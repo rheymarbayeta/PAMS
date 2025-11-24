@@ -1,0 +1,898 @@
+const express = require('express');
+const pool = require('../config/database');
+const { authenticate, authorize } = require('../middleware/auth');
+const { logAction } = require('../utils/auditLogger');
+const { createNotification, notifyRole } = require('../utils/notificationService');
+const { generatePermitPDF, generateAssessmentReportPDF, generateAssessmentReportHTML } = require('../utils/pdfGenerator');
+const { generateApplicationNumber } = require('../utils/applicationNumberGenerator');
+
+const router = express.Router();
+
+// View assessment report (HTML) - must be defined BEFORE global authenticate
+// This route needs special handling because it's opened in a new window
+router.get('/:id/assessment/html', async (req, res, next) => {
+  // Check if token is in query parameter (for new window requests)
+  const tokenFromQuery = req.query.token;
+  
+  if (tokenFromQuery) {
+    // Temporarily set Authorization header for authentication middleware
+    req.headers.authorization = `Bearer ${tokenFromQuery}`;
+  }
+  
+  // Continue to authentication middleware
+  next();
+}, authenticate, async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const printedBy = req.user ? req.user.full_name : 'System';
+    
+    // Get token from query parameter or Authorization header for passing to HTML
+    const token = req.query.token || req.headers.authorization?.split(' ')[1] || '';
+
+    const html = await generateAssessmentReportHTML(applicationId, printedBy, token);
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Generate assessment report HTML error:', error);
+    res.status(500).send(`<html><body><h1>Error</h1><p>${error.message || 'Error generating assessment report'}</p></body></html>`);
+  }
+});
+
+// All routes require authentication
+router.use(authenticate);
+
+// Get all applications (filtered by role)
+router.get('/', async (req, res) => {
+  try {
+    let query = `
+      SELECT 
+        a.application_id,
+        a.application_number,
+        a.entity_id,
+        a.creator_id,
+        a.assessor_id,
+        a.approver_id,
+        a.permit_type,
+        a.status,
+        a.created_at,
+        a.updated_at,
+        e.entity_name,
+        u1.full_name as creator_name,
+        u2.full_name as assessor_name,
+        u3.full_name as approver_name
+      FROM Applications a
+      INNER JOIN Entities e ON a.entity_id = e.entity_id
+      INNER JOIN Users u1 ON a.creator_id = u1.user_id
+      LEFT JOIN Users u2 ON a.assessor_id = u2.user_id
+      LEFT JOIN Users u3 ON a.approver_id = u3.user_id
+    `;
+
+    const conditions = [];
+    const params = [];
+
+    // Role-based filtering
+    const roleName = req.user.role_name;
+    if (roleName === 'Application Creator') {
+      conditions.push('a.creator_id = ?');
+      params.push(req.user.user_id);
+    } else if (roleName === 'Assessor') {
+      conditions.push('(a.status = ? OR a.assessor_id = ?)');
+      params.push('Pending', req.user.user_id);
+    } else if (roleName === 'Approver') {
+      conditions.push('(a.status = ? OR a.approver_id = ?)');
+      params.push('Pending Approval', req.user.user_id);
+    }
+    // SuperAdmin, Admin, Viewer can see all
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ' ORDER BY a.created_at DESC';
+
+    const [applications] = await pool.execute(query, params);
+    res.json(applications);
+  } catch (error) {
+    console.error('Get applications error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Print assessment report (PDF) - must come before /:id route
+router.get('/:id/assessment', async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const printedBy = req.user ? req.user.full_name : 'System';
+
+    console.log(`[PDF] Generating assessment PDF for application ${applicationId}, printed by: ${printedBy}`);
+    
+    const pdfBuffer = await generateAssessmentReportPDF(applicationId, printedBy);
+
+    console.log(`[PDF] PDF generated successfully, size: ${pdfBuffer.length} bytes`);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="assessment-${applicationId}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('[PDF] Generate assessment report error:', error);
+    console.error('[PDF] Error stack:', error.stack);
+    
+    // If it's a PDF generation error, return a proper error response
+    if (error.message) {
+      return res.status(500).json({ 
+        error: error.message || 'Error generating assessment report',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+    res.status(500).json({ error: 'Error generating assessment report' });
+  }
+});
+
+// Print permit (PDF) - must come before /:id route
+router.get('/:id/print', async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    const pdfBuffer = await generatePermitPDF(applicationId);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="permit-${applicationId}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Generate PDF error:', error);
+    res.status(500).json({ error: error.message || 'Error generating PDF' });
+  }
+});
+
+// Get single application with details
+router.get('/:id', async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    // Get application
+    const [applications] = await pool.execute(
+      `SELECT 
+        a.*,
+        a.application_number,
+        e.entity_name,
+        e.contact_person,
+        e.email,
+        e.phone,
+        u1.full_name as creator_name,
+        u2.full_name as assessor_name,
+        u3.full_name as approver_name
+       FROM Applications a
+       INNER JOIN Entities e ON a.entity_id = e.entity_id
+       INNER JOIN Users u1 ON a.creator_id = u1.user_id
+       LEFT JOIN Users u2 ON a.assessor_id = u2.user_id
+       LEFT JOIN Users u3 ON a.approver_id = u3.user_id
+       WHERE a.application_id = ?`,
+      [applicationId]
+    );
+
+    if (applications.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const application = applications[0];
+
+    // Get parameters
+    const [parameters] = await pool.execute(
+      'SELECT * FROM Application_Parameters WHERE application_id = ?',
+      [applicationId]
+    );
+
+    // Get assessed fees
+    const [assessedFees] = await pool.execute(
+      `SELECT 
+        af.assessed_fee_id,
+        af.fee_id,
+        af.assessed_amount,
+        af.assessed_by_user_id,
+        af.created_at,
+        fc.fee_name,
+        fc.default_amount,
+        fcat.category_name,
+        u.full_name as assessed_by_name
+       FROM Assessed_Fees af
+       INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id
+       INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
+       INNER JOIN Users u ON af.assessed_by_user_id = u.user_id
+       WHERE af.application_id = ?
+       ORDER BY fcat.category_name, fc.fee_name`,
+      [applicationId]
+    );
+
+    // Get audit trail
+    const [auditTrail] = await pool.execute(
+      `SELECT 
+        at.*,
+        u.full_name as user_name
+       FROM Audit_Trail at
+       INNER JOIN Users u ON at.user_id = u.user_id
+       WHERE at.application_id = ?
+       ORDER BY at.timestamp DESC`,
+      [applicationId]
+    );
+
+    res.json({
+      ...application,
+      parameters,
+      assessed_fees: assessedFees,
+      audit_trail: auditTrail
+    });
+  } catch (error) {
+    console.error('Get application error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete application (only if not assessed yet)
+router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    // Get application status
+    const [applications] = await pool.execute(
+      'SELECT application_id, application_number, status FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (applications.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const application = applications[0];
+
+    if (application.status !== 'Pending') {
+      return res.status(400).json({ error: 'Only pending applications can be deleted' });
+    }
+
+    await pool.execute('DELETE FROM Applications WHERE application_id = ?', [applicationId]);
+
+    await logAction(
+      req.user.user_id,
+      'DELETE_APPLICATION',
+      `Deleted application ${application.application_number || `#${applicationId}`}`
+    );
+
+    res.json({ message: 'Application deleted successfully' });
+  } catch (error) {
+    console.error('Delete application error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create new application
+router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
+  try {
+    const { entity_id, permit_type, parameters } = req.body;
+
+    if (!entity_id || !permit_type) {
+      return res.status(400).json({ error: 'Entity ID and permit type are required' });
+    }
+
+    // Start transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Generate unique application number using the same connection/transaction
+      // This ensures the FOR UPDATE lock works correctly for concurrent requests
+      const applicationNumber = await generateApplicationNumber(connection);
+
+      // Create application
+      const [result] = await connection.execute(
+        'INSERT INTO Applications (application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?)',
+        [applicationNumber, entity_id, req.user.user_id, permit_type, 'Pending']
+      );
+
+      const applicationId = result.insertId;
+
+      // Insert parameters
+      if (parameters && Array.isArray(parameters)) {
+        for (const param of parameters) {
+          if (param.param_name && param.param_value !== undefined) {
+            await connection.execute(
+              'INSERT INTO Application_Parameters (application_id, param_name, param_value) VALUES (?, ?, ?)',
+              [applicationId, param.param_name, param.param_value]
+            );
+          }
+        }
+      }
+
+      await connection.commit();
+
+      // Log and notify
+      await logAction(
+        req.user.user_id,
+        'CREATE_APP',
+        `Created application ${applicationNumber} (ID: ${applicationId}) for permit type: ${permit_type}`,
+        applicationId
+      );
+
+      await notifyRole(
+        'Assessor',
+        `New application ${applicationNumber} requires assessment`,
+        `/applications/${applicationId}`
+      );
+
+      res.status(201).json({
+        application_id: applicationId,
+        application_number: applicationNumber,
+        message: 'Application created successfully'
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Create application error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add assessed fee
+router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
+  try {
+    const { fee_id, assessed_amount } = req.body;
+    const applicationId = req.params.id;
+
+    if (!fee_id || assessed_amount === undefined) {
+      return res.status(400).json({ error: 'Fee ID and assessed amount are required' });
+    }
+
+    // Check application status
+    const [apps] = await pool.execute(
+      'SELECT status FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Pending' && apps[0].status !== 'Assessed') {
+      return res.status(400).json({ error: 'Cannot add fees to application in current status' });
+    }
+
+    const [result] = await pool.execute(
+      'INSERT INTO Assessed_Fees (application_id, fee_id, assessed_amount, assessed_by_user_id) VALUES (?, ?, ?, ?)',
+      [applicationId, fee_id, parseFloat(assessed_amount), req.user.user_id]
+    );
+
+    await logAction(
+      req.user.user_id,
+      'ADD_FEE',
+      `Added fee ID ${fee_id} with amount ${assessed_amount} to application #${applicationId}`,
+      applicationId
+    );
+
+    res.status(201).json({
+      assessed_fee_id: result.insertId,
+      message: 'Fee added successfully'
+    });
+  } catch (error) {
+    console.error('Add fee error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete assessed fee
+router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const feeId = req.params.feeId;
+
+    // Check application status
+    const [apps] = await pool.execute(
+      'SELECT status FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Pending' && apps[0].status !== 'Assessed') {
+      return res.status(400).json({ error: 'Cannot remove fees from application in current status' });
+    }
+
+    await pool.execute(
+      'DELETE FROM Assessed_Fees WHERE assessed_fee_id = ? AND application_id = ?',
+      [feeId, applicationId]
+    );
+
+    await logAction(
+      req.user.user_id,
+      'REMOVE_FEE',
+      `Removed fee ID ${feeId} from application #${applicationId}`,
+      applicationId
+    );
+
+    res.json({ message: 'Fee removed successfully' });
+  } catch (error) {
+    console.error('Remove fee error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update assessed fee (for re-assessment by approver)
+router.put('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Approver'), async (req, res) => {
+  try {
+    const { assessed_amount } = req.body;
+    const applicationId = req.params.id;
+    const feeId = req.params.feeId;
+
+    if (assessed_amount === undefined) {
+      return res.status(400).json({ error: 'Assessed amount is required' });
+    }
+
+    // Get old amount for audit
+    const [oldFee] = await pool.execute(
+      'SELECT assessed_amount FROM Assessed_Fees WHERE assessed_fee_id = ?',
+      [feeId]
+    );
+
+    if (oldFee.length === 0) {
+      return res.status(404).json({ error: 'Assessed fee not found' });
+    }
+
+    const oldAmount = oldFee[0].assessed_amount;
+
+    await pool.execute(
+      'UPDATE Assessed_Fees SET assessed_amount = ?, assessed_by_user_id = ? WHERE assessed_fee_id = ?',
+      [parseFloat(assessed_amount), req.user.user_id, feeId]
+    );
+
+    await logAction(
+      req.user.user_id,
+      'REASSESS_FEE',
+      `Re-assessed fee ID ${feeId} from ${oldAmount} to ${assessed_amount} for application #${applicationId}`,
+      applicationId
+    );
+
+    res.json({ message: 'Fee updated successfully' });
+  } catch (error) {
+    console.error('Update fee error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Submit assessment
+router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+
+  try {
+    const applicationId = req.params.id;
+
+    // Check application status and get full details
+    const [apps] = await connection.execute(
+      `SELECT 
+        a.*,
+        a.application_number,
+        e.entity_name,
+        e.contact_person,
+        e.email,
+        e.phone
+       FROM Applications a
+       INNER JOIN Entities e ON a.entity_id = e.entity_id
+       WHERE a.application_id = ?`,
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Pending' && apps[0].status !== 'Assessed') {
+      await connection.rollback();
+      return res.status(400).json({ error: 'Application is not in a state that can be assessed' });
+    }
+
+    const app = apps[0];
+
+    // Get assessed fees
+    const [assessedFees] = await connection.execute(
+      `SELECT 
+        af.assessed_fee_id,
+        af.fee_id,
+        af.assessed_amount,
+        fc.fee_name,
+        fcat.category_name
+       FROM Assessed_Fees af
+       INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id
+       INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
+       WHERE af.application_id = ?
+       ORDER BY fc.fee_name`,
+      [applicationId]
+    );
+
+    if (assessedFees.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'No fees assessed for this application' });
+    }
+
+    // Get address from parameters
+    const [parameters] = await connection.execute(
+      'SELECT * FROM Application_Parameters WHERE application_id = ?',
+      [applicationId]
+    );
+    const addressParam = parameters.find(p => 
+      p.param_name.toLowerCase().includes('address') || 
+      p.param_name.toLowerCase() === 'address'
+    );
+    const address = addressParam ? addressParam.param_value : '';
+
+    // Calculate totals
+    let totalBalanceDue = 0;
+    let totalSurcharge = 0;
+    let totalInterest = 0;
+    let totalAmountDue = 0;
+
+    assessedFees.forEach(fee => {
+      const amount = parseFloat(fee.assessed_amount) || 0;
+      const quantity = 1; // Default quantity
+      const balanceDue = amount * quantity;
+      const surcharge = 0; // Default surcharge
+      const interest = 0; // Default interest
+      const total = balanceDue + surcharge + interest;
+
+      totalBalanceDue += balanceDue;
+      totalSurcharge += surcharge;
+      totalInterest += interest;
+      totalAmountDue += total;
+    });
+
+    // Determine app type
+    const appType = app.permit_type && app.permit_type.toLowerCase().includes('renew') ? 'RENEW' : 'NEW';
+    const appDate = new Date(app.created_at);
+    
+    // Calculate validity date (end of next month)
+    const validityDate = new Date();
+    validityDate.setMonth(validityDate.getMonth() + 1);
+    validityDate.setDate(0); // Last day of next month
+
+    // Calculate quarterly amounts (default: divide by 4, can be customized later)
+    // For now, Q1 is 0, and the rest is divided among Q2, Q3, Q4
+    const q1Amount = 0;
+    const remainingAmount = totalAmountDue;
+    const q2Amount = remainingAmount * 0.38; // ~38% for Q2
+    const q3Amount = remainingAmount * 0.36; // ~36% for Q3
+    const q4Amount = remainingAmount * 0.26; // ~26% for Q4
+
+    // Create or update assessment record
+    const [existingRecords] = await connection.execute(
+      'SELECT assessment_id FROM Assessment_Records WHERE application_id = ?',
+      [applicationId]
+    );
+
+    let assessmentId;
+    if (existingRecords.length > 0) {
+      assessmentId = existingRecords[0].assessment_id;
+      // Update existing record
+      await connection.execute(
+        `UPDATE Assessment_Records SET
+          business_name = ?,
+          owner_name = ?,
+          address = ?,
+          app_number = ?,
+          app_type = ?,
+          app_date = ?,
+          validity_date = ?,
+          total_balance_due = ?,
+          total_surcharge = ?,
+          total_interest = ?,
+          total_amount_due = ?,
+          q1_amount = ?,
+          q2_amount = ?,
+          q3_amount = ?,
+          q4_amount = ?,
+          prepared_by_user_id = ?,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE assessment_id = ?`,
+        [
+          app.entity_name,
+          app.contact_person || app.entity_name,
+          address,
+          app.application_number || `#${applicationId}`,
+          appType,
+          appDate,
+          validityDate,
+          totalBalanceDue,
+          totalSurcharge,
+          totalInterest,
+          totalAmountDue,
+          q1Amount,
+          q2Amount,
+          q3Amount,
+          q4Amount,
+          req.user.user_id,
+          assessmentId
+        ]
+      );
+      // Delete existing fees
+      await connection.execute(
+        'DELETE FROM Assessment_Record_Fees WHERE assessment_id = ?',
+        [assessmentId]
+      );
+    } else {
+      // Create new record
+      const [result] = await connection.execute(
+        `INSERT INTO Assessment_Records (
+          application_id, business_name, owner_name, address, app_number, app_type, app_date,
+          validity_date, total_balance_due, total_surcharge, total_interest, total_amount_due,
+          q1_amount, q2_amount, q3_amount, q4_amount, prepared_by_user_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          applicationId,
+          app.entity_name,
+          app.contact_person || app.entity_name,
+          address,
+          app.application_number || `#${applicationId}`,
+          appType,
+          appDate,
+          validityDate,
+          totalBalanceDue,
+          totalSurcharge,
+          totalInterest,
+          totalAmountDue,
+          q1Amount,
+          q2Amount,
+          q3Amount,
+          q4Amount,
+          req.user.user_id
+        ]
+      );
+      assessmentId = result.insertId;
+    }
+
+    // Insert assessment record fees
+    for (const fee of assessedFees) {
+      const amount = parseFloat(fee.assessed_amount) || 0;
+      const quantity = 1;
+      const balanceDue = amount * quantity;
+      const surcharge = 0;
+      const interest = 0;
+      const total = balanceDue + surcharge + interest;
+
+      await connection.execute(
+        `INSERT INTO Assessment_Record_Fees (
+          assessment_id, fee_id, fee_name, amount, quantity, balance_due,
+          surcharge, interest, total
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          assessmentId,
+          fee.fee_id,
+          fee.fee_name,
+          amount,
+          quantity,
+          balanceDue,
+          surcharge,
+          interest,
+          total
+        ]
+      );
+    }
+
+    // Update application status
+    await connection.execute(
+      'UPDATE Applications SET status = ?, assessor_id = ? WHERE application_id = ?',
+      ['Pending Approval', req.user.user_id, applicationId]
+    );
+
+    await connection.commit();
+
+    await logAction(
+      req.user.user_id,
+      'SUBMIT_ASSESSMENT',
+      `Submitted assessment for application #${applicationId}`,
+      applicationId
+    );
+
+    await notifyRole(
+      'Approver',
+      `Application #${applicationId} is pending approval`,
+      `/applications/${applicationId}`
+    );
+
+    res.json({ message: 'Assessment submitted successfully', assessment_id: assessmentId });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Submit assessment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    connection.release();
+  }
+});
+
+// Approve application
+router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    // Check application status
+    const [apps] = await pool.execute(
+      'SELECT status, creator_id FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Pending Approval') {
+      return res.status(400).json({ error: 'Application is not pending approval' });
+    }
+
+    // Update application
+    await pool.execute(
+      'UPDATE Applications SET status = ?, approver_id = ? WHERE application_id = ?',
+      ['Approved', req.user.user_id, applicationId]
+    );
+
+    // Update assessment record with approver
+    await pool.execute(
+      'UPDATE Assessment_Records SET approved_by_user_id = ? WHERE application_id = ?',
+      [req.user.user_id, applicationId]
+    );
+
+    await logAction(
+      req.user.user_id,
+      'APPROVE_APP',
+      `Approved application #${applicationId}`,
+      applicationId
+    );
+
+    // Notify creator
+    await createNotification(
+      apps[0].creator_id,
+      `Application #${applicationId} has been approved`,
+      `/applications/${applicationId}`
+    );
+
+    res.json({ message: 'Application approved successfully' });
+  } catch (error) {
+    console.error('Approve application error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// Renew application (clone)
+router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    // Get original application
+    const [apps] = await pool.execute(
+      'SELECT * FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const originalApp = apps[0];
+
+    // Check if user can renew (must be creator or admin)
+    if (originalApp.creator_id !== req.user.user_id && 
+        !['SuperAdmin', 'Admin'].includes(req.user.role_name)) {
+      return res.status(403).json({ error: 'You can only renew your own applications' });
+    }
+
+    // Start transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Generate unique application number for renewal using the same connection
+      const applicationNumber = await generateApplicationNumber(connection);
+
+      // Create new application
+      const [result] = await connection.execute(
+        'INSERT INTO Applications (application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?)',
+        [applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, 'Pending']
+      );
+
+      const newApplicationId = result.insertId;
+
+      // Copy parameters
+      const [parameters] = await connection.execute(
+        'SELECT param_name, param_value FROM Application_Parameters WHERE application_id = ?',
+        [applicationId]
+      );
+
+      for (const param of parameters) {
+        await connection.execute(
+          'INSERT INTO Application_Parameters (application_id, param_name, param_value) VALUES (?, ?, ?)',
+          [newApplicationId, param.param_name, param.param_value]
+        );
+      }
+
+      await connection.commit();
+
+      await logAction(
+        req.user.user_id,
+        'RENEW_APP',
+        `Renewed application #${applicationId} as application #${newApplicationId}`,
+        newApplicationId
+      );
+
+      await notifyRole(
+        'Assessor',
+        `New application #${newApplicationId} requires assessment (renewal)`,
+        `/applications/${newApplicationId}`
+      );
+
+      res.status(201).json({
+        application_id: newApplicationId,
+        message: 'Application renewed successfully'
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Renew application error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Reject application
+router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const { reason } = req.body;
+
+    // Check application status
+    const [apps] = await pool.execute(
+      'SELECT status, creator_id FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Pending Approval') {
+      return res.status(400).json({ error: 'Application is not pending approval' });
+    }
+
+    // Update application
+    await pool.execute(
+      'UPDATE Applications SET status = ?, approver_id = ? WHERE application_id = ?',
+      ['Rejected', req.user.user_id, applicationId]
+    );
+
+    await logAction(
+      req.user.user_id,
+      'REJECT_APP',
+      `Rejected application #${applicationId}${reason ? ': ' + reason : ''}`,
+      applicationId
+    );
+
+    // Notify creator
+    await createNotification(
+      apps[0].creator_id,
+      `Application #${applicationId} has been rejected${reason ? ': ' + reason : ''}`,
+      `/applications/${applicationId}`
+    );
+
+    res.json({ message: 'Application rejected successfully' });
+  } catch (error) {
+    console.error('Reject application error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+module.exports = router;
+
