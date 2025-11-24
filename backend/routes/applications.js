@@ -3,7 +3,7 @@ const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { createNotification, notifyRole } = require('../utils/notificationService');
-const { generatePermitPDF, generateAssessmentReportPDF, generateAssessmentReportHTML } = require('../utils/pdfGenerator');
+const { generatePermitPDF, generateAssessmentReportPDF, generateAssessmentReportHTML, getAssessmentData } = require('../utils/pdfGenerator');
 const { generateApplicationNumber } = require('../utils/applicationNumberGenerator');
 
 const router = express.Router();
@@ -96,6 +96,39 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Get applications error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get assessment record data (for HTML report)
+router.get('/:id/assessment-record', async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    const data = await getAssessmentData(applicationId);
+    
+    res.json({
+      app_number: data.assessment.app_number,
+      app_date: data.assessment.app_date,
+      app_type: data.assessment.app_type,
+      business_name: data.assessment.business_name,
+      owner_name: data.assessment.owner_name,
+      address: data.assessment.address,
+      prepared_by_name: data.assessment.prepared_by_name,
+      approved_by_name: data.assessment.approved_by_name,
+      validity_date: data.assessment.validity_date,
+      total_balance_due: data.assessment.total_balance_due,
+      total_surcharge: data.assessment.total_surcharge,
+      total_interest: data.assessment.total_interest,
+      total_amount_due: data.assessment.total_amount_due,
+      q1_amount: data.assessment.q1_amount,
+      q2_amount: data.assessment.q2_amount,
+      q3_amount: data.assessment.q3_amount,
+      q4_amount: data.assessment.q4_amount,
+      fees: data.assessmentFees
+    });
+  } catch (error) {
+    console.error('Get assessment record error:', error);
+    res.status(500).json({ error: error.message || 'Error retrieving assessment record' });
   }
 });
 

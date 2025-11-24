@@ -167,9 +167,9 @@ export default function ApplicationDetailPage() {
               {(application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved') && application.assessed_fees.length > 0 && (
                 <button
                   onClick={() => {
-                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
                     const token = localStorage.getItem('token') || '';
-                    const url = `${apiBaseUrl}/api/applications/${application.application_id}/assessment/html${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+                    const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+                    const url = `/assessment-report.html?id=${application.application_id}${encodedToken}`;
                     window.open(url, '_blank');
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"

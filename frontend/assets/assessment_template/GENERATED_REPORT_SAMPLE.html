@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="stylesheet" href="base.min.css"/>
+<link rel="stylesheet" href="fancy.min.css"/>
+<link rel="stylesheet" href="main.css"/>
+<script src="compatibility.min.js"></script>
+<script src="theViewer.min.js"></script>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+  }
+  #report-container {
+    max-width: 1000px;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .loading {
+    padding: 40px;
+    text-align: center;
+    font-size: 18px;
+    color: #666;
+  }
+  .error {
+    padding: 20px;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    color: #856404;
+    margin: 20px;
+  }
+  .controls {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    text-align: right;
+  }
+  .btn {
+    padding: 8px 16px;
+    margin-left: 5px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .btn:hover {
+    background-color: #0056b3;
+  }
+  .btn-print {
+    background-color: #28a745;
+  }
+  .btn-print:hover {
+    background-color: #1e7e34;
+  }
+</style>
+<script>
+try{
+theViewer.defaultViewer = new theViewer.Viewer({});
+}catch(e){}
+</script>
+<title>Generated Assessment Report</title>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn btn-print" onclick="printReport()">Print Report</button>
+    <button class="btn" onclick="downloadPDF()">Download PDF</button>
+  </div>
+  
+  <div id="loading" class="loading">
+    <p>Loading assessment report...</p>
+  </div>
+  
+  <div id="error" style="display:none;" class="error"></div>
+  
+  <div id="report-content" style="display:none;"></div>
+</div>
+
+<script>
+// Get application ID from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const applicationId = urlParams.get('id') || urlParams.get('applicationId');
+const authToken = urlParams.get('token') || localStorage.getItem('token') || '';
+
+// Determine API base URL - work with same origin
+let apiBaseUrl = '';
+if (typeof window !== 'undefined') {
+  // Try to detect backend URL
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    apiBaseUrl = 'http://localhost:5000';
+  } else {
+    // For production, assume backend is on same domain but different port or path
+    apiBaseUrl = window.location.origin.replace(':3000', ':5000');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (!applicationId) {
+    showError('No application ID provided. Please pass ?id=<applicationId> in the URL.');
+    return;
+  }
+  
+  fetchAssessmentReport();
+});
+
+async function fetchAssessmentReport() {
+  try {
+    const url = `${apiBaseUrl}/api/applications/${applicationId}`;
+    
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Unauthorized. Please login again.');
+      }
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+    }
+    
+    const appData = await response.json();
+    renderReport(appData);
+  } catch (error) {
+    console.error('Error fetching assessment data:', error);
+    showError(`Failed to load assessment report: ${error.message}`);
+  }
+}
+
+function renderReport(appData) {
+  // Build HTML report based on template
+  const reportHTML = generateReportHTML(appData);
+  
+  document.getElementById('report-content').innerHTML = reportHTML;
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('report-content').style.display = 'block';
+}
+
+function generateReportHTML(appData) {
+  const now = new Date();
+  const formatDate = (date) => {
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+  
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  };
+  
+  // Format currency
+  const formatCurrency = (value) => {
+    const num = parseFloat(value) || 0;
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP'
+    }).format(num);
+  };
+  
+  return `
+  <div id="page-container">
+    <div id="pf1" class="pf w0 h0" data-page-no="1" style="padding: 40px; font-family: Arial, sans-serif;">
+      <div style="text-align: center; margin-bottom: 30px; page-break-after: avoid;">
+        <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">REPUBLIC OF THE PHILIPPINES</div>
+        <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">MUNICIPALITY OF DALAGUETE</div>
+        <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">PROVINCE OF CEBU</div>
+      </div>
+      
+      <div style="text-align: center; margin-bottom: 30px; font-size: 16px; font-weight: bold; page-break-after: avoid;">
+        ASSESSMENT RECORD
+      </div>
+      
+      <div style="margin-bottom: 20px; font-size: 12px; page-break-after: avoid;">
+        <div style="margin-bottom: 8px;"><strong>Application No:</strong> ${appData.application_number || `#${appData.application_id}`}</div>
+        <div style="margin-bottom: 8px;"><strong>Date:</strong> ${formatDate(new Date(appData.created_at))}</div>
+        <div style="margin-bottom: 8px;"><strong>Trade Name:</strong> ${appData.entity_name || 'N/A'}</div>
+        <div style="margin-bottom: 8px;"><strong>Address:</strong> ${appData.entity_name || 'N/A'}</div>
+        <div style="margin-bottom: 8px;"><strong>Proprietor:</strong> ${appData.creator_name || 'N/A'}</div>
+        <div style="margin-bottom: 8px;"><strong>Permit Type:</strong> ${appData.permit_type || 'N/A'}</div>
+        <div style="margin-bottom: 8px;"><strong>Status:</strong> ${appData.status || 'Pending'}</div>
+      </div>
+      
+      <table style="width: 100%; border-collapse: collapse; margin: 30px 0; font-size: 12px; page-break-inside: avoid;">
+        <thead>
+          <tr style="background-color: #f2f2f2;">
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Description</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border: 1px solid #ddd; padding: 8px;">Permit Type: ${appData.permit_type || 'N/A'}</td>
+            <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">₱ 0.00</td>
+          </tr>
+          <tr style="background-color: #f9f9f9;">
+            <td colspan="2" style="border: 1px solid #ddd; padding: 8px; font-weight: bold; text-align: right;">
+              TOTAL AMOUNT DUE: ₱ 0.00
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <div style="margin-top: 40px; text-align: center; font-size: 12px; page-break-after: avoid;">
+        <div style="margin-bottom: 20px;">
+          <div style="font-weight: bold;">ACTING MUNICIPAL TREASURER</div>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: left; font-size: 11px;">
+          <div>GENERATED BY: ETRACS System 2.5   Form Version 1.0</div>
+          <div>PRINTED BY: ${authToken ? 'User' : 'System'}   PRINT DATE: ${formatDate(now)} ${formatTime(now)}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+function showError(message) {
+  document.getElementById('error').textContent = message;
+  document.getElementById('error').style.display = 'block';
+  document.getElementById('loading').style.display = 'none';
+}
+
+function printReport() {
+  window.print();
+}
+
+function downloadPDF() {
+  if (!authToken) {
+    alert('Please login to download the PDF.');
+    return;
+  }
+  
+  const pdfUrl = `${apiBaseUrl}/api/applications/${applicationId}/assessment?token=${encodeURIComponent(authToken)}`;
+  window.open(pdfUrl, '_blank');
+}
+</script>
+</body>
+</html>
