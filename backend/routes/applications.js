@@ -5,6 +5,7 @@ const { logAction } = require('../utils/auditLogger');
 const { createNotification, notifyRole } = require('../utils/notificationService');
 const { generatePermitPDF, generateAssessmentReportPDF, generateAssessmentReportHTML, getAssessmentData } = require('../utils/pdfGenerator');
 const { generateApplicationNumber } = require('../utils/applicationNumberGenerator');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -112,7 +113,7 @@ router.get('/:id/assessment-record', async (req, res) => {
       app_type: data.assessment.app_type,
       business_name: data.assessment.business_name,
       owner_name: data.assessment.owner_name,
-      address: data.assessment.address,
+      address: data.businessAddress,
       prepared_by_name: data.assessment.prepared_by_name,
       approved_by_name: data.assessment.approved_by_name,
       validity_date: data.assessment.validity_date,
@@ -262,11 +263,11 @@ router.get('/:id', async (req, res) => {
 });
 
 // Delete application (only if not assessed yet)
-router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
   try {
     const applicationId = req.params.id;
 
-    // Get application status
+    // Get application details
     const [applications] = await pool.execute(
       'SELECT application_id, application_number, status FROM Applications WHERE application_id = ?',
       [applicationId]
@@ -278,16 +279,13 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     const application = applications[0];
 
-    if (application.status !== 'Pending') {
-      return res.status(400).json({ error: 'Only pending applications can be deleted' });
-    }
-
+    // SuperAdmin can delete applications in any status
     await pool.execute('DELETE FROM Applications WHERE application_id = ?', [applicationId]);
 
     await logAction(
       req.user.user_id,
       'DELETE_APPLICATION',
-      `Deleted application ${application.application_number || `#${applicationId}`}`
+      `Deleted application #${application.application_number || applicationId} (Status: ${application.status})`
     );
 
     res.json({ message: 'Application deleted successfully' });
@@ -316,20 +314,21 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
       const applicationNumber = await generateApplicationNumber(connection);
 
       // Create application
-      const [result] = await connection.execute(
-        'INSERT INTO Applications (application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?)',
-        [applicationNumber, entity_id, req.user.user_id, permit_type, 'Pending']
-      );
+      const application_id = generateId(ID_PREFIXES.APPLICATION);
 
-      const applicationId = result.insertId;
+      const [result] = await connection.execute(
+        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, 'Pending']
+      );
 
       // Insert parameters
       if (parameters && Array.isArray(parameters)) {
         for (const param of parameters) {
           if (param.param_name && param.param_value !== undefined) {
+            const param_id = generateId(ID_PREFIXES.PARAMETER);
             await connection.execute(
-              'INSERT INTO Application_Parameters (application_id, param_name, param_value) VALUES (?, ?, ?)',
-              [applicationId, param.param_name, param.param_value]
+              'INSERT INTO Application_Parameters (parameter_id, application_id, param_name, param_value) VALUES (?, ?, ?, ?)',
+              [param_id, application_id, param.param_name, param.param_value]
             );
           }
         }
@@ -341,18 +340,18 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
       await logAction(
         req.user.user_id,
         'CREATE_APP',
-        `Created application ${applicationNumber} (ID: ${applicationId}) for permit type: ${permit_type}`,
-        applicationId
+        `Created application #${applicationNumber} for permit type: ${permit_type}`,
+        application_id
       );
 
       await notifyRole(
         'Assessor',
         `New application ${applicationNumber} requires assessment`,
-        `/applications/${applicationId}`
+        `/applications/${application_id}`
       );
 
       res.status(201).json({
-        application_id: applicationId,
+        application_id,
         application_number: applicationNumber,
         message: 'Application created successfully'
       });
@@ -392,20 +391,36 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
       return res.status(400).json({ error: 'Cannot add fees to application in current status' });
     }
 
+    const assessed_fee_id = generateId(ID_PREFIXES.ASSESSED_FEE);
+
     const [result] = await pool.execute(
-      'INSERT INTO Assessed_Fees (application_id, fee_id, assessed_amount, assessed_by_user_id) VALUES (?, ?, ?, ?)',
-      [applicationId, fee_id, parseFloat(assessed_amount), req.user.user_id]
+      'INSERT INTO Assessed_Fees (assessed_fee_id, application_id, fee_id, assessed_amount, assessed_by_user_id) VALUES (?, ?, ?, ?, ?)',
+      [assessed_fee_id, applicationId, fee_id, parseFloat(assessed_amount), req.user.user_id]
     );
+
+    // Get fee name for logging
+    const [feeInfo] = await pool.execute(
+      'SELECT fee_name FROM Fees_Charges WHERE fee_id = ?',
+      [fee_id]
+    );
+    const feeName = feeInfo.length > 0 ? feeInfo[0].fee_name : 'Unknown Fee';
+    
+    // Get application number for logging
+    const [appInfo] = await pool.execute(
+      'SELECT application_number FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+    const appNumber = appInfo.length > 0 ? appInfo[0].application_number : applicationId;
 
     await logAction(
       req.user.user_id,
       'ADD_FEE',
-      `Added fee ID ${fee_id} with amount ${assessed_amount} to application #${applicationId}`,
+      `Added fee "${feeName}" with amount ₱${assessed_amount.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})} to application #${appNumber}`,
       applicationId
     );
 
     res.status(201).json({
-      assessed_fee_id: result.insertId,
+      assessed_fee_id,
       message: 'Fee added successfully'
     });
   } catch (error) {
@@ -439,10 +454,24 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
       [feeId, applicationId]
     );
 
+    // Get fee name for logging
+    const [removeFeeInfo] = await pool.execute(
+      'SELECT fc.fee_name FROM Assessed_Fees af INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id WHERE af.assessed_fee_id = ?',
+      [feeId]
+    );
+    const removedFeeName = removeFeeInfo.length > 0 ? removeFeeInfo[0].fee_name : 'Unknown Fee';
+    
+    // Get application number for logging
+    const [removeAppInfo] = await pool.execute(
+      'SELECT application_number FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+    const removeAppNumber = removeAppInfo.length > 0 ? removeAppInfo[0].application_number : applicationId;
+
     await logAction(
       req.user.user_id,
       'REMOVE_FEE',
-      `Removed fee ID ${feeId} from application #${applicationId}`,
+      `Removed fee "${removedFeeName}" from application #${removeAppNumber}`,
       applicationId
     );
 
@@ -656,13 +685,16 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       );
     } else {
       // Create new record
+      const assessment_id = generateId(ID_PREFIXES.ASSESSMENT_RECORD);
+
       const [result] = await connection.execute(
         `INSERT INTO Assessment_Records (
-          application_id, business_name, owner_name, address, app_number, app_type, app_date,
+          assessment_id, application_id, business_name, owner_name, address, app_number, app_type, app_date,
           validity_date, total_balance_due, total_surcharge, total_interest, total_amount_due,
           q1_amount, q2_amount, q3_amount, q4_amount, prepared_by_user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          assessment_id,
           applicationId,
           app.entity_name,
           app.contact_person || app.entity_name,
@@ -682,7 +714,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
           req.user.user_id
         ]
       );
-      assessmentId = result.insertId;
+      assessmentId = assessment_id;
     }
 
     // Insert assessment record fees
@@ -694,12 +726,15 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       const interest = 0;
       const total = balanceDue + surcharge + interest;
 
+      const record_fee_id = generateId(ID_PREFIXES.ASSESSMENT_RECORD_FEE);
+
       await connection.execute(
         `INSERT INTO Assessment_Record_Fees (
-          assessment_id, fee_id, fee_name, amount, quantity, balance_due,
+          record_fee_id, assessment_id, fee_id, fee_name, amount, quantity, balance_due,
           surcharge, interest, total
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          record_fee_id,
           assessmentId,
           fee.fee_id,
           fee.fee_name,
@@ -721,10 +756,17 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     await connection.commit();
 
+    // Get application number for logging
+    const [assessAppInfo] = await pool.execute(
+      'SELECT application_number FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+    const assessAppNumber = assessAppInfo.length > 0 ? assessAppInfo[0].application_number : applicationId;
+
     await logAction(
       req.user.user_id,
       'SUBMIT_ASSESSMENT',
-      `Submitted assessment for application #${applicationId}`,
+      `Submitted assessment for application #${assessAppNumber}`,
       applicationId
     );
 
@@ -775,10 +817,17 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
       [req.user.user_id, applicationId]
     );
 
+    // Get application number for logging
+    const [approveAppInfo] = await pool.execute(
+      'SELECT application_number FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+    const approveAppNumber = approveAppInfo.length > 0 ? approveAppInfo[0].application_number : applicationId;
+
     await logAction(
       req.user.user_id,
       'APPROVE_APP',
-      `Approved application #${applicationId}`,
+      `Approved application #${approveAppNumber}`,
       applicationId
     );
 
@@ -829,12 +878,12 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
       const applicationNumber = await generateApplicationNumber(connection);
 
       // Create new application
-      const [result] = await connection.execute(
-        'INSERT INTO Applications (application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?)',
-        [applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, 'Pending']
-      );
+      const new_application_id = generateId(ID_PREFIXES.APPLICATION);
 
-      const newApplicationId = result.insertId;
+      const [result] = await connection.execute(
+        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [new_application_id, applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, 'Pending']
+      );
 
       // Copy parameters
       const [parameters] = await connection.execute(
@@ -843,29 +892,43 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
       );
 
       for (const param of parameters) {
+        const parameter_id = generateId(ID_PREFIXES.APPLICATION_PARAMETER);
         await connection.execute(
-          'INSERT INTO Application_Parameters (application_id, param_name, param_value) VALUES (?, ?, ?)',
-          [newApplicationId, param.param_name, param.param_value]
+          'INSERT INTO Application_Parameters (parameter_id, application_id, param_name, param_value) VALUES (?, ?, ?, ?)',
+          [parameter_id, new_application_id, param.param_name, param.param_value]
         );
       }
 
       await connection.commit();
 
+      // Get old and new application numbers for logging
+      const [oldAppInfo] = await pool.execute(
+        'SELECT application_number FROM Applications WHERE application_id = ?',
+        [applicationId]
+      );
+      const oldAppNumber = oldAppInfo.length > 0 ? oldAppInfo[0].application_number : applicationId;
+
+      const [newAppInfo] = await pool.execute(
+        'SELECT application_number FROM Applications WHERE application_id = ?',
+        [new_application_id]
+      );
+      const newAppNumber = newAppInfo.length > 0 ? newAppInfo[0].application_number : new_application_id;
+
       await logAction(
         req.user.user_id,
         'RENEW_APP',
-        `Renewed application #${applicationId} as application #${newApplicationId}`,
-        newApplicationId
+        `Renewed application #${oldAppNumber} as application #${newAppNumber}`,
+        new_application_id
       );
 
       await notifyRole(
         'Assessor',
-        `New application #${newApplicationId} requires assessment (renewal)`,
-        `/applications/${newApplicationId}`
+        `New application #${new_application_id} requires assessment (renewal)`,
+        `/applications/${new_application_id}`
       );
 
       res.status(201).json({
-        application_id: newApplicationId,
+        application_id: new_application_id,
         message: 'Application renewed successfully'
       });
     } catch (error) {
@@ -906,10 +969,17 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
       ['Rejected', req.user.user_id, applicationId]
     );
 
+    // Get application number for logging
+    const [rejectAppInfo] = await pool.execute(
+      'SELECT application_number FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+    const rejectAppNumber = rejectAppInfo.length > 0 ? rejectAppInfo[0].application_number : applicationId;
+
     await logAction(
       req.user.user_id,
       'REJECT_APP',
-      `Rejected application #${applicationId}${reason ? ': ' + reason : ''}`,
+      `Rejected application #${rejectAppNumber}${reason ? ': ' + reason : ''}`,
       applicationId
     );
 
@@ -924,6 +994,138 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
   } catch (error) {
     console.error('Reject application error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Record payment for an application
+router.post('/:id/payment', async (req, res) => {
+  try {
+    console.log('[Payment] Recording payment for application:', req.params.id);
+    console.log('[Payment] User:', req.user);
+    console.log('[Payment] Body:', req.body);
+    
+    const applicationId = req.params.id;
+    const { official_receipt_no, payment_date, address, amount } = req.body;
+
+    // Validate required fields
+    if (!official_receipt_no || !payment_date || !amount) {
+      console.log('[Payment] Missing required fields');
+      return res.status(400).json({ 
+        error: 'Missing required fields: official_receipt_no, payment_date, amount' 
+      });
+    }
+
+    // Check if application exists
+    const [apps] = await pool.execute(
+      'SELECT * FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      console.log('[Payment] Application not found:', applicationId);
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if application is approved
+    if (apps[0].status !== 'Approved') {
+      console.log('[Payment] Application not approved:', apps[0].status);
+      return res.status(400).json({ 
+        error: 'Payment can only be recorded for approved applications' 
+      });
+    }
+
+    // Insert payment record
+    console.log('[Payment] Inserting payment record...');
+    const payment_id = generateId(ID_PREFIXES.PAYMENT);
+    const [result] = await pool.execute(
+      `INSERT INTO Payments 
+       (payment_id, application_id, official_receipt_no, payment_date, address, amount, recorded_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [payment_id, applicationId, official_receipt_no, payment_date, address || null, amount, req.user.user_id]
+    );
+
+    console.log('[Payment] Payment recorded successfully with ID:', payment_id);
+
+    // Check total payments vs total amount due
+    const [assessmentRecord] = await pool.execute(
+      'SELECT total_amount_due FROM Assessment_Records WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (assessmentRecord.length > 0) {
+      const totalAmountDue = parseFloat(assessmentRecord[0].total_amount_due) || 0;
+      
+      // Get total payments
+      const [payments] = await pool.execute(
+        'SELECT SUM(amount) as total_paid FROM Payments WHERE application_id = ?',
+        [applicationId]
+      );
+
+      const totalPaid = parseFloat(payments[0]?.total_paid) || 0;
+
+      console.log(`[Payment] Total amount due: ₱${totalAmountDue}, Total paid: ₱${totalPaid}`);
+
+      // If fully paid, update application status to "Paid"
+      if (totalPaid >= totalAmountDue && totalAmountDue > 0) {
+        console.log(`[Payment] Application ${applicationId} is fully paid. Updating status to "Paid"`);
+        await pool.execute(
+          'UPDATE Applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+          ['Paid', applicationId]
+        );
+      }
+    }
+
+    // Log action with error handling
+    try {
+      await logAction(
+        req.user.user_id,
+        'RECORD_PAYMENT',
+        `Recorded payment for application #${applicationId}: Receipt #${official_receipt_no}, Amount: ₱${amount}`,
+        applicationId
+      );
+    } catch (logError) {
+      console.warn('[Payment] Warning: Could not log action:', logError);
+      // Don't fail the payment if logging fails
+    }
+
+    res.json({ 
+      message: 'Payment recorded successfully',
+      payment_id: result.insertId 
+    });
+  } catch (error) {
+    console.error('[Payment] Record payment error:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      console.log('[Payment] Duplicate entry error for receipt number');
+      return res.status(400).json({ 
+        error: 'This official receipt number has already been recorded for this application' 
+      });
+    }
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Get payment information for an application
+router.get('/:id/payment', async (req, res) => {
+  try {
+    console.log('[Payment] Fetching payments for application:', req.params.id);
+    const applicationId = req.params.id;
+
+    const [payments] = await pool.execute(
+      `SELECT 
+        p.*,
+        u.full_name as recorded_by_name
+       FROM Payments p
+       LEFT JOIN Users u ON p.recorded_by_user_id = u.user_id
+       WHERE p.application_id = ?
+       ORDER BY p.created_at DESC`,
+      [applicationId]
+    );
+
+    console.log('[Payment] Found payments:', payments.length);
+    res.json(payments);
+  } catch (error) {
+    console.error('[Payment] Get payment error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 

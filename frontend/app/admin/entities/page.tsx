@@ -11,6 +11,7 @@ interface Entity {
   contact_person: string | null;
   email: string | null;
   phone: string | null;
+  address: string | null;
 }
 
 export default function EntitiesPage() {
@@ -23,6 +24,7 @@ export default function EntitiesPage() {
     contact_person: '',
     email: '',
     phone: '',
+    address: '',
   });
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export default function EntitiesPage() {
       }
       setShowModal(false);
       setEditingEntity(null);
-      setFormData({ entity_name: '', contact_person: '', email: '', phone: '' });
+      setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
       fetchEntities();
     } catch (error: any) {
       alert(error.response?.data?.error || 'Error saving entity');
@@ -64,6 +66,7 @@ export default function EntitiesPage() {
       contact_person: entity.contact_person || '',
       email: entity.email || '',
       phone: entity.phone || '',
+      address: entity.address || '',
     });
     setShowModal(true);
   };
@@ -97,7 +100,7 @@ export default function EntitiesPage() {
             <button
               onClick={() => {
                 setEditingEntity(null);
-                setFormData({ entity_name: '', contact_person: '', email: '', phone: '' });
+                setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
                 setShowModal(true);
               }}
               className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
@@ -116,7 +119,8 @@ export default function EntitiesPage() {
                         {entity.entity_name}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {entity.contact_person && `Contact: ${entity.contact_person}`}
+                        {entity.address && `${entity.address}`}
+                        {entity.contact_person && ` • Contact: ${entity.contact_person}`}
                         {entity.email && ` • ${entity.email}`}
                         {entity.phone && ` • ${entity.phone}`}
                       </div>
@@ -155,6 +159,7 @@ export default function EntitiesPage() {
                     <input
                       type="text"
                       required
+                      placeholder="Enter entity name"
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                       value={formData.entity_name}
                       onChange={(e) =>
@@ -168,6 +173,7 @@ export default function EntitiesPage() {
                     </label>
                     <input
                       type="text"
+                      placeholder="Enter contact person name"
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                       value={formData.contact_person}
                       onChange={(e) =>
@@ -181,6 +187,7 @@ export default function EntitiesPage() {
                     </label>
                     <input
                       type="email"
+                      placeholder="Enter email address"
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                       value={formData.email}
                       onChange={(e) =>
@@ -194,10 +201,25 @@ export default function EntitiesPage() {
                     </label>
                     <input
                       type="tel"
+                      placeholder="Enter phone number"
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                       value={formData.phone}
                       onChange={(e) =>
                         setFormData({ ...formData, phone: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Address
+                    </label>
+                    <textarea
+                      placeholder="Enter address"
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                      rows={3}
+                      value={formData.address}
+                      onChange={(e) =>
+                        setFormData({ ...formData, address: e.target.value })
                       }
                     />
                   </div>

@@ -53,6 +53,17 @@ export default function AssessApplicationPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+
+  // Format currency with Philippine Peso symbol
+  const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
   const [application, setApplication] = useState<Application | null>(null);
   const [fees, setFees] = useState<Fee[]>([]);
   const [selectedFee, setSelectedFee] = useState<number | ''>('');
@@ -321,7 +332,7 @@ export default function AssessApplicationPage() {
                       : parseFloat(fee.default_amount || '0');
                     return (
                       <option key={fee.fee_id} value={fee.fee_id.toString()}>
-                        {fee.category_name} - {fee.fee_name} (${amount.toFixed(2)})
+                        {fee.category_name} - {fee.fee_name} ({formatCurrency(amount)})
                       </option>
                     );
                   })}
@@ -380,7 +391,7 @@ export default function AssessApplicationPage() {
                         {fee.fee_name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${parseFloat(fee.assessed_amount.toString()).toFixed(2)}
+                        {formatCurrency(parseFloat(fee.assessed_amount.toString()))}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button
@@ -407,7 +418,7 @@ export default function AssessApplicationPage() {
                       Total
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-gray-900">
-                      ${totalAssessed.toFixed(2)}
+                      {formatCurrency(totalAssessed)}
                     </td>
                     <td></td>
                   </tr>

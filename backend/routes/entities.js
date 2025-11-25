@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -53,25 +54,28 @@ router.get('/:id', async (req, res) => {
 // Create entity (Admin only)
 router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   try {
-    const { entity_name, contact_person, email, phone } = req.body;
+    const { entity_name, contact_person, email, phone, address } = req.body;
 
     if (!entity_name) {
       return res.status(400).json({ error: 'Entity name is required' });
     }
 
+    const entity_id = generateId(ID_PREFIXES.ENTITY);
+
     const [result] = await pool.execute(
-      'INSERT INTO Entities (entity_name, contact_person, email, phone) VALUES (?, ?, ?, ?)',
-      [entity_name, contact_person || null, email || null, phone || null]
+      'INSERT INTO Entities (entity_id, entity_name, contact_person, email, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
+      [entity_id, entity_name, contact_person || null, email || null, phone || null, address || null]
     );
 
     await logAction(req.user.user_id, 'CREATE_ENTITY', `Created entity '${entity_name}'`);
 
     res.status(201).json({
-      entity_id: result.insertId,
+      entity_id,
       entity_name,
       contact_person,
       email,
-      phone
+      phone,
+      address
     });
   } catch (error) {
     console.error('Create entity error:', error);
@@ -82,7 +86,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 // Update entity (Admin only)
 router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   try {
-    const { entity_name, contact_person, email, phone } = req.body;
+    const { entity_name, contact_person, email, phone, address } = req.body;
     const entityId = req.params.id;
 
     if (!entity_name) {
@@ -90,8 +94,8 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      'UPDATE Entities SET entity_name = ?, contact_person = ?, email = ?, phone = ? WHERE entity_id = ?',
-      [entity_name, contact_person || null, email || null, phone || null, entityId]
+      'UPDATE Entities SET entity_name = ?, contact_person = ?, email = ?, phone = ?, address = ? WHERE entity_id = ?',
+      [entity_name, contact_person || null, email || null, phone || null, address || null, entityId]
     );
 
     if (result.affectedRows === 0) {

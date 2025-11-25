@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -32,15 +33,17 @@ router.post('/categories', authorize('SuperAdmin', 'Admin'), async (req, res) =>
       return res.status(400).json({ error: 'Category name is required' });
     }
 
+    const category_id = generateId(ID_PREFIXES.CATEGORY);
+
     const [result] = await pool.execute(
-      'INSERT INTO Fees_Categories (category_name) VALUES (?)',
-      [category_name]
+      'INSERT INTO Fees_Categories (category_id, category_name) VALUES (?, ?)',
+      [category_id, category_name]
     );
 
     await logAction(req.user.user_id, 'CREATE_FEE_CATEGORY', `Created category '${category_name}'`);
 
     res.status(201).json({
-      category_id: result.insertId,
+      category_id,
       category_name
     });
   } catch (error) {
@@ -171,15 +174,17 @@ router.post('/charges', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
+    const fee_id = generateId(ID_PREFIXES.FEE);
+
     const [result] = await pool.execute(
-      'INSERT INTO Fees_Charges (category_id, fee_name, default_amount) VALUES (?, ?, ?)',
-      [category_id, fee_name, parseFloat(default_amount)]
+      'INSERT INTO Fees_Charges (fee_id, category_id, fee_name, default_amount) VALUES (?, ?, ?, ?)',
+      [fee_id, category_id, fee_name, parseFloat(default_amount)]
     );
 
     await logAction(req.user.user_id, 'CREATE_FEE', `Created fee '${fee_name}'`);
 
     res.status(201).json({
-      fee_id: result.insertId,
+      fee_id,
       category_id,
       fee_name,
       default_amount: parseFloat(default_amount)

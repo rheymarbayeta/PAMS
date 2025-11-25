@@ -588,13 +588,17 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
  * @returns {Promise<Object>} Assessment data object
  */
 const getAssessmentData = async (applicationId) => {
-  // Get assessment record from database
+  // Get assessment record from database with entity info
   const [assessmentRecords] = await pool.execute(
     `SELECT 
       ar.*,
+      a.entity_id,
+      e.address as entity_address,
       u1.full_name as prepared_by_name,
       u2.full_name as approved_by_name
      FROM Assessment_Records ar
+     INNER JOIN Applications a ON ar.application_id = a.application_id
+     INNER JOIN Entities e ON a.entity_id = e.entity_id
      LEFT JOIN Users u1 ON ar.prepared_by_user_id = u1.user_id
      LEFT JOIN Users u2 ON ar.approved_by_user_id = u2.user_id
      WHERE ar.application_id = ?`,
@@ -670,11 +674,11 @@ const getAssessmentData = async (applicationId) => {
   // Extract data
   const bin = paramsObj.bin || paramsObj.business_identification_number || assessment.app_number || '';
   const tradeName = assessment.business_name || '';
-  const businessAddress = assessment.address || '';
+  const businessAddress = assessment.entity_address || assessment.address || '';
   const proprietorName = assessment.owner_name || assessment.business_name || '';
   const proprietorId = paramsObj.proprietor_id || paramsObj.owner_id || '';
   const proprietorDisplay = proprietorId ? `${proprietorName} (${proprietorId})` : proprietorName;
-  const ownerAddress = paramsObj.owner_address || paramsObj.proprietor_address || businessAddress || '';
+  const ownerAddress = assessment.entity_address || assessment.address || paramsObj.owner_address || paramsObj.proprietor_address || '';
   
   // Barcode format: prefix:application_number
   const barcodePrefix = paramsObj.barcode_prefix || '51005';

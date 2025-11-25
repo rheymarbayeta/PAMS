@@ -8,15 +8,15 @@ import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface AssessedFee {
-  assessed_fee_id: number;
-  fee_id: number;
+  assessed_fee_id: string;
+  fee_id: string;
   fee_name: string;
   category_name: string;
   assessed_amount: number;
 }
 
 interface Application {
-  application_id: number;
+  application_id: string;
   application_number: string | null;
   status: string;
   assessed_fees: AssessedFee[];
@@ -31,7 +31,7 @@ export default function ApproveApplicationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [editingFee, setEditingFee] = useState<number | null>(null);
+  const [editingFee, setEditingFee] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<string>('');
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function ApproveApplicationPage() {
     setEditAmount(fee.assessed_amount.toString());
   };
 
-  const handleSaveFee = async (feeId: number) => {
+  const handleSaveFee = async (feeId: string) => {
     try {
       await api.put(`/api/applications/${params.id}/fees/${feeId}`, {
         assessed_amount: parseFloat(editAmount),
@@ -143,6 +143,15 @@ export default function ApproveApplicationPage() {
     0
   );
 
+  const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
   return (
     <ProtectedRoute>
       <Layout>
@@ -184,15 +193,21 @@ export default function ApproveApplicationPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {editingFee === fee.assessed_fee_id ? (
-                          <input
-                            type="number"
-                            step="0.01"
-                            className="w-24 border border-gray-300 rounded-md px-2 py-1"
-                            value={editAmount}
-                            onChange={(e) => setEditAmount(e.target.value)}
-                          />
+                          <div>
+                            <label htmlFor={`amount-${fee.assessed_fee_id}`} className="sr-only">
+                              Amount
+                            </label>
+                            <input
+                              id={`amount-${fee.assessed_fee_id}`}
+                              type="number"
+                              step="0.01"
+                              className="w-24 border border-gray-300 rounded-md px-2 py-1"
+                              value={editAmount}
+                              onChange={(e) => setEditAmount(e.target.value)}
+                            />
+                          </div>
                         ) : (
-                          `$${parseFloat(fee.assessed_amount.toString()).toFixed(2)}`
+                          formatCurrency(parseFloat(fee.assessed_amount.toString()))
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -232,7 +247,7 @@ export default function ApproveApplicationPage() {
                       Total
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-gray-900">
-                      ${totalAssessed.toFixed(2)}
+                      {formatCurrency(totalAssessed)}
                     </td>
                     <td></td>
                   </tr>
@@ -262,10 +277,11 @@ export default function ApproveApplicationPage() {
               <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
                 <h3 className="text-lg font-bold mb-4">Reject Application</h3>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="rejectReason" className="block text-sm font-medium text-gray-700 mb-2">
                     Reason for Rejection *
                   </label>
                   <textarea
+                    id="rejectReason"
                     required
                     rows={4}
                     className="w-full border border-gray-300 rounded-md px-3 py-2"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ChangeEvent } from 'react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
@@ -33,6 +33,28 @@ export default function FeesPage() {
     fee_name: '',
     default_amount: '',
   });
+
+  const formatCurrency = (value: string | number): string => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(num)) return '0.00';
+    return num.toLocaleString('en-PH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
+  const handleAmountChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Remove any non-digit characters except decimal point
+    const numericValue = value.replace(/[^\d.]/g, '');
+    // Ensure only one decimal point
+    const parts = numericValue.split('.');
+    let formattedValue = parts[0];
+    if (parts.length > 1) {
+      formattedValue += '.' + parts[1].substring(0, 2);
+    }
+    setFeeForm({ ...feeForm, default_amount: formattedValue });
+  };
 
   useEffect(() => {
     fetchCategories();
@@ -228,9 +250,9 @@ export default function FeesPage() {
                             {fee.fee_name}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {fee.category_name} • ${typeof fee.default_amount === 'number' 
-                              ? fee.default_amount.toFixed(2) 
-                              : parseFloat(fee.default_amount || '0').toFixed(2)}
+                            {fee.category_name} • ₱ {typeof fee.default_amount === 'number' 
+                              ? fee.default_amount.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                              : parseFloat(fee.default_amount || '0').toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                           </div>
                         </div>
                         <div className="flex space-x-2">
@@ -278,6 +300,8 @@ export default function FeesPage() {
                     </label>
                     <input
                       type="text"
+                      title="Category Name"
+                      placeholder="Enter category name"
                       required
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                       value={categoryForm.category_name}
@@ -321,6 +345,7 @@ export default function FeesPage() {
                       Category
                     </label>
                     <select
+                      title="Fee Category"
                       required
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                       value={feeForm.category_id}
@@ -342,6 +367,8 @@ export default function FeesPage() {
                     </label>
                     <input
                       type="text"
+                      title="Fee Name"
+                      placeholder="Enter fee name"
                       required
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                       value={feeForm.fee_name}
@@ -354,16 +381,18 @@ export default function FeesPage() {
                     <label className="block text-sm font-medium text-gray-700">
                       Default Amount
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                      value={feeForm.default_amount}
-                      onChange={(e) =>
-                        setFeeForm({ ...feeForm, default_amount: e.target.value })
-                      }
-                    />
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-2 text-gray-600 font-semibold">₱</span>
+                      <input
+                        type="text"
+                        title="Default Amount"
+                        placeholder="0.00"
+                        required
+                        className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md text-right"
+                        value={formatCurrency(feeForm.default_amount)}
+                        onChange={handleAmountChange}
+                      />
+                    </div>
                   </div>
                   <div className="flex justify-end space-x-2">
                     <button

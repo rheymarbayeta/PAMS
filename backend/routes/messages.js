@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -113,9 +114,11 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Recipient ID and content are required' });
     }
 
+    const message_id = generateId(ID_PREFIXES.MESSAGE);
+
     const [result] = await pool.execute(
-      'INSERT INTO Messages (sender_id, recipient_id, content, application_context_id) VALUES (?, ?, ?, ?)',
-      [req.user.user_id, recipient_id, content, application_context_id || null]
+      'INSERT INTO Messages (message_id, sender_id, recipient_id, content, application_context_id) VALUES (?, ?, ?, ?, ?)',
+      [message_id, req.user.user_id, recipient_id, content, application_context_id || null]
     );
 
     // Get the created message with user details
@@ -128,7 +131,7 @@ router.post('/', async (req, res) => {
        INNER JOIN Users sender ON m.sender_id = sender.user_id
        INNER JOIN Users recipient ON m.recipient_id = recipient.user_id
        WHERE m.message_id = ?`,
-      [result.insertId]
+      [message_id]
     );
 
     const message = messages[0];

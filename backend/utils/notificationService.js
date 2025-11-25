@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { generateId, ID_PREFIXES } = require('./idGenerator');
 
 // This will be set by server.js
 let io = null;
@@ -17,15 +18,17 @@ const setSocketIO = (socketIO, emitFn) => {
  */
 const createNotification = async (userId, message, link = null) => {
   try {
+    const notification_id = generateId(ID_PREFIXES.NOTIFICATION);
+
     const [result] = await pool.execute(
-      'INSERT INTO Notifications (user_id, message, link) VALUES (?, ?, ?)',
-      [userId, message, link]
+      'INSERT INTO Notifications (notification_id, user_id, message, link) VALUES (?, ?, ?, ?)',
+      [notification_id, userId, message, link]
     );
 
     // Emit real-time notification
     if (emitNotificationFn) {
       emitNotificationFn(userId, {
-        notification_id: result.insertId,
+        notification_id: notification_id,
         user_id: userId,
         message,
         link,

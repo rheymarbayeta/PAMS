@@ -5,8 +5,8 @@ USE pams_db;
 
 -- Create Assessment_Records table
 CREATE TABLE IF NOT EXISTS Assessment_Records (
-    assessment_id INT AUTO_INCREMENT PRIMARY KEY,
-    application_id INT NOT NULL UNIQUE,
+    assessment_id VARCHAR(64) PRIMARY KEY,
+    application_id VARCHAR(64) NOT NULL UNIQUE,
     business_name VARCHAR(255) NOT NULL,
     owner_name VARCHAR(255),
     address TEXT,
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS Assessment_Records (
     q2_amount DECIMAL(12, 2) DEFAULT 0.00,
     q3_amount DECIMAL(12, 2) DEFAULT 0.00,
     q4_amount DECIMAL(12, 2) DEFAULT 0.00,
-    prepared_by_user_id INT,
-    approved_by_user_id INT,
+    prepared_by_user_id VARCHAR(64),
+    approved_by_user_id VARCHAR(64),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (application_id) REFERENCES Applications(application_id) ON DELETE CASCADE,
@@ -35,9 +35,9 @@ CREATE TABLE IF NOT EXISTS Assessment_Records (
 
 -- Create Assessment_Record_Fees table for individual fees in assessment
 CREATE TABLE IF NOT EXISTS Assessment_Record_Fees (
-    record_fee_id INT AUTO_INCREMENT PRIMARY KEY,
-    assessment_id INT NOT NULL,
-    fee_id INT NOT NULL,
+    record_fee_id VARCHAR(64) PRIMARY KEY,
+    assessment_id VARCHAR(64) NOT NULL,
+    fee_id VARCHAR(64) NOT NULL,
     fee_name VARCHAR(255) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
     quantity INT DEFAULT 1,

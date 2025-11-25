@@ -60,6 +60,9 @@
   .btn-print:hover {
     background-color: #1e7e34;
   }
+  .hidden {
+    display: none;
+  }
 </style>
 <script>
 try{
@@ -79,9 +82,9 @@ theViewer.defaultViewer = new theViewer.Viewer({});
     <p>Loading assessment report...</p>
   </div>
   
-  <div id="error" style="display:none;" class="error"></div>
+  <div id="error" class="error hidden"></div>
   
-  <div id="report-content" style="display:none;"></div>
+  <div id="report-content" class="hidden"></div>
 </div>
 
 <script>

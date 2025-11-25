@@ -9,9 +9,9 @@ import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ApplicationDetail {
-  application_id: number;
+  application_id: string;
   application_number: string | null;
-  entity_id: number;
+  entity_id: string;
   entity_name: string;
   contact_person: string | null;
   email: string | null;
@@ -25,8 +25,8 @@ interface ApplicationDetail {
   updated_at: string;
   parameters: Array<{ param_name: string; param_value: string }>;
   assessed_fees: Array<{
-    assessed_fee_id: number;
-    fee_id: number;
+    assessed_fee_id: string;
+    fee_id: string;
     fee_name: string;
     category_name: string;
     assessed_amount: number;
@@ -34,7 +34,7 @@ interface ApplicationDetail {
     assessed_by_name: string;
   }>;
   audit_trail: Array<{
-    log_id: number;
+    log_id: string;
     user_name: string;
     action: string;
     details: string;
@@ -79,6 +79,8 @@ export default function ApplicationDetailPage() {
         return 'bg-orange-100 text-orange-800';
       case 'Approved':
         return 'bg-green-100 text-green-800';
+      case 'Paid':
+        return 'bg-emerald-100 text-emerald-800';
       case 'Rejected':
         return 'bg-red-100 text-red-800';
       default:
@@ -175,6 +177,27 @@ export default function ApplicationDetailPage() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 >
                   Print Assessment Report
+                </button>
+              )}
+              {application.status === 'Approved' && (
+                <button
+                  onClick={() => router.push(`/applications/${application.application_id}/payment`)}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                >
+                  Record Payment
+                </button>
+              )}
+              {application.status === 'Paid' && (
+                <button
+                  onClick={() => {
+                    const token = localStorage.getItem('token') || '';
+                    const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+                    const url = `/permit-report.html?id=${application.application_id}${encodedToken}`;
+                    window.open(url, '_blank');
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  Issue Permit
                 </button>
               )}
               {canRenew && (
@@ -326,7 +349,7 @@ export default function ApplicationDetailPage() {
                           {fee.fee_name}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${parseFloat(fee.assessed_amount.toString()).toFixed(2)}
+                          ₱ {parseFloat(fee.assessed_amount.toString()).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {fee.assessed_by_name}
@@ -340,7 +363,7 @@ export default function ApplicationDetailPage() {
                         Total
                       </td>
                       <td className="px-6 py-4 text-sm font-bold text-gray-900">
-                        ${totalFees.toFixed(2)}
+                        ₱ {totalFees.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </td>
                       <td></td>
                     </tr>
@@ -356,14 +379,27 @@ export default function ApplicationDetailPage() {
               {application.audit_trail.length === 0 ? (
                 <div className="text-sm text-gray-500">No audit trail entries</div>
               ) : (
-                application.audit_trail.map((log) => (
-                  <div key={log.log_id} className="border-l-4 border-indigo-500 pl-4 py-2">
-                    <div className="text-sm text-gray-900">{log.details}</div>
-                    <div className="text-xs text-gray-500">
-                      {log.user_name} • {new Date(log.timestamp).toLocaleString()}
+                application.audit_trail.map((log) => {
+                  // Format amounts in the log details
+                  const formatLogDetails = (details: string) => {
+                    return details.replace(/₱([\d,]+\.?\d{0,2})/g, (match, amount) => {
+                      const num = parseFloat(amount.replace(/,/g, ''));
+                      return '₱ ' + num.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    }).replace(/Amount:\s*(\d+(?:\.\d{2})?)/g, (match, amount) => {
+                      const num = parseFloat(amount);
+                      return 'Amount: ₱ ' + num.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    });
+                  };
+
+                  return (
+                    <div key={log.log_id} className="border-l-4 border-indigo-500 pl-4 py-2">
+                      <div className="text-sm text-gray-900">{formatLogDetails(log.details)}</div>
+                      <div className="text-xs text-gray-500">
+                        {log.user_name} • {new Date(log.timestamp).toLocaleString()}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

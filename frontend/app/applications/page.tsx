@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Application {
   application_id: number;
@@ -20,6 +21,7 @@ interface Application {
 
 export default function ApplicationsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
@@ -40,6 +42,22 @@ export default function ApplicationsPage() {
       console.error('Error fetching applications:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteApplication = async (e: React.MouseEvent, applicationId: number) => {
+    e.stopPropagation();
+    
+    if (!confirm('Are you sure you want to delete this application? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/applications/${applicationId}`);
+      alert('Application deleted successfully');
+      fetchApplications();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Error deleting application');
     }
   };
 
@@ -111,11 +129,13 @@ export default function ApplicationsPage() {
                 filteredApplications.map((app) => (
                   <li
                     key={app.application_id}
-                    className="px-4 py-4 hover:bg-gray-50 cursor-pointer"
-                    onClick={() => router.push(`/applications/${app.application_id}`)}
+                    className="px-4 py-4 hover:bg-gray-50"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => router.push(`/applications/${app.application_id}`)}
+                      >
                         <div className="flex items-center">
                           <div className="text-sm font-medium text-gray-900">
                             {app.application_number || `Application #${app.application_id}`}
@@ -135,7 +155,16 @@ export default function ApplicationsPage() {
                           Created by {app.creator_name} • {new Date(app.created_at).toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="ml-4">
+                      <div className="ml-4 flex items-center gap-2">
+                        {user?.role_name === 'SuperAdmin' && (
+                          <button
+                            onClick={(e) => handleDeleteApplication(e, app.application_id)}
+                            className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-red-600 hover:bg-red-50 border border-red-300"
+                            title="Delete application (SuperAdmin only)"
+                          >
+                            Delete
+                          </button>
+                        )}
                         <svg
                           className="h-5 w-5 text-gray-400"
                           fill="none"

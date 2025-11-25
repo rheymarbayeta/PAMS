@@ -1,12 +1,13 @@
 -- PAMS Database Schema
 -- MySQL 8.0+
+-- All IDs use VARCHAR(64) hash-based format (MD5/UUID) instead of INT AUTO_INCREMENT
 
 CREATE DATABASE IF NOT EXISTS pams_db;
 USE pams_db;
 
 -- Roles Table
 CREATE TABLE IF NOT EXISTS Roles (
-    role_id INT AUTO_INCREMENT PRIMARY KEY,
+    role_id VARCHAR(64) PRIMARY KEY,
     role_name VARCHAR(50) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -14,11 +15,11 @@ CREATE TABLE IF NOT EXISTS Roles (
 
 -- Users Table
 CREATE TABLE IF NOT EXISTS Users (
-    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(64) PRIMARY KEY,
     username VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role_id INT NOT NULL,
+    role_id VARCHAR(64) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES Roles(role_id) ON DELETE RESTRICT,
@@ -28,11 +29,12 @@ CREATE TABLE IF NOT EXISTS Users (
 
 -- Entities Table (Permit Applicants)
 CREATE TABLE IF NOT EXISTS Entities (
-    entity_id INT AUTO_INCREMENT PRIMARY KEY,
+    entity_id VARCHAR(64) PRIMARY KEY,
     entity_name VARCHAR(255) NOT NULL,
     contact_person VARCHAR(255),
     email VARCHAR(255),
     phone VARCHAR(50),
+    address VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_entity_name (entity_name)
@@ -40,13 +42,15 @@ CREATE TABLE IF NOT EXISTS Entities (
 
 -- Applications Table
 CREATE TABLE IF NOT EXISTS Applications (
-    application_id INT AUTO_INCREMENT PRIMARY KEY,
-    entity_id INT NOT NULL,
-    creator_id INT NOT NULL,
-    assessor_id INT NULL,
-    approver_id INT NULL,
+    application_id VARCHAR(64) PRIMARY KEY,
+    entity_id VARCHAR(64) NOT NULL,
+    creator_id VARCHAR(64) NOT NULL,
+    assessor_id VARCHAR(64),
+    approver_id VARCHAR(64),
+    permit_type_id VARCHAR(64),
     permit_type VARCHAR(100) NOT NULL,
-    status ENUM('Pending', 'Assessed', 'Pending Approval', 'Approved', 'Rejected') DEFAULT 'Pending',
+    status ENUM('Pending', 'Assessed', 'Pending Approval', 'Approved', 'Rejected', 'Paid', 'Issued', 'Released') DEFAULT 'Pending',
+    application_number VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (entity_id) REFERENCES Entities(entity_id) ON DELETE RESTRICT,
@@ -62,8 +66,8 @@ CREATE TABLE IF NOT EXISTS Applications (
 
 -- Application_Parameters Table (Dynamic fields)
 CREATE TABLE IF NOT EXISTS Application_Parameters (
-    parameter_id INT AUTO_INCREMENT PRIMARY KEY,
-    application_id INT NOT NULL,
+    parameter_id VARCHAR(64) PRIMARY KEY,
+    application_id VARCHAR(64) NOT NULL,
     param_name VARCHAR(100) NOT NULL,
     param_value TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -75,7 +79,7 @@ CREATE TABLE IF NOT EXISTS Application_Parameters (
 
 -- Fees_Categories Table
 CREATE TABLE IF NOT EXISTS Fees_Categories (
-    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    category_id VARCHAR(64) PRIMARY KEY,
     category_name VARCHAR(100) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -83,8 +87,8 @@ CREATE TABLE IF NOT EXISTS Fees_Categories (
 
 -- Fees_Charges Table (Master list of all possible fees)
 CREATE TABLE IF NOT EXISTS Fees_Charges (
-    fee_id INT AUTO_INCREMENT PRIMARY KEY,
-    category_id INT NOT NULL,
+    fee_id VARCHAR(64) PRIMARY KEY,
+    category_id VARCHAR(64) NOT NULL,
     fee_name VARCHAR(255) NOT NULL,
     default_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -95,11 +99,11 @@ CREATE TABLE IF NOT EXISTS Fees_Charges (
 
 -- Assessed_Fees Table (Links fees to applications)
 CREATE TABLE IF NOT EXISTS Assessed_Fees (
-    assessed_fee_id INT AUTO_INCREMENT PRIMARY KEY,
-    application_id INT NOT NULL,
-    fee_id INT NOT NULL,
+    assessed_fee_id VARCHAR(64) PRIMARY KEY,
+    application_id VARCHAR(64) NOT NULL,
+    fee_id VARCHAR(64) NOT NULL,
     assessed_amount DECIMAL(10, 2) NOT NULL,
-    assessed_by_user_id INT NOT NULL,
+    assessed_by_user_id VARCHAR(64) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (application_id) REFERENCES Applications(application_id) ON DELETE CASCADE,
@@ -111,9 +115,9 @@ CREATE TABLE IF NOT EXISTS Assessed_Fees (
 
 -- Audit_Trail Table
 CREATE TABLE IF NOT EXISTS Audit_Trail (
-    log_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    application_id INT NULL,
+    log_id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    application_id VARCHAR(64),
     action VARCHAR(100) NOT NULL,
     details TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -127,8 +131,8 @@ CREATE TABLE IF NOT EXISTS Audit_Trail (
 
 -- Notifications Table
 CREATE TABLE IF NOT EXISTS Notifications (
-    notification_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
+    notification_id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
     message TEXT NOT NULL,
     link VARCHAR(255),
     is_read BOOLEAN DEFAULT FALSE,
@@ -141,10 +145,10 @@ CREATE TABLE IF NOT EXISTS Notifications (
 
 -- Messages Table (Internal chat)
 CREATE TABLE IF NOT EXISTS Messages (
-    message_id INT AUTO_INCREMENT PRIMARY KEY,
-    sender_id INT NOT NULL,
-    recipient_id INT NOT NULL,
-    application_context_id INT NULL,
+    message_id VARCHAR(64) PRIMARY KEY,
+    sender_id VARCHAR(64) NOT NULL,
+    recipient_id VARCHAR(64) NOT NULL,
+    application_context_id VARCHAR(64),
     content TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (sender_id) REFERENCES Users(user_id) ON DELETE RESTRICT,
@@ -156,3 +160,20 @@ CREATE TABLE IF NOT EXISTS Messages (
     INDEX idx_timestamp (timestamp)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Payments Table (Payment receipts)
+CREATE TABLE IF NOT EXISTS Payments (
+    payment_id VARCHAR(64) PRIMARY KEY,
+    application_id VARCHAR(64) NOT NULL,
+    official_receipt_no VARCHAR(100) NOT NULL,
+    payment_date DATE NOT NULL,
+    address VARCHAR(255),
+    amount DECIMAL(10, 2) NOT NULL,
+    recorded_by_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES Applications(application_id) ON DELETE CASCADE,
+    FOREIGN KEY (recorded_by_user_id) REFERENCES Users(user_id) ON DELETE RESTRICT,
+    INDEX idx_application_id (application_id),
+    INDEX idx_official_receipt_no (official_receipt_no),
+    UNIQUE KEY unique_receipt (application_id, official_receipt_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

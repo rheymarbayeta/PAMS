@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -184,14 +185,18 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       }
     }
     
+    // Generate rule ID
+    const rule_id = generateId(ID_PREFIXES.ASSESSMENT_RULE);
+
     // Insert rule - handle legacy 'attribute' column if it still exists
     let result;
     try {
       if (attributeColumnAvailable && attributeName) {
         // Include attribute column (legacy schema)
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [
+            rule_id,
             permit_type_id,
             attribute_id,
             attributeName,
@@ -203,8 +208,9 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       } else {
         // Use new schema (without legacy column)
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?)',
+          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
           [
+            rule_id,
             permit_type_id,
             attribute_id,
             rule_name,
@@ -219,8 +225,9 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         attributeColumnAvailable = false;
         // Retry without attribute column
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?)',
+          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
           [
+            rule_id,
             permit_type_id,
             attribute_id,
             rule_name,
@@ -232,8 +239,9 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         console.log('[AssessmentRules] Attribute column requires value. Retrying with attribute name.');
         attributeColumnAvailable = true;
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [
+            rule_id,
             permit_type_id,
             attribute_id,
             attributeName,
@@ -247,8 +255,8 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       }
     }
 
-    const ruleId = result.insertId;
-    console.log('[AssessmentRules] Rule inserted with ID:', ruleId);
+    // Use the generated rule_id instead of result.insertId
+    console.log('[AssessmentRules] Rule inserted with ID:', rule_id);
 
     // Insert associated fees if provided
     if (fees && Array.isArray(fees)) {
@@ -275,7 +283,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
           }
           
           console.log('[AssessmentRules] Inserting fee:', {
-            rule_id: ruleId,
+            rule_id: rule_id,
             fee_id: fee.fee_id,
             fee_name: feeName || 'Unknown Fee',
             amount: parseFloat(fee.amount),
@@ -283,10 +291,13 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
             fee_order: fee.fee_order !== undefined ? fee.fee_order : i
           });
           
+          const rule_fee_id = generateId(ID_PREFIXES.ASSESSMENT_RULE_FEE);
+
           await connection.execute(
-            'INSERT INTO Assessment_Rule_Fees (rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO Assessment_Rule_Fees (rule_fee_id, rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
-              ruleId,
+              rule_fee_id,
+              rule_id,
               fee.fee_id,
               feeName || 'Unknown Fee',
               parseFloat(fee.amount),
@@ -310,7 +321,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     console.log('[AssessmentRules] Audit log created');
 
     const response = {
-      rule_id: ruleId,
+      rule_id: rule_id,
       permit_type_id,
       attribute_id,
       rule_name,

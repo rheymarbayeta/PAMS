@@ -8,7 +8,7 @@ import api from '@/services/api';
 interface PermitType {
   permit_type_id: number;
   permit_type_name: string;
-  attribute_id: number | null;
+  attribute_id: string | null;
   attribute_name: string | null;
   description: string | null;
   is_active: boolean;
@@ -44,7 +44,7 @@ export default function PermitTypesPage() {
     description: '',
     is_active: true,
   });
-  const [attributes, setAttributes] = useState<Array<{ attribute_id: number; attribute_name: string }>>([]);
+  const [attributes, setAttributes] = useState<Array<{ attribute_id: string; attribute_name: string }>>([]);
   const [permitTypeFees, setPermitTypeFees] = useState<PermitTypeFee[]>([]);
   const [currentPermitTypeId, setCurrentPermitTypeId] = useState<number | null>(null);
   const [showAttributeModal, setShowAttributeModal] = useState(false);
@@ -144,7 +144,7 @@ export default function PermitTypesPage() {
     try {
       const payload = {
         ...formData,
-        attribute_id: formData.attribute_id ? parseInt(formData.attribute_id, 10) : null,
+        attribute_id: formData.attribute_id || null,
         fees: permitTypeFees,
       };
 
@@ -177,7 +177,7 @@ export default function PermitTypesPage() {
       setEditingPermitType(fullPermitType);
       setFormData({
         permit_type_name: fullPermitType.permit_type_name,
-        attribute_id: fullPermitType.attribute_id?.toString() || '',
+        attribute_id: fullPermitType.attribute_id || '',
         description: fullPermitType.description || '',
         is_active: fullPermitType.is_active,
       });

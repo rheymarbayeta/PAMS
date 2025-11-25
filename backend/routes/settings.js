@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -40,6 +41,8 @@ router.put('/:key', authenticate, authorize('SuperAdmin', 'Admin'), async (req, 
     const { key } = req.params;
     const { value, description } = req.body;
 
+    console.log(`[Settings] Updating setting: key=${key}, value=${value}`);
+
     if (value === undefined) {
       return res.status(400).json({ error: 'Setting value is required' });
     }
@@ -47,20 +50,25 @@ router.put('/:key', authenticate, authorize('SuperAdmin', 'Admin'), async (req, 
     // Check if table exists, if not return helpful error
     try {
       const [result] = await pool.execute(
-        'UPDATE System_Settings SET setting_value = ?, description = COALESCE(?, description), updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?',
-        [value, description, key]
+        'UPDATE System_Settings SET setting_value = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?',
+        [value, description || null, key]
       );
+
+      console.log(`[Settings] Update result for ${key}: affectedRows=${result.affectedRows}`);
 
       if (result.affectedRows === 0) {
         // Try to insert if it doesn't exist
+        console.log(`[Settings] Inserting new setting: ${key}`);
+        const setting_id = generateId(ID_PREFIXES.SYSTEM_SETTING);
         await pool.execute(
-          'INSERT INTO System_Settings (setting_key, setting_value, description) VALUES (?, ?, ?)',
-          [key, value, description || '']
+          'INSERT INTO System_Settings (setting_id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)',
+          [setting_id, key, value, description || null]
         );
       }
 
       res.json({ message: 'Setting updated successfully' });
     } catch (dbError) {
+      console.error(`[Settings] Database error for ${key}:`, dbError);
       // Check if it's a table doesn't exist error
       if (dbError.code === 'ER_NO_SUCH_TABLE' || dbError.message.includes("doesn't exist")) {
         console.error('System_Settings table does not exist. Please run the migration:');
@@ -73,9 +81,9 @@ router.put('/:key', authenticate, authorize('SuperAdmin', 'Admin'), async (req, 
       throw dbError;
     }
   } catch (error) {
-    console.error('Update setting error:', error);
-    console.error('Error details:', error.message);
-    console.error('Error code:', error.code);
+    console.error('[Settings] Update setting error:', error);
+    console.error('[Settings] Error details:', error.message);
+    console.error('[Settings] Error code:', error.code);
     res.status(500).json({ 
       error: 'Internal server error',
       details: error.message 

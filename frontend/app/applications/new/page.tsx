@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getBarangaysByMunicipality, BARANGAYS_BY_MUNICIPALITY } from '@/utils/barangays';
 
 interface Entity {
-  entity_id: number;
+  entity_id: string;
   entity_name: string;
   contact_person: string | null;
   email: string | null;
@@ -17,9 +17,9 @@ interface Entity {
 }
 
 interface PermitTypeOption {
-  permit_type_id: number;
+  permit_type_id: string;
   permit_type_name: string;
-  attribute_id?: number | null;
+  attribute_id?: string | null;
   attribute_name?: string | null;
   is_active?: boolean;
 }
@@ -67,7 +67,7 @@ export default function NewApplicationPage() {
 
   const handleEntitySelect = (entity: Entity) => {
     setSelectedEntity(entity);
-    setFormData({ ...formData, entity_id: entity.entity_id.toString() });
+    setFormData({ ...formData, entity_id: entity.entity_id });
     setEntitySearch(entity.entity_name);
     setShowEntityDropdown(false);
   };
@@ -181,7 +181,7 @@ export default function NewApplicationPage() {
       ];
 
       const response = await api.post('/api/applications', {
-        entity_id: parseInt(formData.entity_id),
+        entity_id: formData.entity_id,
         permit_type: formData.permit_type,
         parameters: parameters,
       });

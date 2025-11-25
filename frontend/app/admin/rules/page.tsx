@@ -6,10 +6,10 @@ import Layout from '@/components/Layout';
 import api from '@/services/api';
 
 interface AssessmentRule {
-  rule_id: number;
-  permit_type_id: number;
+  rule_id: string;
+  permit_type_id: string;
   permit_type_name: string;
-  attribute_id: number;
+  attribute_id: string;
   attribute_name: string;
   rule_name: string;
   description: string | null;
@@ -18,8 +18,8 @@ interface AssessmentRule {
 }
 
 interface RuleFee {
-  rule_fee_id?: number;
-  fee_id: number;
+  rule_fee_id?: string;
+  fee_id: string;
   fee_name: string;
   amount: number;
   default_amount?: number;
@@ -29,22 +29,22 @@ interface RuleFee {
 }
 
 interface PermitType {
-  permit_type_id: number;
+  permit_type_id: string;
   permit_type_name: string;
-  attribute_id: number | null;
+  attribute_id: string | null;
   attribute_name: string | null;
   is_active: boolean;
 }
 
 interface Attribute {
-  attribute_id: number;
+  attribute_id: string;
   attribute_name: string;
   description: string | null;
   is_active: boolean;
 }
 
 interface Fee {
-  fee_id: number;
+  fee_id: string;
   fee_name: string;
   category_name: string;
   default_amount: number;
@@ -79,8 +79,8 @@ export default function RulesPage() {
   useEffect(() => {
     // Only auto-populate for new rules (not when editing)
     if (formData.permit_type_id && formData.attribute_id && !editingRule) {
-      const permitType = permitTypes.find(pt => pt.permit_type_id.toString() === formData.permit_type_id);
-      const attribute = attributes.find(attr => attr.attribute_id.toString() === formData.attribute_id);
+      const permitType = permitTypes.find(pt => pt.permit_type_id === formData.permit_type_id);
+      const attribute = attributes.find(attr => attr.attribute_id === formData.attribute_id);
       
       if (permitType && attribute) {
         const autoRuleName = `${permitType.permit_type_name} - ${attribute.attribute_name}`;
@@ -169,8 +169,8 @@ export default function RulesPage() {
     try {
       const payload = {
         ...formData,
-        permit_type_id: parseInt(formData.permit_type_id),
-        attribute_id: parseInt(formData.attribute_id),
+        permit_type_id: formData.permit_type_id,
+        attribute_id: formData.attribute_id,
         fees: ruleFees,
       };
 
@@ -227,7 +227,7 @@ export default function RulesPage() {
     setRuleFees([
       ...ruleFees,
       {
-        fee_id: 0,
+        fee_id: '',
         fee_name: '',
         amount: 0,
         is_required: true,
@@ -504,11 +504,11 @@ export default function RulesPage() {
                             <select
                               required
                               className="flex-1 border border-gray-300 rounded-md px-3 py-2"
-                              value={fee.fee_id || 0}
-                              onChange={(e) => updateFee(index, 'fee_id', parseInt(e.target.value))}
+                              value={fee.fee_id || ''}
+                              onChange={(e) => updateFee(index, 'fee_id', e.target.value)}
                               aria-label={`Select fee for row ${index + 1}`}
                             >
-                              <option value={0}>Select Fee</option>
+                              <option value="">Select Fee</option>
                               {allFees.map((f) => (
                                 <option key={f.fee_id} value={f.fee_id}>
                                   {f.category_name} - {f.fee_name}

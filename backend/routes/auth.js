@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -118,17 +119,18 @@ router.post('/register', authenticate, authorize('SuperAdmin', 'Admin'), async (
 
     // Hash password
     const password_hash = await bcrypt.hash(password, 10);
+    const user_id = generateId(ID_PREFIXES.USER);
 
     // Create user
     const [result] = await pool.execute(
-      'INSERT INTO Users (username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?)',
-      [username, password_hash, full_name, role_id]
+      'INSERT INTO Users (user_id, username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?, ?)',
+      [user_id, username, password_hash, full_name, role_id]
     );
 
     await logAction(req.user.user_id, 'CREATE_USER', `User '${req.user.username}' created user '${username}'`);
 
     res.status(201).json({
-      user_id: result.insertId,
+      user_id,
       username,
       full_name,
       role_id

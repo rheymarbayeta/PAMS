@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
+const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
@@ -84,18 +85,20 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       return res.status(400).json({ error: 'Attribute name is required' });
     }
 
+    const attribute_id = generateId(ID_PREFIXES.ATTRIBUTE);
+
     console.log('[Attributes] Inserting attribute into database...');
     const [result] = await pool.execute(
-      'INSERT INTO Attributes (attribute_name, description, is_active) VALUES (?, ?, ?)',
-      [attribute_name, description || null, is_active !== undefined ? is_active : true]
+      'INSERT INTO Attributes (attribute_id, attribute_name, description, is_active) VALUES (?, ?, ?, ?)',
+      [attribute_id, attribute_name, description || null, is_active !== undefined ? is_active : true]
     );
 
-    console.log('[Attributes] Attribute inserted with ID:', result.insertId);
+    console.log('[Attributes] Attribute inserted with ID:', attribute_id);
 
     await logAction(req.user.user_id, 'CREATE_ATTRIBUTE', `Created attribute '${attribute_name}'`);
 
     const response = {
-      attribute_id: result.insertId,
+      attribute_id,
       attribute_name,
       description,
       is_active: is_active !== undefined ? is_active : true
