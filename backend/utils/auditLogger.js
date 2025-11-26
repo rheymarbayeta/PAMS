@@ -12,24 +12,35 @@ const logAction = async (userId, action, details, applicationId = null) => {
   try {
     const audit_log_id = generateId(ID_PREFIXES.AUDIT_LOG);
     
-    console.log('[AuditLogger] Logging action:', {
-      audit_log_id,
-      user_id: userId,
-      application_id: applicationId,
-      action,
-      details
-    });
+    console.log('\n========== AUDIT LOGGER ==========');
+    console.log('[AuditLogger] Input Parameters:');
+    console.log('  - userId:', userId);
+    console.log('  - action:', action);
+    console.log('  - details:', details);
+    console.log('  - applicationId:', applicationId);
+    console.log('[AuditLogger] Generated ID:');
+    console.log('  - audit_log_id:', audit_log_id);
+    
+    console.log('[AuditLogger] Inserting into Audit_Trail:');
+    console.log('  - log_id:', audit_log_id);
+    console.log('  - user_id:', userId);
+    console.log('  - application_id:', applicationId);
+    console.log('  - action:', action);
+    console.log('  - details:', details);
 
     await pool.execute(
       'INSERT INTO Audit_Trail (log_id, user_id, application_id, action, details) VALUES (?, ?, ?, ?, ?)',
       [audit_log_id, userId, applicationId, action, details]
     );
 
-    console.log('[AuditLogger] Action logged successfully');
+    console.log('[AuditLogger] ✅ Action logged successfully');
+    console.log('==================================\n');
   } catch (error) {
-    console.error('[AuditLogger] Error logging audit trail:', error);
+    console.log('\n========== AUDIT LOGGER ERROR ==========');
+    console.error('[AuditLogger] ❌ Error logging audit trail:', error);
     console.error('[AuditLogger] Error code:', error.code);
     console.error('[AuditLogger] Error message:', error.message);
+    console.log('========================================\n');
     // Don't throw - audit logging should not break the main flow
   }
 };

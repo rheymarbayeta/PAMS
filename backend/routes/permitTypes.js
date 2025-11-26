@@ -30,6 +30,9 @@ router.get('/:id', async (req, res) => {
   try {
     const permitTypeId = req.params.id;
     
+    console.log('\n========== GET PERMIT TYPE ==========');
+    console.log('[PermitTypes] Fetching permit type:', permitTypeId);
+    
     // Get permit type
     const [permitTypes] = await pool.execute(
       `SELECT pt.*, a.attribute_name, a.attribute_id, a.description AS attribute_description
@@ -40,8 +43,18 @@ router.get('/:id', async (req, res) => {
     );
 
     if (permitTypes.length === 0) {
+      console.error('[PermitTypes] Permit type not found:', permitTypeId);
       return res.status(404).json({ error: 'Permit type not found' });
     }
+
+    const permitType = permitTypes[0];
+    console.log('[PermitTypes] Permit type found:');
+    console.log('  - permit_type_id:', permitType.permit_type_id);
+    console.log('  - permit_type_name:', permitType.permit_type_name);
+    console.log('  - description (from Permit_Types):', permitType.description);
+    console.log('  - attribute_id:', permitType.attribute_id);
+    console.log('  - attribute_name:', permitType.attribute_name);
+    console.log('  - attribute_description (from Attributes):', permitType.attribute_description);
 
     // Get associated fees
     const [fees] = await pool.execute(
@@ -55,6 +68,8 @@ router.get('/:id', async (req, res) => {
       [permitTypeId]
     );
 
+    console.log('[PermitTypes] Associated fees found:', fees.length);
+
     // Convert amounts to numbers
     const feesWithNumbers = fees.map(fee => ({
       ...fee,
@@ -63,10 +78,18 @@ router.get('/:id', async (req, res) => {
         : fee.default_amount
     }));
 
-    res.json({
-      ...permitTypes[0],
+    const response = {
+      ...permitType,
       fees: feesWithNumbers
-    });
+    };
+    
+    console.log('[PermitTypes] Sending response:');
+    console.log('  - permit_type_id:', response.permit_type_id);
+    console.log('  - permit_type_name:', response.permit_type_name);
+    console.log('  - description:', response.description);
+    console.log('====================================\n');
+
+    res.json(response);
   } catch (error) {
     console.error('Get permit type error:', error);
     res.status(500).json({ error: 'Internal server error' });

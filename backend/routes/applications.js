@@ -184,6 +184,9 @@ router.get('/:id', async (req, res) => {
   try {
     const applicationId = req.params.id;
 
+    console.log('\n========== GET APPLICATION DETAIL ==========');
+    console.log('[Applications] Fetching application:', applicationId);
+
     // Get application
     const [applications] = await pool.execute(
       `SELECT 
@@ -206,16 +209,27 @@ router.get('/:id', async (req, res) => {
     );
 
     if (applications.length === 0) {
+      console.error('[Applications] ❌ Application not found:', applicationId);
       return res.status(404).json({ error: 'Application not found' });
     }
 
     const application = applications[0];
+
+    console.log('[Applications] ✅ Application found:');
+    console.log('  - application_id:', application.application_id);
+    console.log('  - application_number:', application.application_number);
+    console.log('  - permit_type:', application.permit_type);
+    console.log('  - permit_type_id:', application.permit_type_id);
+    console.log('  - entity_id:', application.entity_id);
+    console.log('  - status:', application.status);
 
     // Get parameters
     const [parameters] = await pool.execute(
       'SELECT * FROM Application_Parameters WHERE application_id = ?',
       [applicationId]
     );
+
+    console.log('[Applications] Parameters found:', parameters.length);
 
     // Get assessed fees
     const [assessedFees] = await pool.execute(
@@ -250,6 +264,15 @@ router.get('/:id', async (req, res) => {
       [applicationId]
     );
 
+    console.log('[Applications] ✅ Sending response with:');
+    console.log('  - application_id:', application.application_id);
+    console.log('  - permit_type:', application.permit_type);
+    console.log('  - permit_type_id:', application.permit_type_id);
+    console.log('  - parameters count:', parameters.length);
+    console.log('  - assessed_fees count:', assessedFees.length);
+    console.log('  - audit_trail count:', auditTrail.length);
+    console.log('==========================================\n');
+
     res.json({
       ...application,
       parameters,
@@ -282,10 +305,23 @@ router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
     // SuperAdmin can delete applications in any status
     await pool.execute('DELETE FROM Applications WHERE application_id = ?', [applicationId]);
 
+    console.log('\n========== DELETE APPLICATION LOGGING ==========');
+    console.log('[DeleteApp] Step 1 - Application Data:');
+    console.log('  - applicationId:', applicationId);
+    console.log('  - application_number:', application.application_number);
+    console.log('  - status:', application.status);
+    console.log('  - user_id:', req.user.user_id);
+
+    const deleteLogMessage = `Deleted application #${application.application_number || applicationId} (Status: ${application.status})`;
+    
+    console.log('[DeleteApp] Step 2 - Final Log Message:');
+    console.log('  - message:', deleteLogMessage);
+    console.log('================================================\n');
+
     await logAction(
       req.user.user_id,
       'DELETE_APPLICATION',
-      `Deleted application #${application.application_number || applicationId} (Status: ${application.status})`
+      deleteLogMessage
     );
 
     res.json({ message: 'Application deleted successfully' });
@@ -316,9 +352,16 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
       // Create application
       const application_id = generateId(ID_PREFIXES.APPLICATION);
 
+      // Get permit_type_id from permit_type name
+      const [permitTypes] = await connection.execute(
+        'SELECT permit_type_id FROM Permit_Types WHERE permit_type_name = ? LIMIT 1',
+        [permit_type]
+      );
+      const permit_type_id = permitTypes.length > 0 ? permitTypes[0].permit_type_id : null;
+
       const [result] = await connection.execute(
-        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, 'Pending']
+        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, permit_type_id, 'Pending']
       );
 
       // Insert parameters
@@ -336,11 +379,26 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
 
       await connection.commit();
 
+      console.log('\n========== CREATE APPLICATION LOGGING ==========');
+      console.log('[CreateApp] Step 1 - Generated Data:');
+      console.log('  - application_id:', application_id);
+      console.log('  - applicationNumber:', applicationNumber);
+      console.log('  - entity_id:', entity_id);
+      console.log('  - permit_type:', permit_type);
+      console.log('  - permit_type_id:', permit_type_id);
+      console.log('  - creator_id:', req.user.user_id);
+
       // Log and notify
+      const createLogMessage = `Created application #${applicationNumber} for permit type: ${permit_type}`;
+      
+      console.log('[CreateApp] Step 2 - Final Log Message:');
+      console.log('  - message:', createLogMessage);
+      console.log('===============================================\n');
+
       await logAction(
         req.user.user_id,
         'CREATE_APP',
-        `Created application #${applicationNumber} for permit type: ${permit_type}`,
+        createLogMessage,
         application_id
       );
 
@@ -398,6 +456,13 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
       [assessed_fee_id, applicationId, fee_id, parseFloat(assessed_amount), req.user.user_id]
     );
 
+    console.log('\n========== ADD FEE LOGGING ==========');
+    console.log('[AddFee] Step 1 - Input Parameters:');
+    console.log('  - fee_id:', fee_id);
+    console.log('  - assessed_amount:', assessed_amount);
+    console.log('  - applicationId:', applicationId);
+    console.log('  - user_id:', req.user.user_id);
+
     // Get fee name for logging
     const [feeInfo] = await pool.execute(
       'SELECT fee_name FROM Fees_Charges WHERE fee_id = ?',
@@ -405,17 +470,31 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
     );
     const feeName = feeInfo.length > 0 ? feeInfo[0].fee_name : 'Unknown Fee';
     
+    console.log('[AddFee] Step 2 - Fee Query Result:');
+    console.log('  - feeInfo query result:', feeInfo);
+    console.log('  - feeName:', feeName);
+
     // Get application number for logging
     const [appInfo] = await pool.execute(
       'SELECT application_number FROM Applications WHERE application_id = ?',
       [applicationId]
     );
     const appNumber = appInfo.length > 0 ? appInfo[0].application_number : applicationId;
+    
+    console.log('[AddFee] Step 3 - Application Query Result:');
+    console.log('  - appInfo query result:', appInfo);
+    console.log('  - appNumber:', appNumber);
+
+    const logMessage = `Added fee "${feeName}" with amount ₱${assessed_amount.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})} to application #${appNumber}`;
+    
+    console.log('[AddFee] Step 4 - Final Log Message:');
+    console.log('  - message:', logMessage);
+    console.log('=====================================\n');
 
     await logAction(
       req.user.user_id,
       'ADD_FEE',
-      `Added fee "${feeName}" with amount ₱${assessed_amount.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})} to application #${appNumber}`,
+      logMessage,
       applicationId
     );
 
@@ -454,6 +533,12 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
       [feeId, applicationId]
     );
 
+    console.log('\n========== REMOVE FEE LOGGING ==========');
+    console.log('[RemoveFee] Step 1 - Input Parameters:');
+    console.log('  - feeId:', feeId);
+    console.log('  - applicationId:', applicationId);
+    console.log('  - user_id:', req.user.user_id);
+
     // Get fee name for logging
     const [removeFeeInfo] = await pool.execute(
       'SELECT fc.fee_name FROM Assessed_Fees af INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id WHERE af.assessed_fee_id = ?',
@@ -461,6 +546,10 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
     );
     const removedFeeName = removeFeeInfo.length > 0 ? removeFeeInfo[0].fee_name : 'Unknown Fee';
     
+    console.log('[RemoveFee] Step 2 - Fee Query Result:');
+    console.log('  - removeFeeInfo query result:', removeFeeInfo);
+    console.log('  - removedFeeName:', removedFeeName);
+
     // Get application number for logging
     const [removeAppInfo] = await pool.execute(
       'SELECT application_number FROM Applications WHERE application_id = ?',
@@ -468,10 +557,20 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
     );
     const removeAppNumber = removeAppInfo.length > 0 ? removeAppInfo[0].application_number : applicationId;
 
+    console.log('[RemoveFee] Step 3 - Application Query Result:');
+    console.log('  - removeAppInfo query result:', removeAppInfo);
+    console.log('  - removeAppNumber:', removeAppNumber);
+
+    const removeLogMessage = `Removed fee "${removedFeeName}" from application #${removeAppNumber}`;
+    
+    console.log('[RemoveFee] Step 4 - Final Log Message:');
+    console.log('  - message:', removeLogMessage);
+    console.log('=========================================\n');
+
     await logAction(
       req.user.user_id,
       'REMOVE_FEE',
-      `Removed fee "${removedFeeName}" from application #${removeAppNumber}`,
+      removeLogMessage,
       applicationId
     );
 
@@ -756,6 +855,11 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     await connection.commit();
 
+    console.log('\n========== SUBMIT ASSESSMENT LOGGING ==========');
+    console.log('[SubmitAssessment] Step 1 - Input Parameters:');
+    console.log('  - applicationId:', applicationId);
+    console.log('  - user_id:', req.user.user_id);
+
     // Get application number for logging
     const [assessAppInfo] = await pool.execute(
       'SELECT application_number FROM Applications WHERE application_id = ?',
@@ -763,10 +867,20 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
     );
     const assessAppNumber = assessAppInfo.length > 0 ? assessAppInfo[0].application_number : applicationId;
 
+    console.log('[SubmitAssessment] Step 2 - Application Query Result:');
+    console.log('  - assessAppInfo query result:', assessAppInfo);
+    console.log('  - assessAppNumber:', assessAppNumber);
+
+    const assessLogMessage = `Submitted assessment for application #${assessAppNumber}`;
+    
+    console.log('[SubmitAssessment] Step 3 - Final Log Message:');
+    console.log('  - message:', assessLogMessage);
+    console.log('==============================================\n');
+
     await logAction(
       req.user.user_id,
       'SUBMIT_ASSESSMENT',
-      `Submitted assessment for application #${assessAppNumber}`,
+      assessLogMessage,
       applicationId
     );
 
@@ -817,6 +931,11 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
       [req.user.user_id, applicationId]
     );
 
+    console.log('\n========== APPROVE APPLICATION LOGGING ==========');
+    console.log('[ApproveApp] Step 1 - Input Parameters:');
+    console.log('  - applicationId:', applicationId);
+    console.log('  - user_id:', req.user.user_id);
+
     // Get application number for logging
     const [approveAppInfo] = await pool.execute(
       'SELECT application_number FROM Applications WHERE application_id = ?',
@@ -824,10 +943,20 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
     );
     const approveAppNumber = approveAppInfo.length > 0 ? approveAppInfo[0].application_number : applicationId;
 
+    console.log('[ApproveApp] Step 2 - Application Query Result:');
+    console.log('  - approveAppInfo query result:', approveAppInfo);
+    console.log('  - approveAppNumber:', approveAppNumber);
+
+    const approveLogMessage = `Approved application #${approveAppNumber}`;
+    
+    console.log('[ApproveApp] Step 3 - Final Log Message:');
+    console.log('  - message:', approveLogMessage);
+    console.log('=================================================\n');
+
     await logAction(
       req.user.user_id,
       'APPROVE_APP',
-      `Approved application #${approveAppNumber}`,
+      approveLogMessage,
       applicationId
     );
 
@@ -881,8 +1010,8 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
       const new_application_id = generateId(ID_PREFIXES.APPLICATION);
 
       const [result] = await connection.execute(
-        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [new_application_id, applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, 'Pending']
+        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [new_application_id, applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, originalApp.permit_type_id, 'Pending']
       );
 
       // Copy parameters
@@ -901,6 +1030,12 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
 
       await connection.commit();
 
+      console.log('\n========== RENEW APPLICATION LOGGING ==========');
+      console.log('[RenewApp] Step 1 - Input Parameters:');
+      console.log('  - oldApplicationId:', applicationId);
+      console.log('  - newApplicationId:', new_application_id);
+      console.log('  - user_id:', req.user.user_id);
+
       // Get old and new application numbers for logging
       const [oldAppInfo] = await pool.execute(
         'SELECT application_number FROM Applications WHERE application_id = ?',
@@ -908,16 +1043,30 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
       );
       const oldAppNumber = oldAppInfo.length > 0 ? oldAppInfo[0].application_number : applicationId;
 
+      console.log('[RenewApp] Step 2 - Old Application Query Result:');
+      console.log('  - oldAppInfo query result:', oldAppInfo);
+      console.log('  - oldAppNumber:', oldAppNumber);
+
       const [newAppInfo] = await pool.execute(
         'SELECT application_number FROM Applications WHERE application_id = ?',
         [new_application_id]
       );
       const newAppNumber = newAppInfo.length > 0 ? newAppInfo[0].application_number : new_application_id;
 
+      console.log('[RenewApp] Step 3 - New Application Query Result:');
+      console.log('  - newAppInfo query result:', newAppInfo);
+      console.log('  - newAppNumber:', newAppNumber);
+
+      const renewLogMessage = `Renewed application #${oldAppNumber} as application #${newAppNumber}`;
+      
+      console.log('[RenewApp] Step 4 - Final Log Message:');
+      console.log('  - message:', renewLogMessage);
+      console.log('==============================================\n');
+
       await logAction(
         req.user.user_id,
         'RENEW_APP',
-        `Renewed application #${oldAppNumber} as application #${newAppNumber}`,
+        renewLogMessage,
         new_application_id
       );
 
@@ -969,6 +1118,12 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
       ['Rejected', req.user.user_id, applicationId]
     );
 
+    console.log('\n========== REJECT APPLICATION LOGGING ==========');
+    console.log('[RejectApp] Step 1 - Input Parameters:');
+    console.log('  - applicationId:', applicationId);
+    console.log('  - reason:', reason);
+    console.log('  - user_id:', req.user.user_id);
+
     // Get application number for logging
     const [rejectAppInfo] = await pool.execute(
       'SELECT application_number FROM Applications WHERE application_id = ?',
@@ -976,10 +1131,20 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
     );
     const rejectAppNumber = rejectAppInfo.length > 0 ? rejectAppInfo[0].application_number : applicationId;
 
+    console.log('[RejectApp] Step 2 - Application Query Result:');
+    console.log('  - rejectAppInfo query result:', rejectAppInfo);
+    console.log('  - rejectAppNumber:', rejectAppNumber);
+
+    const rejectLogMessage = `Rejected application #${rejectAppNumber}${reason ? ': ' + reason : ''}`;
+    
+    console.log('[RejectApp] Step 3 - Final Log Message:');
+    console.log('  - message:', rejectLogMessage);
+    console.log('=================================================\n');
+
     await logAction(
       req.user.user_id,
       'REJECT_APP',
-      `Rejected application #${rejectAppNumber}${reason ? ': ' + reason : ''}`,
+      rejectLogMessage,
       applicationId
     );
 

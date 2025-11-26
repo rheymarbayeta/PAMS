@@ -189,6 +189,9 @@ async function fetchPermitReport() {
     // Fetch application data to get permit type name
     let applicationData = {};
     try {
+      console.log('\n========== FETCH APPLICATION DATA ==========');
+      console.log('Fetching application from:', applicationUrl);
+      
       const applicationResponse = await fetch(applicationUrl, {
         method: 'GET',
         headers: headers,
@@ -196,17 +199,36 @@ async function fetchPermitReport() {
       });
       if (applicationResponse.ok) {
         applicationData = await applicationResponse.json();
-        console.log('Application data loaded:', applicationData);
+        console.log('✅ Application data loaded successfully');
+        console.log('Full applicationData:', applicationData);
+        console.log('  - application_id:', applicationData.application_id);
+        console.log('  - permit_type:', applicationData.permit_type);
+        console.log('  - permit_type_id:', applicationData.permit_type_id);
+        console.log('  - entity_id:', applicationData.entity_id);
+        console.log('  - parameters:', applicationData.parameters);
+        console.log('============================================\n');
+      } else {
+        console.error('❌ Application fetch failed with status:', applicationResponse.status);
       }
     } catch (appError) {
-      console.warn('Could not fetch application data:', appError);
+      console.error('❌ Could not fetch application data:', appError);
     }
     
     // Fetch permit type to get attribute details
     let permitTypeData = {};
+    console.log('\n========== CHECKING PERMIT TYPE ID ==========');
+    console.log('applicationData:', applicationData);
+    console.log('applicationData.permit_type_id:', applicationData.permit_type_id);
+    console.log('applicationData.permit_type:', applicationData.permit_type);
+    console.log('============================================\n');
+    
     if (applicationData.permit_type_id) {
       try {
         const permitTypeUrl = `${apiBaseUrl}/api/permit-types/${applicationData.permit_type_id}`;
+        console.log('\n========== FETCH PERMIT TYPE ==========');
+        console.log('Fetching permit type from:', permitTypeUrl);
+        console.log('  - permit_type_id:', applicationData.permit_type_id);
+        
         const permitTypeResponse = await fetch(permitTypeUrl, {
           method: 'GET',
           headers: headers,
@@ -214,11 +236,26 @@ async function fetchPermitReport() {
         });
         if (permitTypeResponse.ok) {
           permitTypeData = await permitTypeResponse.json();
-          console.log('Permit type data loaded:', permitTypeData);
+          console.log('✅ Permit type data loaded successfully');
+          console.log('Full permitTypeData:', permitTypeData);
+          console.log('  - permit_type_id:', permitTypeData.permit_type_id);
+          console.log('  - permit_type_name:', permitTypeData.permit_type_name);
+          console.log('  - description (from Permit_Types table):', permitTypeData.description);
+          console.log('  - attribute_id:', permitTypeData.attribute_id);
+          console.log('  - attribute_name:', permitTypeData.attribute_name);
+          console.log('  - attribute_description (from Attributes table):', permitTypeData.attribute_description);
+          console.log('=====================================\n');
+        } else {
+          console.error('❌ Permit type fetch failed with status:', permitTypeResponse.status);
+          const errorText = await permitTypeResponse.text();
+          console.error('Error response:', errorText);
         }
       } catch (permitError) {
-        console.warn('Could not fetch permit type data:', permitError);
+        console.error('❌ Could not fetch permit type data:', permitError);
       }
+    } else {
+      console.error('❌ No permit_type_id found in applicationData');
+      console.log('Available application data fields:', Object.keys(applicationData));
     }
     
     // Fetch settings
@@ -244,18 +281,38 @@ async function fetchPermitReport() {
 }
 
 function renderReport(appData, settings = {}, applicationData = {}, permitTypeData = {}) {
+  console.log('\n========== RENDER REPORT ==========');
+  console.log('Input parameters:');
+  console.log('  - appData:', appData);
+  console.log('  - settings:', settings);
+  console.log('  - applicationData:', applicationData);
+  console.log('  - permitTypeData:', permitTypeData);
+  
   const reportHTML = generateReportHTML(appData, settings, applicationData, permitTypeData);
   
   document.getElementById('report-content').innerHTML = reportHTML;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('report-content').classList.remove('hidden');
+  console.log('===================================\n');
 }
 
 function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}) {
   const now = new Date();
   
+  console.log('\n========== GENERATE REPORT HTML ==========');
+  console.log('Step 1 - Input Data:');
+  console.log('  - data (appData):', data);
+  console.log('  - settings:', settings);
+  console.log('  - applicationData:', applicationData);
+  console.log('  - permitTypeData:', permitTypeData);
+  
   // Get permit type name from application data
   const permitTypeName = applicationData.permit_type || data.app_type || 'PERMIT';
+  
+  console.log('Step 2 - Permit Type Name:');
+  console.log('  - applicationData.permit_type:', applicationData.permit_type);
+  console.log('  - data.app_type:', data.app_type);
+  console.log('  - permitTypeName (final):', permitTypeName);
   
   // Extract address components from application parameters
   const addressParameters = applicationData.parameters || [];
@@ -263,17 +320,43 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   let municipality = 'Dalaguete';
   let province = 'Cebu';
   
+  console.log('Step 3 - Address Parameters:');
+  console.log('  - addressParameters:', addressParameters);
+  
   // Try to get address components from parameters
   addressParameters.forEach(param => {
     const paramName = (param.param_name || '').toLowerCase();
-    if (paramName.includes('barangay')) barangay = param.param_value || barangay;
-    if (paramName.includes('municipality')) municipality = param.param_value || municipality;
-    if (paramName.includes('province')) province = param.param_value || province;
+    if (paramName.includes('barangay')) {
+      barangay = param.param_value || barangay;
+      console.log('  - Found barangay:', barangay);
+    }
+    if (paramName.includes('municipality')) {
+      municipality = param.param_value || municipality;
+      console.log('  - Found municipality:', municipality);
+    }
+    if (paramName.includes('province')) {
+      province = param.param_value || province;
+      console.log('  - Found province:', province);
+    }
   });
   
-  // Get permit activities from attribute description
-  const permitActivities = permitTypeData.attribute_description || 
+  console.log('Step 4 - Final Address Components:');
+  console.log('  - barangay:', barangay);
+  console.log('  - municipality:', municipality);
+  console.log('  - province:', province);
+  
+  // Get permit activities from permit_types description column
+  // This comes directly from: Permit_Types table.description
+  const permitActivities = permitTypeData.description || 
     'Permit to conduct business activities as specified by the local government unit.';
+  
+  console.log('Step 5 - Permit Activities (MAIN VARIABLE):');
+  console.log('  - Source: Permit_Types table -> description column');
+  console.log('  - permitTypeData.permit_type_id:', permitTypeData.permit_type_id);
+  console.log('  - permitTypeData.permit_type_name:', permitTypeData.permit_type_name);
+  console.log('  - permitTypeData.description (from Permit_Types.description):', permitTypeData.description);
+  console.log('  - permitActivities (final value):', permitActivities);
+  console.log('==========================================\n');
   
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
@@ -292,6 +375,18 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
       maximumFractionDigits: 2
     });
   };
+
+  console.log('\n========== FINAL REPORT DATA ==========');
+  console.log('All variables being used in template:');
+  console.log('  - permitTypeName:', permitTypeName);
+  console.log('  - data.business_name:', data.business_name);
+  console.log('  - data.address:', data.address);
+  console.log('  - permitActivities:', permitActivities);
+  console.log('  - barangay:', barangay);
+  console.log('  - municipality:', municipality);
+  console.log('  - province:', province);
+  console.log('  - now:', now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+  console.log('=======================================\n');
 
   return `
     <div id="page-container">
