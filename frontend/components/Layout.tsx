@@ -41,8 +41,8 @@ export default function Layout({ children }: LayoutProps) {
   }, [showUserMenu]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
+    <div className="min-h-screen bg-slate-50">
+      <nav className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
@@ -55,7 +55,7 @@ export default function Layout({ children }: LayoutProps) {
                     height={40}
                     className="object-contain"
                   />
-                  <span className="text-xl font-bold text-indigo-600">PAMS</span>
+                  <span className="text-xl font-bold text-slate-800">PAMS</span>
                 </Link>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
@@ -63,8 +63,8 @@ export default function Layout({ children }: LayoutProps) {
                   href="/dashboard"
                   className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                     isActive('/dashboard')
-                      ? 'border-indigo-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-teal-600 text-slate-900'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                   }`}
                 >
                   Dashboard
@@ -74,8 +74,8 @@ export default function Layout({ children }: LayoutProps) {
                     href="/applications/new"
                     className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                       isActive('/applications/new')
-                        ? 'border-indigo-500 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-teal-600 text-slate-900'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                     }`}
                   >
                     New Application
@@ -85,8 +85,8 @@ export default function Layout({ children }: LayoutProps) {
                   href="/applications"
                   className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                     isActive('/applications')
-                      ? 'border-indigo-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-teal-600 text-slate-900'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                   }`}
                 >
                   Applications
@@ -96,8 +96,8 @@ export default function Layout({ children }: LayoutProps) {
                     href="/admin/entities"
                     className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                       isActive('/admin/entities')
-                        ? 'border-indigo-500 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-teal-600 text-slate-900'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                     }`}
                   >
                     Entities
@@ -108,8 +108,8 @@ export default function Layout({ children }: LayoutProps) {
                     href="/chat"
                     className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                       isActive('/chat')
-                        ? 'border-indigo-500 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-teal-600 text-slate-900'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                     }`}
                   >
                     Chat
@@ -122,7 +122,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center space-x-2 text-sm text-gray-700 hover:text-gray-900 focus:outline-none"
+                  className="flex items-center space-x-2 text-sm text-slate-600 hover:text-slate-900 focus:outline-none"
                 >
                   <span>{user?.full_name} ({user?.role_name})</span>
                   <svg
@@ -135,14 +135,14 @@ export default function Layout({ children }: LayoutProps) {
                   </svg>
                 </button>
                 {showUserMenu && canAccess(['SuperAdmin', 'Admin']) && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50 border border-slate-200">
                     <Link
                       href="/admin/users"
                       onClick={() => setShowUserMenu(false)}
                       className={`block px-4 py-2 text-sm ${
                         isActive('/admin/users')
-                          ? 'bg-indigo-50 text-indigo-700'
-                          : 'text-gray-700 hover:bg-gray-100'
+                          ? 'bg-teal-50 text-teal-700'
+                          : 'text-slate-700 hover:bg-slate-50'
                       }`}
                     >
                       Users
@@ -152,8 +152,8 @@ export default function Layout({ children }: LayoutProps) {
                       onClick={() => setShowUserMenu(false)}
                       className={`block px-4 py-2 text-sm ${
                         isActive('/admin/fees')
-                          ? 'bg-indigo-50 text-indigo-700'
-                          : 'text-gray-700 hover:bg-gray-100'
+                          ? 'bg-teal-50 text-teal-700'
+                          : 'text-slate-700 hover:bg-slate-50'
                       }`}
                     >
                       Fees
@@ -163,8 +163,8 @@ export default function Layout({ children }: LayoutProps) {
                       onClick={() => setShowUserMenu(false)}
                       className={`block px-4 py-2 text-sm ${
                         isActive('/admin/settings')
-                          ? 'bg-indigo-50 text-indigo-700'
-                          : 'text-gray-700 hover:bg-gray-100'
+                          ? 'bg-teal-50 text-teal-700'
+                          : 'text-slate-700 hover:bg-slate-50'
                       }`}
                     >
                       Settings
@@ -174,8 +174,8 @@ export default function Layout({ children }: LayoutProps) {
                       onClick={() => setShowUserMenu(false)}
                       className={`block px-4 py-2 text-sm ${
                         isActive('/admin/permit-types')
-                          ? 'bg-indigo-50 text-indigo-700'
-                          : 'text-gray-700 hover:bg-gray-100'
+                          ? 'bg-teal-50 text-teal-700'
+                          : 'text-slate-700 hover:bg-slate-50'
                       }`}
                     >
                       Permit Types
@@ -185,32 +185,32 @@ export default function Layout({ children }: LayoutProps) {
                       onClick={() => setShowUserMenu(false)}
                       className={`block px-4 py-2 text-sm ${
                         isActive('/admin/rules')
-                          ? 'bg-indigo-50 text-indigo-700'
-                          : 'text-gray-700 hover:bg-gray-100'
+                          ? 'bg-teal-50 text-teal-700'
+                          : 'text-slate-700 hover:bg-slate-50'
                       }`}
                     >
                       Rules
                     </Link>
-                    <div className="border-t border-gray-200 my-1"></div>
+                    <div className="border-t border-slate-200 my-1"></div>
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
                         logout();
                       }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                     >
                       Logout
                     </button>
                   </div>
                 )}
                 {showUserMenu && !canAccess(['SuperAdmin', 'Admin']) && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50 border border-slate-200">
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
                         logout();
                       }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                     >
                       Logout
                     </button>

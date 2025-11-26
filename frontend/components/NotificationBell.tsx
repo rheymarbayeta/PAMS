@@ -110,7 +110,7 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setShowDropdown(!showDropdown)}
-        className="relative p-2 text-gray-600 hover:text-gray-900"
+        className="relative p-2 text-slate-500 hover:text-slate-700"
       >
         <svg
           className="h-6 w-6"
@@ -126,18 +126,18 @@ export default function NotificationBell() {
           />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-600 ring-2 ring-white"></span>
+          <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
         )}
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg z-50 border border-gray-200">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
+        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg z-50 border border-slate-200">
+          <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+            <h3 className="text-sm font-medium text-slate-800">Notifications</h3>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllAsRead}
-                className="text-xs text-indigo-600 hover:text-indigo-800"
+                className="text-xs text-teal-600 hover:text-teal-700"
               >
                 Mark all as read
               </button>
@@ -145,32 +145,32 @@ export default function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="p-4 text-sm text-gray-500 text-center">No notifications</div>
+              <div className="p-4 text-sm text-slate-500 text-center">No notifications</div>
             ) : (
               notifications.map((notification) => (
                 <div
                   key={notification.notification_id}
-                  className={`p-4 border-b border-gray-200 transition-colors ${
+                  className={`p-4 border-b border-slate-100 transition-colors ${
                     notification.link 
-                      ? 'cursor-pointer hover:bg-indigo-50 active:bg-indigo-100' 
+                      ? 'cursor-pointer hover:bg-slate-50' 
                       : 'cursor-default'
                   } ${
-                    !notification.is_read ? 'bg-blue-50' : ''
+                    !notification.is_read ? 'bg-teal-50/50' : ''
                   }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex items-start">
                     {!notification.is_read && (
-                      <span className="mt-1 mr-2 block h-2 w-2 rounded-full bg-indigo-600 flex-shrink-0"></span>
+                      <span className="mt-1 mr-2 block h-2 w-2 rounded-full bg-teal-500 flex-shrink-0"></span>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between">
-                        <p className={`text-sm ${notification.link ? 'text-indigo-900 font-medium' : 'text-gray-900'}`}>
+                        <p className={`text-sm ${notification.link ? 'text-slate-800 font-medium' : 'text-slate-700'}`}>
                           {notification.message}
                         </p>
                         {notification.link && (
                           <svg
-                            className="h-4 w-4 text-indigo-600 ml-2 flex-shrink-0 mt-0.5"
+                            className="h-4 w-4 text-teal-600 ml-2 flex-shrink-0 mt-0.5"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -184,7 +184,7 @@ export default function NotificationBell() {
                           </svg>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-slate-400 mt-1">
                         {new Date(notification.created_at).toLocaleString()}
                       </p>
                     </div>

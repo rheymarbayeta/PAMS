@@ -10,6 +10,8 @@ interface DashboardStats {
   pending: number;
   pendingApproval: number;
   approved: number;
+  issued: number;
+  released: number;
   total: number;
 }
 
@@ -19,6 +21,8 @@ export default function DashboardPage() {
     pending: 0,
     pendingApproval: 0,
     approved: 0,
+    issued: 0,
+    released: 0,
     total: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -45,10 +49,10 @@ export default function DashboardPage() {
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
             <div className="flex flex-col items-center justify-center py-20">
               <div className="relative">
-                <div className="h-16 w-16 rounded-full border-4 border-indigo-100"></div>
-                <div className="absolute top-0 left-0 h-16 w-16 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+                <div className="h-16 w-16 rounded-full border-4 border-slate-100"></div>
+                <div className="absolute top-0 left-0 h-16 w-16 rounded-full border-4 border-slate-600 border-t-transparent animate-spin"></div>
               </div>
-              <p className="mt-4 text-gray-600 font-medium">Loading dashboard...</p>
+              <p className="mt-4 text-slate-600 font-medium">Loading dashboard...</p>
             </div>
           </div>
         </Layout>
@@ -63,39 +67,39 @@ export default function DashboardPage() {
           {/* Page Header */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+              <div className="h-10 w-10 rounded-lg bg-slate-800 flex items-center justify-center">
                 <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">
                   Dashboard
                 </h1>
-                <p className="text-sm text-gray-500">Overview of application statistics</p>
+                <p className="text-sm text-slate-500">Overview of application statistics</p>
               </div>
             </div>
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {/* Pending Applications */}
             <div
-              className="group bg-white rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-6 cursor-pointer hover:shadow-xl hover:border-yellow-200 hover:-translate-y-1 transition-all duration-300"
+              className="group bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-amber-300 hover:shadow-soft transition-all duration-200"
               onClick={() => router.push('/applications?filter=Pending')}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Pending Applications</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.pending}</p>
+                  <p className="text-sm font-medium text-slate-500 mb-1">Pending</p>
+                  <p className="text-2xl font-bold text-slate-800">{stats.pending}</p>
                 </div>
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-yellow-100 to-amber-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <svg className="h-7 w-7 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="h-12 w-12 rounded-lg bg-amber-50 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
               </div>
-              <div className="mt-4 flex items-center text-sm text-yellow-600">
+              <div className="mt-3 flex items-center text-sm text-amber-600">
                 <span className="font-medium">View all</span>
                 <svg className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -105,21 +109,21 @@ export default function DashboardPage() {
 
             {/* Pending Approval */}
             <div
-              className="group bg-white rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-6 cursor-pointer hover:shadow-xl hover:border-orange-200 hover:-translate-y-1 transition-all duration-300"
+              className="group bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-orange-300 hover:shadow-soft transition-all duration-200"
               onClick={() => router.push('/applications?filter=Pending Approval')}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Pending Approval</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.pendingApproval}</p>
+                  <p className="text-sm font-medium text-slate-500 mb-1">For Approval</p>
+                  <p className="text-2xl font-bold text-slate-800">{stats.pendingApproval}</p>
                 </div>
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-100 to-red-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <svg className="h-7 w-7 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="h-12 w-12 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                   </svg>
                 </div>
               </div>
-              <div className="mt-4 flex items-center text-sm text-orange-600">
+              <div className="mt-3 flex items-center text-sm text-orange-600">
                 <span className="font-medium">View all</span>
                 <svg className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -129,21 +133,69 @@ export default function DashboardPage() {
 
             {/* Approved */}
             <div
-              className="group bg-white rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-6 cursor-pointer hover:shadow-xl hover:border-emerald-200 hover:-translate-y-1 transition-all duration-300"
+              className="group bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-teal-300 hover:shadow-soft transition-all duration-200"
               onClick={() => router.push('/applications?filter=Approved')}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Approved</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.approved}</p>
+                  <p className="text-sm font-medium text-slate-500 mb-1">Approved</p>
+                  <p className="text-2xl font-bold text-slate-800">{stats.approved}</p>
                 </div>
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-100 to-green-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <svg className="h-7 w-7 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="h-12 w-12 rounded-lg bg-teal-50 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
               </div>
-              <div className="mt-4 flex items-center text-sm text-emerald-600">
+              <div className="mt-3 flex items-center text-sm text-teal-600">
+                <span className="font-medium">View all</span>
+                <svg className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Issued */}
+            <div
+              className="group bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-sky-300 hover:shadow-soft transition-all duration-200"
+              onClick={() => router.push('/applications?filter=Issued')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 mb-1">Issued</p>
+                  <p className="text-2xl font-bold text-slate-800">{stats.issued}</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-sky-50 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center text-sm text-sky-600">
+                <span className="font-medium">View all</span>
+                <svg className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Released */}
+            <div
+              className="group bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-emerald-300 hover:shadow-soft transition-all duration-200"
+              onClick={() => router.push('/applications?filter=Released')}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 mb-1">Released</p>
+                  <p className="text-2xl font-bold text-slate-800">{stats.released}</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-emerald-50 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center text-sm text-emerald-600">
                 <span className="font-medium">View all</span>
                 <svg className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -153,21 +205,21 @@ export default function DashboardPage() {
 
             {/* Total Applications */}
             <div
-              className="group bg-white rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-6 cursor-pointer hover:shadow-xl hover:border-indigo-200 hover:-translate-y-1 transition-all duration-300"
+              className="group bg-white rounded-xl border border-slate-200 p-5 cursor-pointer hover:border-slate-400 hover:shadow-soft transition-all duration-200"
               onClick={() => router.push('/applications')}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Total Applications</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+                  <p className="text-sm font-medium text-slate-500 mb-1">Total</p>
+                  <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
                 </div>
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <svg className="h-7 w-7 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                 </div>
               </div>
-              <div className="mt-4 flex items-center text-sm text-indigo-600">
+              <div className="mt-3 flex items-center text-sm text-slate-600">
                 <span className="font-medium">View all</span>
                 <svg className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
