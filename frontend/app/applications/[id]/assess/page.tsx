@@ -68,6 +68,7 @@ export default function AssessApplicationPage() {
   const [fees, setFees] = useState<Fee[]>([]);
   const [selectedFee, setSelectedFee] = useState<number | ''>('');
   const [assessedAmount, setAssessedAmount] = useState<string>('');
+  const [quantity, setQuantity] = useState<string>('1');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [autoNotice, setAutoNotice] = useState<{ type: NoticeType; message: string } | null>(null);
@@ -194,18 +195,26 @@ export default function AssessApplicationPage() {
   };
 
   const handleAddFee = async () => {
-    if (selectedFee === '' || !assessedAmount) {
-      alert('Please select a fee and enter an amount');
+    if (selectedFee === '' || !assessedAmount || !quantity) {
+      alert('Please select a fee, enter an amount, and quantity');
+      return;
+    }
+
+    const quantityNum = parseFloat(quantity);
+    if (quantityNum <= 0) {
+      alert('Quantity must be greater than 0');
       return;
     }
 
     try {
+      const totalAmount = parseFloat(assessedAmount) * quantityNum;
       await api.post(`/api/applications/${params.id}/fees`, {
         fee_id: typeof selectedFee === 'number' ? selectedFee : parseInt(selectedFee),
-        assessed_amount: parseFloat(assessedAmount),
+        assessed_amount: totalAmount,
       });
       setSelectedFee('');
       setAssessedAmount('');
+      setQuantity('1');
       fetchData();
     } catch (error: any) {
       alert(error.response?.data?.error || 'Error adding fee');
@@ -304,7 +313,7 @@ export default function AssessApplicationPage() {
 
           <div className="bg-white shadow rounded-lg p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Add Fee</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div>
                 <label htmlFor="fee_select" className="block text-sm font-medium text-gray-700 mb-2">
                   Select Fee
@@ -322,6 +331,7 @@ export default function AssessApplicationPage() {
                         ? fee.default_amount 
                         : parseFloat(fee.default_amount || '0');
                       setAssessedAmount(amount.toString());
+                      setQuantity('1');
                     }
                   }}
                 >
@@ -340,7 +350,7 @@ export default function AssessApplicationPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Assessed Amount
+                  Unit Amount
                 </label>
                 <input
                   type="number"
@@ -351,14 +361,40 @@ export default function AssessApplicationPage() {
                   placeholder={selectedFeeData?.default_amount.toString()}
                 />
               </div>
-              <div className="flex items-end">
-                <button
-                  onClick={handleAddFee}
-                  className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-                >
-                  Add Fee
-                </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  placeholder="1"
+                />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Total Amount
+                </label>
+                <div className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50 flex items-center">
+                  <span className="text-gray-900 font-medium">
+                    {assessedAmount && quantity 
+                      ? formatCurrency(parseFloat(assessedAmount) * parseFloat(quantity)) 
+                      : formatCurrency(0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={handleAddFee}
+                className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700"
+              >
+                Add Fee
+              </button>
             </div>
           </div>
 
