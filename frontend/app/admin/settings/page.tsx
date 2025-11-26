@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
+import Link from 'next/link';
 
 interface Setting {
   value: string;
@@ -121,6 +122,38 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-6">
+            {/* Quick Links */}
+            <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                  <svg className="h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-semibold text-gray-900">Advanced Settings</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Configure advanced system settings for specialized features.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Link
+                  href="/admin/settings/permit-display"
+                  className="group flex items-start gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 transition-all duration-200"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-purple-700 transition-colors">Permit Display Conditions</h3>
+                    <p className="text-sm text-gray-500 mt-1">Configure how permit activities are displayed (table vs paragraph format)</p>
+                  </div>
+                </Link>
+              </div>
+            </div>
+
             {/* Default Address Settings */}
             <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
               <div className="flex items-center gap-2 mb-4">

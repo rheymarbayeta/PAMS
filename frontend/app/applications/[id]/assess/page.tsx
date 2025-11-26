@@ -254,10 +254,13 @@ export default function AssessApplicationPage() {
     }
 
     try {
-      const totalAmount = parseFloat(assessedAmount) * quantityNum;
+      const unitAmount = parseFloat(assessedAmount);
+      const totalAmount = unitAmount * quantityNum;
       await api.post(`/api/applications/${params.id}/fees`, {
         fee_id: selectedFee,
         assessed_amount: totalAmount,
+        unit_amount: unitAmount,
+        quantity: quantityNum,
       });
       // Reset all form fields including search query
       setSelectedFee('');

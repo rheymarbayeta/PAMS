@@ -287,23 +287,71 @@ router.get('/:id', async (req, res) => {
 
 // Delete application (only if not assessed yet)
 router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+    
     const applicationId = req.params.id;
 
     // Get application details
-    const [applications] = await pool.execute(
+    const [applications] = await connection.execute(
       'SELECT application_id, application_number, status FROM Applications WHERE application_id = ?',
       [applicationId]
     );
 
     if (applications.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Application not found' });
     }
 
     const application = applications[0];
 
-    // SuperAdmin can delete applications in any status
-    await pool.execute('DELETE FROM Applications WHERE application_id = ?', [applicationId]);
+    // Delete related records in order (child tables first)
+    // 1. Delete Assessment_Record_Fees (child of Assessment_Records)
+    await connection.execute(
+      `DELETE arf FROM Assessment_Record_Fees arf
+       INNER JOIN Assessment_Records ar ON arf.assessment_id = ar.assessment_id
+       WHERE ar.application_id = ?`,
+      [applicationId]
+    );
+    
+    // 2. Delete Assessment_Records
+    await connection.execute(
+      'DELETE FROM Assessment_Records WHERE application_id = ?',
+      [applicationId]
+    );
+    
+    // 3. Delete Assessed_Fees
+    await connection.execute(
+      'DELETE FROM Assessed_Fees WHERE application_id = ?',
+      [applicationId]
+    );
+    
+    // 4. Delete Application_Parameters
+    await connection.execute(
+      'DELETE FROM Application_Parameters WHERE application_id = ?',
+      [applicationId]
+    );
+    
+    // 5. Delete Payments
+    await connection.execute(
+      'DELETE FROM Payments WHERE application_id = ?',
+      [applicationId]
+    );
+    
+    // 6. Update Audit_Trail to set application_id to NULL (preserve audit history)
+    await connection.execute(
+      'UPDATE Audit_Trail SET application_id = NULL WHERE application_id = ?',
+      [applicationId]
+    );
+    
+    // 7. Finally delete the Application itself
+    await connection.execute(
+      'DELETE FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    await connection.commit();
 
     console.log('\n========== DELETE APPLICATION LOGGING ==========');
     console.log('[DeleteApp] Step 1 - Application Data:');
@@ -311,10 +359,17 @@ router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
     console.log('  - application_number:', application.application_number);
     console.log('  - status:', application.status);
     console.log('  - user_id:', req.user.user_id);
+    console.log('[DeleteApp] Step 2 - Deleted related records from:');
+    console.log('  - Assessment_Record_Fees');
+    console.log('  - Assessment_Records');
+    console.log('  - Assessed_Fees');
+    console.log('  - Application_Parameters');
+    console.log('  - Payments');
+    console.log('  - (Audit_Trail updated to NULL)');
 
-    const deleteLogMessage = `Deleted application #${application.application_number || applicationId} (Status: ${application.status})`;
+    const deleteLogMessage = `Deleted application #${application.application_number || applicationId} (Status: ${application.status}) and all related records`;
     
-    console.log('[DeleteApp] Step 2 - Final Log Message:');
+    console.log('[DeleteApp] Step 3 - Final Log Message:');
     console.log('  - message:', deleteLogMessage);
     console.log('================================================\n');
 
@@ -324,10 +379,13 @@ router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
       deleteLogMessage
     );
 
-    res.json({ message: 'Application deleted successfully' });
+    res.json({ message: 'Application and all related records deleted successfully' });
   } catch (error) {
+    await connection.rollback();
     console.error('Delete application error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    connection.release();
   }
 });
 
@@ -428,7 +486,7 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
 // Add assessed fee
 router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
   try {
-    const { fee_id, assessed_amount } = req.body;
+    const { fee_id, assessed_amount, unit_amount, quantity } = req.body;
     const applicationId = req.params.id;
 
     if (!fee_id || assessed_amount === undefined) {
@@ -450,16 +508,22 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
     }
 
     const assessed_fee_id = generateId(ID_PREFIXES.ASSESSED_FEE);
+    
+    // Store quantity and unit_amount if provided
+    const feeQuantity = parseInt(quantity) || 1;
+    const feeUnitAmount = parseFloat(unit_amount) || parseFloat(assessed_amount);
 
     const [result] = await pool.execute(
-      'INSERT INTO Assessed_Fees (assessed_fee_id, application_id, fee_id, assessed_amount, assessed_by_user_id) VALUES (?, ?, ?, ?, ?)',
-      [assessed_fee_id, applicationId, fee_id, parseFloat(assessed_amount), req.user.user_id]
+      'INSERT INTO Assessed_Fees (assessed_fee_id, application_id, fee_id, assessed_amount, unit_amount, quantity, assessed_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [assessed_fee_id, applicationId, fee_id, parseFloat(assessed_amount), feeUnitAmount, feeQuantity, req.user.user_id]
     );
 
     console.log('\n========== ADD FEE LOGGING ==========');
     console.log('[AddFee] Step 1 - Input Parameters:');
     console.log('  - fee_id:', fee_id);
     console.log('  - assessed_amount:', assessed_amount);
+    console.log('  - unit_amount:', feeUnitAmount);
+    console.log('  - quantity:', feeQuantity);
     console.log('  - applicationId:', applicationId);
     console.log('  - user_id:', req.user.user_id);
 
@@ -664,6 +728,8 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
         af.assessed_fee_id,
         af.fee_id,
         af.assessed_amount,
+        af.unit_amount,
+        af.quantity,
         fc.fee_name,
         fcat.category_name
        FROM Assessed_Fees af
@@ -698,8 +764,8 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     assessedFees.forEach(fee => {
       const amount = parseFloat(fee.assessed_amount) || 0;
-      const quantity = 1; // Default quantity
-      const balanceDue = amount * quantity;
+      // assessed_amount already includes quantity, no need to multiply
+      const balanceDue = amount;
       const surcharge = 0; // Default surcharge
       const interest = 0; // Default interest
       const total = balanceDue + surcharge + interest;
@@ -819,8 +885,9 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
     // Insert assessment record fees
     for (const fee of assessedFees) {
       const amount = parseFloat(fee.assessed_amount) || 0;
-      const quantity = 1;
-      const balanceDue = amount * quantity;
+      // Use stored quantity from Assessed_Fees, default to 1 if not available
+      const quantity = parseInt(fee.quantity) || 1;
+      const balanceDue = amount;  // assessed_amount already includes quantity
       const surcharge = 0;
       const interest = 0;
       const total = balanceDue + surcharge + interest;

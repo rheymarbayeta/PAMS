@@ -4,6 +4,8 @@
 <meta charset="utf-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<!-- Include html2pdf.js for PDF generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * {
     margin: 0;
@@ -18,7 +20,6 @@
   }
   #report-container {
     max-width: 8.5in;
-    height: 13in;
     margin: 20px auto;
     background: white;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -42,6 +43,9 @@
     background-color: #f8f9fa;
     border-bottom: 1px solid #dee2e6;
     text-align: right;
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
   .btn {
     padding: 8px 16px;
@@ -56,29 +60,109 @@
   .btn:hover {
     background-color: #0056b3;
   }
+  .btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+  }
   .btn-print {
     background-color: #28a745;
   }
   .btn-print:hover {
     background-color: #1e7e34;
   }
-  #page-container {
-    padding: 0.5in;
+  .btn-pdf {
+    background-color: #dc3545;
+  }
+  .btn-pdf:hover {
+    background-color: #c82333;
+  }
+  
+  /* Page container for proper sizing */
+  .page {
     width: 8.5in;
-    height: 13in;
-    margin: 0;
-    overflow: hidden;
+    min-height: 13in;
+    padding: 0.5in;
+    margin: 0 auto 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
+    page-break-after: always;
     display: flex;
     flex-direction: column;
+  }
+  
+  .page:last-child {
+    page-break-after: avoid;
+  }
+  
+  .page-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .page-footer {
+    flex-shrink: 0;
+    padding-top: 15px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    font-size: 8px;
+    color: #666;
+    margin-top: auto;
   }
   
   .hidden {
     display: none;
   }
   
+  /* Table styles for permit activities */
+  .permit-activities-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 14px;
+  }
+  .permit-activities-table th,
+  .permit-activities-table td {
+    border: 1px solid #333;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .permit-activities-table th {
+    background-color: #f0f0f0;
+    font-weight: bold;
+  }
+  .permit-activities-table td.qty {
+    text-align: center;
+    width: 80px;
+  }
+  
+  /* Page break utilities */
+  .page-break-before {
+    page-break-before: always;
+  }
+  .page-break-after {
+    page-break-after: always;
+  }
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+  
+  /* Continuation header for multi-page */
+  .continuation-header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ccc;
+  }
+  .continuation-header h3 {
+    font-size: 14px;
+    color: #666;
+  }
+  
   @page {
     size: 8.5in 13in;
-    margin: 0.5in;
+    margin: 0;
   }
   
   @media print {
@@ -91,15 +175,18 @@
       box-shadow: none;
       margin: 0;
       max-width: 100%;
-      height: auto;
     }
     .controls {
-      display: none;
+      display: none !important;
     }
-    #page-container {
-      padding: 0.5in;
-      margin: 0;
+    .page {
       box-shadow: none;
+      margin: 0;
+      width: 8.5in;
+      min-height: 13in;
+      page-break-after: always;
+    }
+    .page:last-child {
       page-break-after: avoid;
     }
   }
@@ -109,8 +196,8 @@
 <body>
 <div id="report-container">
   <div class="controls">
-    <button class="btn btn-print" onclick="printReport()">Print Permit</button>
-    <button class="btn" onclick="downloadPDF()">Download PDF</button>
+    <button class="btn btn-print" onclick="printReport()">🖨️ Print Permit</button>
+    <button class="btn btn-pdf" onclick="downloadPDF()" id="pdf-btn">📄 Download PDF</button>
   </div>
   
   <div id="loading" class="loading">
@@ -268,6 +355,7 @@ async function fetchPermitReport() {
       });
       if (settingsResponse.ok) {
         settings = await settingsResponse.json();
+        console.log('✅ Settings loaded:', settings);
       }
     } catch (settingsError) {
       console.warn('Could not fetch settings, using defaults:', settingsError);
@@ -297,14 +385,18 @@ async function fetchPermitReport() {
       console.warn('Could not fetch payment data:', paymentError);
     }
     
-    renderReport(assessmentData, settings, applicationData, permitTypeData, paymentData);
+    // Get assessment fees from assessmentData (already fetched)
+    const assessmentFees = assessmentData.fees || [];
+    console.log('✅ Assessment fees:', assessmentFees);
+    
+    renderReport(assessmentData, settings, applicationData, permitTypeData, paymentData, assessmentFees);
   } catch (error) {
     console.error('Error fetching permit data:', error);
     showError(`Failed to load permit report: ${error.message}`);
   }
 }
 
-function renderReport(appData, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}) {
+function renderReport(appData, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}, assessmentFees = []) {
   console.log('\n========== RENDER REPORT ==========');
   console.log('Input parameters:');
   console.log('  - appData:', appData);
@@ -312,8 +404,9 @@ function renderReport(appData, settings = {}, applicationData = {}, permitTypeDa
   console.log('  - applicationData:', applicationData);
   console.log('  - permitTypeData:', permitTypeData);
   console.log('  - paymentData:', paymentData);
+  console.log('  - assessmentFees:', assessmentFees);
   
-  const reportHTML = generateReportHTML(appData, settings, applicationData, permitTypeData, paymentData);
+  const reportHTML = generateReportHTML(appData, settings, applicationData, permitTypeData, paymentData, assessmentFees);
   
   document.getElementById('report-content').innerHTML = reportHTML;
   document.getElementById('loading').classList.add('hidden');
@@ -349,7 +442,145 @@ function adjustPermitTitleSize() {
   console.log('Permit title font size adjusted to:', fontSize + 'px');
 }
 
-function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}) {
+/**
+ * Check if permit activities should be displayed in tabular format
+ * based on the settings configuration
+ * 
+ * Settings format (permit_tabular_display_conditions):
+ * JSON array of conditions, e.g.:
+ * [
+ *   { "attribute_name": "PERYA", "display_mode": "table_with_quantity" },
+ *   { "attribute_name": "SPECIAL_PERMIT", "display_mode": "table_with_quantity" },
+ *   { "permit_type_name": "Amusement Permit", "display_mode": "table_with_quantity" }
+ * ]
+ * 
+ * display_mode options:
+ * - "table_with_quantity": Shows fee name and quantity in a table
+ * - "table_simple": Shows just fee names in a table
+ * - "paragraph" (default): Shows as regular paragraph text
+ */
+function getPermitActivitiesDisplayMode(settings, permitTypeData) {
+  // Get the tabular display conditions from settings
+  const conditionsStr = settings.permit_tabular_display_conditions?.value;
+  
+  if (!conditionsStr) {
+    console.log('No tabular display conditions found in settings, using default paragraph mode');
+    return { mode: 'paragraph' };
+  }
+  
+  try {
+    const conditions = JSON.parse(conditionsStr);
+    console.log('Parsed tabular display conditions:', conditions);
+    
+    // Check each condition
+    for (const condition of conditions) {
+      // Check by attribute_name
+      if (condition.attribute_name && 
+          permitTypeData.attribute_name && 
+          permitTypeData.attribute_name.toUpperCase() === condition.attribute_name.toUpperCase()) {
+        console.log(`✅ Matched condition by attribute_name: ${condition.attribute_name}`);
+        return { mode: condition.display_mode || 'table_with_quantity', condition };
+      }
+      
+      // Check by permit_type_name
+      if (condition.permit_type_name && 
+          permitTypeData.permit_type_name && 
+          permitTypeData.permit_type_name.toUpperCase() === condition.permit_type_name.toUpperCase()) {
+        console.log(`✅ Matched condition by permit_type_name: ${condition.permit_type_name}`);
+        return { mode: condition.display_mode || 'table_with_quantity', condition };
+      }
+      
+      // Check by attribute_id
+      if (condition.attribute_id && 
+          permitTypeData.attribute_id === condition.attribute_id) {
+        console.log(`✅ Matched condition by attribute_id: ${condition.attribute_id}`);
+        return { mode: condition.display_mode || 'table_with_quantity', condition };
+      }
+    }
+    
+    console.log('No matching conditions found, using default paragraph mode');
+    return { mode: 'paragraph' };
+  } catch (parseError) {
+    console.error('Error parsing tabular display conditions:', parseError);
+    return { mode: 'paragraph' };
+  }
+}
+
+/**
+ * Generate HTML for permit activities based on display mode
+ */
+function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentFees, barangay, municipality, province, now, yearEndDate) {
+  const dateOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+  const startDate = now.toLocaleDateString('en-US', dateOptions);
+  const endDate = yearEndDate.toLocaleDateString('en-US', dateOptions);
+  
+  if (displayInfo.mode === 'table_with_quantity' && assessmentFees.length > 0) {
+    // Generate table with fee names and quantities
+    let tableRows = assessmentFees
+      .filter(fee => fee.quantity && fee.quantity > 0) // Only show fees with quantity
+      .map(fee => `
+        <tr>
+          <td>${fee.fee_name}</td>
+          <td class="qty">${fee.quantity}</td>
+        </tr>
+      `).join('');
+    
+    // If no fees with quantity, fall back to showing all fees
+    if (!tableRows) {
+      tableRows = assessmentFees.map(fee => `
+        <tr>
+          <td>${fee.fee_name}</td>
+          <td class="qty">${fee.quantity || 1}</td>
+        </tr>
+      `).join('');
+    }
+    
+    return `
+      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating the following at <strong>${barangay}, ${municipality}, ${province}</strong>:</p>
+      <table class="permit-activities-table" style="margin: 15px auto; width: 80%;">
+        <thead>
+          <tr>
+            <th>Activity / Item</th>
+            <th style="text-align: center; width: 100px;">Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+      <p style="margin: 10px 0 0 0; text-indent: 40px;">Valid from <strong>${startDate}</strong> up to <strong>${endDate}</strong> only.</p>
+    `;
+  } else if (displayInfo.mode === 'table_simple' && assessmentFees.length > 0) {
+    // Generate simple table with just fee names
+    const tableRows = assessmentFees.map(fee => `
+      <tr>
+        <td>${fee.fee_name}</td>
+      </tr>
+    `).join('');
+    
+    return `
+      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating the following at <strong>${barangay}, ${municipality}, ${province}</strong>:</p>
+      <table class="permit-activities-table" style="margin: 15px auto; width: 60%;">
+        <thead>
+          <tr>
+            <th>Activity / Item</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+      <p style="margin: 10px 0 0 0; text-indent: 40px;">Valid from <strong>${startDate}</strong> up to <strong>${endDate}</strong> only.</p>
+    `;
+  } else {
+    // Default paragraph mode
+    return `
+      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${permitActivities}</strong> at <strong>${barangay}, ${municipality}, ${province}</strong> on <strong>${startDate}</strong> up to <strong>${endDate}</strong> only.</p>
+    `;
+  }
+}
+
+function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}, assessmentFees = []) {
   const now = new Date();
   const currentYear = now.getFullYear();
   const yearEndDate = new Date(currentYear, 11, 31); // December 31 of current year
@@ -426,6 +657,11 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - permitTypeData.permit_type_name:', permitTypeData.permit_type_name);
   console.log('  - permitTypeData.description (from Permit_Types.description):', permitTypeData.description);
   console.log('  - permitActivities (final value):', permitActivities);
+  
+  // Check if we should display activities in tabular format
+  const displayInfo = getPermitActivitiesDisplayMode(settings, permitTypeData);
+  console.log('Step 6 - Display Mode:');
+  console.log('  - displayInfo:', displayInfo);
   console.log('==========================================\n');
   
   const formatDate = (dateStr) => {
@@ -455,15 +691,34 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - barangay:', barangay);
   console.log('  - municipality:', municipality);
   console.log('  - province:', province);
+  console.log('  - displayInfo.mode:', displayInfo.mode);
   console.log('  - now:', now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
   console.log('=======================================\n');
 
+  // Generate permit activities content based on display mode
+  const permitActivitiesContent = generatePermitActivitiesHTML(
+    displayInfo, 
+    permitActivities, 
+    assessmentFees, 
+    barangay, 
+    municipality, 
+    province, 
+    now, 
+    yearEndDate
+  );
+
+  // Store metadata for pagination
+  window.permitReportMeta = {
+    permitTypeName,
+    businessName: data.business_name || 'N/A',
+    issueDate: now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  };
+
   return `
-    <div id="page-container">
-      <!-- Content wrapper that grows to fill space -->
-      <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start;">
+    <div class="page" id="page-1">
+      <div class="page-content">
         <!-- Header -->
-        <div style="text-align: center; margin-bottom: 20px; page-break-after: avoid;">
+        <div class="avoid-break" style="text-align: center; margin-bottom: 20px;">
           <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 8px;">
             <img src="/dalaguete-logo.png" alt="Logo" style="height: 50px; width: auto;">
           </div>
@@ -476,17 +731,17 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
         </div>
 
         <!-- Permit Title -->
-        <div id="permit-title" style="text-align: center; margin-bottom: 30px; font-weight: bold; page-break-after: avoid; text-transform: uppercase; letter-spacing: 3px; white-space: nowrap;">
+        <div id="permit-title" class="avoid-break" style="text-align: center; margin-bottom: 30px; font-weight: bold; text-transform: uppercase; letter-spacing: 3px; white-space: nowrap;">
           ${permitTypeName}
         </div>
 
         <!-- Certification Text -->
-        <div style="text-align: center; margin-bottom: 30px; font-size: 18px; font-weight: bold; page-break-after: avoid; text-transform: uppercase;">
+        <div class="avoid-break" style="text-align: center; margin-bottom: 30px; font-size: 18px; font-weight: bold; text-transform: uppercase;">
           IS HEREBY GRANTED TO
         </div>
 
         <!-- Business Information -->
-        <div style="text-align: center; margin-bottom: 20px; font-size: 25px; page-break-after: avoid; text-transform: uppercase;">
+        <div class="avoid-break" style="text-align: center; margin-bottom: 20px; font-size: 25px; text-transform: uppercase;">
           <div style="text-decoration: underline; font-weight: bold; margin-bottom: 10px;">
             ${data.business_name || 'N/A'}
           </div>
@@ -496,15 +751,15 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
         </div>
 
         <!-- Permit Body -->
-        <div style="text-align: justify; margin-bottom: 30px; margin-top: 40px; font-size: 18px; line-height: 1.6; page-break-after: avoid; margin-left: 40px; margin-right: 40px;">
-          <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${permitActivities}</strong> at <strong>${barangay}, ${municipality}, ${province}</strong> on <strong>${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong> up to <strong>${yearEndDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong> only.</p>
-          <p style="margin: 32px 0 0 0; text-indent: 40px;">This PERMIT is valid on the dates specified above and is subject to all existing laws, rules and ordinance of the municipal government.</p>
-          <p style="margin: 32px 0 0 0; text-indent: 40px;">Further, this office reserves the right to revoke this permit anytime should public safety and interest so warrant.</p>
-          <p style="margin: 32px 0 0 0; text-indent: 40px;">Given this <strong>${formatDateWithOrdinal(now)}</strong> at <strong>Municipal Hall, Dalaguete, Cebu, Philippines.</strong></p>
+        <div style="text-align: justify; margin-bottom: 30px; margin-top: 40px; font-size: 18px; line-height: 1.6; margin-left: 40px; margin-right: 40px;">
+          ${permitActivitiesContent}
+          <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">This PERMIT is valid on the dates specified above and is subject to all existing laws, rules and ordinance of the municipal government.</p>
+          <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">Further, this office reserves the right to revoke this permit anytime should public safety and interest so warrant.</p>
+          <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">Given this <strong>${formatDateWithOrdinal(now)}</strong> at <strong>Municipal Hall, Dalaguete, Cebu, Philippines.</strong></p>
         </div>
         
         <!-- Approval Section -->
-        <div style="margin-top: 60px; margin-left: 40px; margin-right: 40px; font-size: 14px; line-height: 1.8;">
+        <div class="avoid-break" style="margin-top: 60px; margin-left: 40px; margin-right: 40px; font-size: 14px; line-height: 1.8;">
           <div style="margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
           <div style="margin-bottom: 5px;">
             <div style="font-weight: bold;">${settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA'}</div>
@@ -517,25 +772,132 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
             <div>Dalaguete, Cebu</div>
           </div>
         </div>
-        
-        <!-- Spacer to push footer down -->
-        <div style="flex: 1;"></div>
       </div>
 
-      <!-- Footer stays at bottom -->
-      <div style="flex-shrink: 0; padding-top: 15px; border-top: 1px solid #ccc; text-align: center; font-size: 8px; color: #666;">
-        <div>Generated by PAMS | Permit and Assessment Management System | Issued: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} | Page 1 of 1</div>
+      <!-- Footer -->
+      <div class="page-footer">
+        <div>Generated by PAMS | Permit and Assessment Management System | Issued: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} | Page <span class="page-number">1</span> of <span class="total-pages">1</span></div>
       </div>
     </div>
   `;
+}
+
+/**
+ * Check if content overflows and needs pagination
+ * This runs after the report is rendered
+ */
+function checkAndApplyPagination() {
+  const reportContent = document.getElementById('report-content');
+  const firstPage = document.querySelector('.page');
+  
+  if (!firstPage) return;
+  
+  const pageHeight = 13 * 96; // 13 inches in pixels (96 DPI)
+  const contentHeight = firstPage.scrollHeight;
+  
+  console.log('Page height limit:', pageHeight, 'px');
+  console.log('Content height:', contentHeight, 'px');
+  
+  if (contentHeight > pageHeight) {
+    console.log('⚠️ Content overflows! Pagination may be needed.');
+    // The CSS page-break rules will handle this during print/PDF generation
+    // We just need to update page numbers
+  }
+  
+  updatePageNumbers();
+}
+
+/**
+ * Update page numbers in the document
+ */
+function updatePageNumbers() {
+  const pages = document.querySelectorAll('.page');
+  const totalPages = pages.length;
+  
+  pages.forEach((page, index) => {
+    const pageNumEl = page.querySelector('.page-number');
+    const totalPagesEl = page.querySelector('.total-pages');
+    
+    if (pageNumEl) pageNumEl.textContent = index + 1;
+    if (totalPagesEl) totalPagesEl.textContent = totalPages;
+  });
 }
 
 function printReport() {
   window.print();
 }
 
+/**
+ * Download the permit report as a PDF file
+ * Uses html2pdf.js library for client-side PDF generation
+ */
 async function downloadPDF() {
-  alert('PDF download feature coming soon. Use Print > Save as PDF from your browser.');
+  const pdfBtn = document.getElementById('pdf-btn');
+  const originalText = pdfBtn.innerHTML;
+  
+  try {
+    // Disable button and show loading state
+    pdfBtn.disabled = true;
+    pdfBtn.innerHTML = '⏳ Generating PDF...';
+    
+    // Get the report content
+    const element = document.getElementById('report-content');
+    
+    if (!element || element.classList.contains('hidden')) {
+      throw new Error('Report content not loaded yet');
+    }
+    
+    // Get metadata for filename
+    const meta = window.permitReportMeta || {};
+    const businessName = (meta.businessName || 'Permit').replace(/[^a-zA-Z0-9]/g, '_');
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `Permit_${businessName}_${date}.pdf`;
+    
+    // Configure PDF options for 8.5 x 13 inch (Legal size)
+    const opt = {
+      margin: [0.5, 0.5, 0.5, 0.5], // inches: top, left, bottom, right
+      filename: filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { 
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        letterRendering: true
+      },
+      jsPDF: { 
+        unit: 'in', 
+        format: [8.5, 13], // Legal size
+        orientation: 'portrait'
+      },
+      pagebreak: { 
+        mode: ['avoid-all', 'css', 'legacy'],
+        before: '.page-break-before',
+        after: '.page-break-after',
+        avoid: '.avoid-break'
+      }
+    };
+    
+    console.log('Generating PDF with options:', opt);
+    
+    // Generate and download the PDF
+    await html2pdf().set(opt).from(element).save();
+    
+    console.log('✅ PDF generated successfully:', filename);
+    
+    // Show success message briefly
+    pdfBtn.innerHTML = '✅ Downloaded!';
+    setTimeout(() => {
+      pdfBtn.innerHTML = originalText;
+      pdfBtn.disabled = false;
+    }, 2000);
+    
+  } catch (error) {
+    console.error('❌ Error generating PDF:', error);
+    alert('Error generating PDF: ' + error.message);
+    pdfBtn.innerHTML = originalText;
+    pdfBtn.disabled = false;
+  }
 }
 
 function showError(message) {
