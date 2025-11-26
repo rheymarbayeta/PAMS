@@ -228,6 +228,28 @@ function generateReportHTML(data, settings = {}) {
       day: 'numeric'
     });
   };
+
+  // Get the last weekday (Mon-Fri) of the current month based on a date
+  const getLastWeekdayOfMonth = (baseDate) => {
+    const date = new Date(baseDate);
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    // Get last day of the month
+    const lastDay = new Date(year, month + 1, 0);
+    // If it's Saturday (6), go back 1 day; if Sunday (0), go back 2 days
+    const dayOfWeek = lastDay.getDay();
+    if (dayOfWeek === 6) {
+      lastDay.setDate(lastDay.getDate() - 1); // Saturday -> Friday
+    } else if (dayOfWeek === 0) {
+      lastDay.setDate(lastDay.getDate() - 2); // Sunday -> Friday
+    }
+    return lastDay;
+  };
+
+  // Calculate validity date as last weekday of application month
+  const appDate = data.app_date ? new Date(data.app_date) : new Date();
+  const validityDate = getLastWeekdayOfMonth(appDate);
+  const validityDateFormatted = formatDate(validityDate);
   
   const formatCurrency = (value) => {
     const num = parseFloat(value) || 0;
@@ -423,7 +445,7 @@ function generateReportHTML(data, settings = {}) {
                   <tr>
                     <td style="width: 60%; text-align: right; padding: 2px; padding-right: 8px;"><strong>BILL IS VALID UNTIL:</strong></td>
                     <td style="width: 40%; text-align: right; padding: 2px; font-weight: bold;">
-                      ${formatDate(data.validity_date)}
+                      ${validityDateFormatted}
                     </td>
                   </tr>
                 </table>

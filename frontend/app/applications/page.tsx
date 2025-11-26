@@ -64,17 +64,17 @@ export default function ApplicationsPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Pending':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'Assessed':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Pending Approval':
-        return 'bg-orange-100 text-orange-800';
+        return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'Approved':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-100 text-green-800 border-green-200';
       case 'Rejected':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 text-red-800 border-red-200';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -86,7 +86,15 @@ export default function ApplicationsPage() {
     return (
       <ProtectedRoute>
         <Layout>
-          <div>Loading...</div>
+          <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="relative">
+                <div className="h-16 w-16 rounded-full border-4 border-indigo-100"></div>
+                <div className="absolute top-0 left-0 h-16 w-16 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+              </div>
+              <p className="mt-4 text-gray-600 font-medium">Loading applications...</p>
+            </div>
+          </div>
         </Layout>
       </ProtectedRoute>
     );
@@ -95,10 +103,23 @@ export default function ApplicationsPage() {
   return (
     <ProtectedRoute>
       <Layout>
-        <div className="px-4 py-6 sm:px-0">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">Applications</h1>
-            <div className="flex flex-col items-end">
+        <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+                <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                  Applications
+                </h1>
+                <p className="text-sm text-gray-500">{filteredApplications.length} {filteredApplications.length === 1 ? 'application' : 'applications'} found</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
               <label htmlFor="status-filter" className="sr-only">
                 Filter by status
               </label>
@@ -106,7 +127,7 @@ export default function ApplicationsPage() {
                 id="status-filter"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2"
+                className="border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 outline-none cursor-pointer"
                 aria-label="Filter applications by status"
               >
                 <option value="all">All Status</option>
@@ -119,71 +140,94 @@ export default function ApplicationsPage() {
             </div>
           </div>
 
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <ul className="divide-y divide-gray-200">
-              {filteredApplications.length === 0 ? (
-                <li className="px-4 py-4 text-center text-gray-500">
-                  No applications found
-                </li>
-              ) : (
-                filteredApplications.map((app) => (
+          {/* Applications List */}
+          <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-hidden">
+            {filteredApplications.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="mx-auto h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                  <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <p className="text-gray-500 font-medium">No applications found</p>
+                <p className="text-gray-400 text-sm mt-1">Try adjusting your filter</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {filteredApplications.map((app, index) => (
                   <li
                     key={app.application_id}
-                    className="px-4 py-4 hover:bg-gray-50"
+                    className={`group hover:bg-gray-50/80 transition-colors duration-150 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="px-6 py-5 flex items-center justify-between">
                       <div 
-                        className="flex-1 cursor-pointer"
+                        className="flex-1 cursor-pointer min-w-0"
                         onClick={() => router.push(`/applications/${app.application_id}`)}
                       >
-                        <div className="flex items-center">
-                          <div className="text-sm font-medium text-gray-900">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-sm font-semibold text-gray-900 truncate">
                             {app.application_number || `Application #${app.application_id}`}
-                          </div>
+                          </span>
                           <span
-                            className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                              app.status
-                            )}`}
+                            className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border ${getStatusColor(app.status)}`}
                           >
                             {app.status}
                           </span>
                         </div>
-                        <div className="mt-2 text-sm text-gray-500">
-                          <span className="font-medium">{app.entity_name}</span> • {app.permit_type}
+                        <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                          <span className="font-medium text-gray-800">{app.entity_name}</span>
+                          <span className="text-gray-300">•</span>
+                          <span className="text-gray-500">{app.permit_type}</span>
                         </div>
-                        <div className="mt-1 text-xs text-gray-400">
-                          Created by {app.creator_name} • {new Date(app.created_at).toLocaleDateString()}
+                        <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-400">
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span>Created by {app.creator_name}</span>
+                          <span className="text-gray-300">•</span>
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span>{new Date(app.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <div className="ml-4 flex items-center gap-2">
+                      <div className="ml-4 flex items-center gap-3">
                         {user?.role_name === 'SuperAdmin' && (
                           <button
                             onClick={(e) => handleDeleteApplication(e, app.application_id)}
-                            className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium text-red-600 hover:bg-red-50 border border-red-300"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-lg border border-red-200 hover:border-red-600 transition-all duration-200"
                             title="Delete application (SuperAdmin only)"
                           >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                             Delete
                           </button>
                         )}
-                        <svg
-                          className="h-5 w-5 text-gray-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                        <div 
+                          className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-indigo-100 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/applications/${app.application_id}`)}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
+                          <svg
+                            className="h-4 w-4 text-gray-400 group-hover:text-indigo-600 transition-colors"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </div>
                       </div>
                     </div>
                   </li>
-                ))
-              )}
-            </ul>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </Layout>

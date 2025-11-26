@@ -273,6 +273,11 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
         return `${month} ${year}`;
       };
 
+      const formatFullDate = (date) => {
+        // Format: "November 30, 2025"
+        return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      };
+
       const formatPrintDate = (date) => {
         // Format: "Thursday, November 20, 2025 at 11:58"
         const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
@@ -284,8 +289,25 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
         return `${weekday}, ${month} ${day}, ${year} at ${hours}:${minutes}`;
       };
 
-      const validityDate = assessment.validity_date ? new Date(assessment.validity_date) : new Date();
-      const validityFormatted = formatMonthYear(validityDate);
+      // Get the last weekday (Mon-Fri) of the current month based on application date
+      const getLastWeekdayOfMonth = (baseDate) => {
+        const year = baseDate.getFullYear();
+        const month = baseDate.getMonth();
+        // Get last day of the month
+        const lastDay = new Date(year, month + 1, 0);
+        // If it's Saturday (6), go back 1 day; if Sunday (0), go back 2 days
+        const dayOfWeek = lastDay.getDay();
+        if (dayOfWeek === 6) {
+          lastDay.setDate(lastDay.getDate() - 1); // Saturday -> Friday
+        } else if (dayOfWeek === 0) {
+          lastDay.setDate(lastDay.getDate() - 2); // Sunday -> Friday
+        }
+        return lastDay;
+      };
+
+      // Bill validity is the last weekday of the application's current month
+      const validityDate = getLastWeekdayOfMonth(appDate);
+      const validityFormatted = formatFullDate(validityDate);
       const assessmentDateFormatted = formatShortDate(assessmentDate);
       
       // Print date format: "Thursday, November 20, 2025 at 11:58"
@@ -535,8 +557,8 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
       doc.font('Helvetica-Bold').fontSize(10);
       doc.text('BILL IS VALID UNTIL', 342, totalDueY + 12);
       doc.text(':', 413, totalDueY + 12);
-      doc.font('Helvetica-Bold').fontSize(10);
-      const validityDateFormatted = formatMonthYear(validityDate);
+      doc.font('Helvetica-Bold').fontSize(9);
+      const validityDateFormatted = formatFullDate(validityDate);
       doc.text(validityDateFormatted, 420, totalDueY + 12);
 
       // Signatures Section
@@ -710,8 +732,30 @@ const getAssessmentData = async (applicationId) => {
     return `${month} ${year}`;
   };
 
-  const validityDate = assessment.validity_date ? new Date(assessment.validity_date) : new Date();
-  const validityFormatted = formatMonthYear(validityDate);
+  const formatFullDate = (date) => {
+    // Format: "November 30, 2025"
+    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
+  // Get the last weekday (Mon-Fri) of the current month based on application date
+  const getLastWeekdayOfMonth = (baseDate) => {
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    // Get last day of the month
+    const lastDay = new Date(year, month + 1, 0);
+    // If it's Saturday (6), go back 1 day; if Sunday (0), go back 2 days
+    const dayOfWeek = lastDay.getDay();
+    if (dayOfWeek === 6) {
+      lastDay.setDate(lastDay.getDate() - 1); // Saturday -> Friday
+    } else if (dayOfWeek === 0) {
+      lastDay.setDate(lastDay.getDate() - 2); // Sunday -> Friday
+    }
+    return lastDay;
+  };
+
+  // Bill validity is the last weekday of the application's current month
+  const validityDate = getLastWeekdayOfMonth(appDate);
+  const validityFormatted = formatFullDate(validityDate);
   const assessmentDateFormatted = formatShortDate(assessmentDate);
   
   const now = new Date();

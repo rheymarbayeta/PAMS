@@ -116,7 +116,7 @@ router.get('/:id/assessment-record', async (req, res) => {
       address: data.businessAddress,
       prepared_by_name: data.assessment.prepared_by_name,
       approved_by_name: data.assessment.approved_by_name,
-      validity_date: data.assessment.validity_date,
+      validity_date: data.validityDate, // Use calculated last weekday of month
       total_balance_due: data.assessment.total_balance_due,
       total_surcharge: data.assessment.total_surcharge,
       total_interest: data.assessment.total_interest,
@@ -1290,6 +1290,91 @@ router.get('/:id/payment', async (req, res) => {
     res.json(payments);
   } catch (error) {
     console.error('[Payment] Get payment error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Issue permit - changes status from Paid to Issued
+router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    // Check current status
+    const [apps] = await pool.execute(
+      'SELECT status, application_number FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Paid') {
+      return res.status(400).json({ error: 'Permit can only be issued for paid applications' });
+    }
+
+    // Update status to Issued
+    await pool.execute(
+      'UPDATE Applications SET status = ?, issued_by_user_id = ?, issued_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+      ['Issued', req.user.user_id, applicationId]
+    );
+
+    // Log action
+    await logAction(
+      req.user.user_id,
+      'ISSUE_PERMIT',
+      `Issued permit for application ${apps[0].application_number || applicationId}`,
+      applicationId
+    );
+
+    res.json({ message: 'Permit issued successfully' });
+  } catch (error) {
+    console.error('Issue permit error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Release permit - changes status from Issued to Released
+router.put('/:id/release', authorize('SuperAdmin', 'Admin', 'Approver'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const { released_by, received_by } = req.body;
+
+    if (!released_by || !received_by) {
+      return res.status(400).json({ error: 'Released by and Received by are required' });
+    }
+
+    // Check current status
+    const [apps] = await pool.execute(
+      'SELECT status, application_number FROM Applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Issued') {
+      return res.status(400).json({ error: 'Permit can only be released for issued applications' });
+    }
+
+    // Update status to Released
+    await pool.execute(
+      'UPDATE Applications SET status = ?, released_by = ?, received_by = ?, released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+      ['Released', released_by, received_by, applicationId]
+    );
+
+    // Log action
+    await logAction(
+      req.user.user_id,
+      'RELEASE_PERMIT',
+      `Released permit for application ${apps[0].application_number || applicationId}. Released by: ${released_by}, Received by: ${received_by}`,
+      applicationId
+    );
+
+    res.json({ message: 'Permit released successfully' });
+  } catch (error) {
+    console.error('Release permit error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });

@@ -318,7 +318,35 @@ function renderReport(appData, settings = {}, applicationData = {}, permitTypeDa
   document.getElementById('report-content').innerHTML = reportHTML;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('report-content').classList.remove('hidden');
+  
+  // Auto-size permit title to fit on one line
+  setTimeout(() => {
+    adjustPermitTitleSize();
+  }, 100);
+  
   console.log('===================================\n');
+}
+
+// Function to adjust permit title font size to fit on one line
+function adjustPermitTitleSize() {
+  const titleElement = document.getElementById('permit-title');
+  if (!titleElement) return;
+  
+  const container = titleElement.parentElement;
+  const maxWidth = container.offsetWidth - 80; // Account for margins
+  
+  let fontSize = 70; // Start with max font size (biggest in document)
+  const minFontSize = 36; // Minimum font size, still bigger than other text
+  
+  titleElement.style.fontSize = fontSize + 'px';
+  
+  // Reduce font size until text fits on one line
+  while (titleElement.scrollWidth > maxWidth && fontSize > minFontSize) {
+    fontSize -= 2;
+    titleElement.style.fontSize = fontSize + 'px';
+  }
+  
+  console.log('Permit title font size adjusted to:', fontSize + 'px');
 }
 
 function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}) {
@@ -448,7 +476,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
         </div>
 
         <!-- Permit Title -->
-        <div style="text-align: center; margin-bottom: 30px; font-size: 50px; font-weight: bold; page-break-after: avoid; text-transform: uppercase; letter-spacing: 3px;">
+        <div id="permit-title" style="text-align: center; margin-bottom: 30px; font-weight: bold; page-break-after: avoid; text-transform: uppercase; letter-spacing: 3px; white-space: nowrap;">
           ${permitTypeName}
         </div>
 

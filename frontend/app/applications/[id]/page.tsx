@@ -21,6 +21,9 @@ interface ApplicationDetail {
   creator_name: string;
   assessor_name: string | null;
   approver_name: string | null;
+  issued_by_name: string | null;
+  released_by: string | null;
+  received_by: string | null;
   created_at: string;
   updated_at: string;
   parameters: Array<{ param_name: string; param_value: string }>;
@@ -48,6 +51,10 @@ export default function ApplicationDetailPage() {
   const { user } = useAuth();
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
+  const [releaseData, setReleaseData] = useState({ released_by: '', received_by: '' });
+  const [releasing, setReleasing] = useState(false);
+  const [issuing, setIssuing] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -81,6 +88,10 @@ export default function ApplicationDetailPage() {
         return 'bg-green-100 text-green-800';
       case 'Paid':
         return 'bg-emerald-100 text-emerald-800';
+      case 'Issued':
+        return 'bg-indigo-100 text-indigo-800';
+      case 'Released':
+        return 'bg-purple-100 text-purple-800';
       case 'Rejected':
         return 'bg-red-100 text-red-800';
       default:
@@ -90,12 +101,53 @@ export default function ApplicationDetailPage() {
 
   const canAssess = user && ['SuperAdmin', 'Admin', 'Assessor'].includes(user.role_name);
   const canApprove = user && ['SuperAdmin', 'Admin', 'Approver'].includes(user.role_name);
-  const canPrint = application?.status === 'Approved';
-  const canRenew = user && ['SuperAdmin', 'Admin', 'Application Creator'].includes(user.role_name) && application?.status === 'Approved';
+  const canIssue = user && ['SuperAdmin', 'Admin', 'Approver'].includes(user.role_name) && application?.status === 'Paid';
+  const canRelease = user && ['SuperAdmin', 'Admin', 'Approver'].includes(user.role_name) && application?.status === 'Issued';
+  const canPrintPermit = application?.status === 'Paid' || application?.status === 'Issued' || application?.status === 'Released';
+  const canRenew = user && ['SuperAdmin', 'Admin', 'Application Creator'].includes(user.role_name) && 
+    (application?.status === 'Issued' || application?.status === 'Released');
   const canDelete =
     user &&
     ['SuperAdmin', 'Admin'].includes(user.role_name) &&
     application?.status === 'Pending';
+
+  const handleIssuePermit = async () => {
+    if (!application) return;
+    if (!confirm('Issue this permit? This will change the status to Issued.')) return;
+    setIssuing(true);
+    try {
+      await api.put(`/api/applications/${application.application_id}/issue`);
+      // Open permit report in new tab
+      const token = localStorage.getItem('token') || '';
+      const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+      const url = `/permit-report.html?id=${application.application_id}${encodedToken}`;
+      window.open(url, '_blank');
+      fetchApplication();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Error issuing permit');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  const handleReleasePermit = async () => {
+    if (!releaseData.released_by.trim() || !releaseData.received_by.trim()) {
+      alert('Please fill in both fields');
+      return;
+    }
+    setReleasing(true);
+    try {
+      await api.put(`/api/applications/${application?.application_id}/release`, releaseData);
+      alert('Permit released successfully!');
+      setShowReleaseModal(false);
+      setReleaseData({ released_by: '', received_by: '' });
+      fetchApplication();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Error releasing permit');
+    } finally {
+      setReleasing(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!application) return;
@@ -113,7 +165,12 @@ export default function ApplicationDetailPage() {
     return (
       <ProtectedRoute>
         <Layout>
-          <div>Loading...</div>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-4"></div>
+              <p className="text-gray-500 font-medium">Loading application...</p>
+            </div>
+          </div>
         </Layout>
       </ProtectedRoute>
     );
@@ -123,7 +180,17 @@ export default function ApplicationDetailPage() {
     return (
       <ProtectedRoute>
         <Layout>
-          <div>Application not found</div>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="p-4 bg-gray-100 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Application Not Found</h3>
+              <p className="text-gray-500">The application you're looking for doesn't exist.</p>
+            </div>
+          </div>
         </Layout>
       </ProtectedRoute>
     );
@@ -135,21 +202,24 @@ export default function ApplicationDetailPage() {
     <ProtectedRoute>
       <Layout>
         <div className="px-4 py-6 sm:px-0">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center space-x-4">
-              <Image
-                src="/dalaguete-logo.png"
-                alt="Municipality of Dalaguete Official Seal"
-                width={60}
-                height={60}
-                className="object-contain"
-              />
+          {/* Page Header */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Image
+                  src="/dalaguete-logo.png"
+                  alt="Municipality of Dalaguete Official Seal"
+                  width={70}
+                  height={70}
+                  className="object-contain"
+                />
+              </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
                   Application {application.application_number || `#${application.application_id}`}
                 </h1>
                 <span
-                  className={`mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                  className={`mt-2 inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 ${getStatusColor(
                     application.status
                   )}`}
                 >
@@ -157,37 +227,8 @@ export default function ApplicationDetailPage() {
                 </span>
               </div>
             </div>
-            <div className="flex space-x-2">
-              {canPrint && (
-                <button
-                  onClick={() => router.push(`/applications/${application.application_id}/print`)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                >
-                  Print Permit
-                </button>
-              )}
-              {(application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved') && application.assessed_fees.length > 0 && (
-                <button
-                  onClick={() => {
-                    const token = localStorage.getItem('token') || '';
-                    const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
-                    const url = `/assessment-report.html?id=${application.application_id}${encodedToken}`;
-                    window.open(url, '_blank');
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Print Assessment Report
-                </button>
-              )}
-              {application.status === 'Approved' && (
-                <button
-                  onClick={() => router.push(`/applications/${application.application_id}/payment`)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
-                >
-                  Record Payment
-                </button>
-              )}
-              {application.status === 'Paid' && (
+            <div className="flex flex-wrap gap-2">
+              {canPrintPermit && (
                 <button
                   onClick={() => {
                     const token = localStorage.getItem('token') || '';
@@ -195,9 +236,62 @@ export default function ApplicationDetailPage() {
                     const url = `/permit-report.html?id=${application.application_id}${encodedToken}`;
                     window.open(url, '_blank');
                   }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl shadow-lg shadow-green-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
                 >
-                  Issue Permit
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print Permit
+                </button>
+              )}
+              {(application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0 && (
+                <button
+                  onClick={() => {
+                    const token = localStorage.getItem('token') || '';
+                    const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+                    const url = `/assessment-report.html?id=${application.application_id}${encodedToken}`;
+                    window.open(url, '_blank');
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Print Assessment
+                </button>
+              )}
+              {application.status === 'Approved' && (
+                <button
+                  onClick={() => router.push(`/applications/${application.application_id}/payment`)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl shadow-lg shadow-purple-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  Record Payment
+                </button>
+              )}
+              {application.status === 'Paid' && (
+                <button
+                  onClick={handleIssuePermit}
+                  disabled={issuing}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-xl shadow-lg shadow-teal-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {issuing ? 'Issuing...' : 'Issue Permit'}
+                </button>
+              )}
+              {application.status === 'Issued' && (
+                <button
+                  onClick={() => setShowReleaseModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  Release Permit
                 </button>
               )}
               {canRenew && (
@@ -212,86 +306,104 @@ export default function ApplicationDetailPage() {
                       alert(error.response?.data?.error || 'Error renewing application');
                     }
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
                 >
-                  Renew Application
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Renew
                 </button>
               )}
               {canAssess && application.status === 'Pending' && (
                 <button
                   onClick={() => router.push(`/applications/${application.application_id}/assess`)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
                 >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
                   Assess Fees
                 </button>
               )}
               {canApprove && application.status === 'Pending Approval' && (
                 <button
                   onClick={() => router.push(`/applications/${application.application_id}/approve`)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
                 >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   Review & Approve
                 </button>
               )}
               {canDelete && (
                 <button
                   onClick={handleDelete}
-                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl shadow-lg shadow-red-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
                 >
-                  Delete Application
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
                 </button>
               )}
             </div>
           </div>
 
+          {/* Details Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Application Details</h2>
-              <dl className="space-y-2">
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Permit Type</dt>
-                  <dd className="text-sm text-gray-900">{application.permit_type}</dd>
+            <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Application Details
+              </h2>
+              <dl className="space-y-3">
+                <div className="flex items-start">
+                  <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Permit Type</dt>
+                  <dd className="text-sm text-gray-900 font-medium">{application.permit_type}</dd>
                 </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Entity</dt>
+                <div className="flex items-start">
+                  <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Entity</dt>
                   <dd className="text-sm text-gray-900">{application.entity_name}</dd>
                 </div>
                 {application.contact_person && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Contact Person</dt>
+                  <div className="flex items-start">
+                    <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Contact</dt>
                     <dd className="text-sm text-gray-900">{application.contact_person}</dd>
                   </div>
                 )}
                 {application.email && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Email</dt>
+                  <div className="flex items-start">
+                    <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Email</dt>
                     <dd className="text-sm text-gray-900">{application.email}</dd>
                   </div>
                 )}
                 {application.phone && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Phone</dt>
+                  <div className="flex items-start">
+                    <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Phone</dt>
                     <dd className="text-sm text-gray-900">{application.phone}</dd>
                   </div>
                 )}
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Created By</dt>
+                <div className="flex items-start pt-3 border-t border-gray-100">
+                  <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Created By</dt>
                   <dd className="text-sm text-gray-900">{application.creator_name}</dd>
                 </div>
                 {application.assessor_name && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Assessed By</dt>
+                  <div className="flex items-start">
+                    <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Assessed By</dt>
                     <dd className="text-sm text-gray-900">{application.assessor_name}</dd>
                   </div>
                 )}
                 {application.approver_name && (
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Approved By</dt>
+                  <div className="flex items-start">
+                    <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Approved By</dt>
                     <dd className="text-sm text-gray-900">{application.approver_name}</dd>
                   </div>
                 )}
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Created At</dt>
+                <div className="flex items-start">
+                  <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">Created At</dt>
                   <dd className="text-sm text-gray-900">
                     {new Date(application.created_at).toLocaleString()}
                   </dd>
@@ -299,15 +411,25 @@ export default function ApplicationDetailPage() {
               </dl>
             </div>
 
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Parameters</h2>
+            <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Parameters
+              </h2>
               {application.parameters.length === 0 ? (
-                <div className="text-sm text-gray-500">No parameters</div>
+                <div className="text-center py-8">
+                  <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  <p className="text-sm text-gray-500">No parameters</p>
+                </div>
               ) : (
-                <dl className="space-y-2">
+                <dl className="space-y-3">
                   {application.parameters.map((param, index) => (
-                    <div key={index}>
-                      <dt className="text-sm font-medium text-gray-500">{param.param_name}</dt>
+                    <div key={index} className="flex items-start">
+                      <dt className="w-32 text-sm font-medium text-gray-500 flex-shrink-0">{param.param_name}</dt>
                       <dd className="text-sm text-gray-900">{param.param_value || '-'}</dd>
                     </div>
                   ))}
@@ -316,53 +438,50 @@ export default function ApplicationDetailPage() {
             </div>
           </div>
 
-          <div className="mt-6 bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Assessed Fees</h2>
+          {/* Assessed Fees */}
+          <div className="mt-6 bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Assessed Fees
+            </h2>
             {application.assessed_fees.length === 0 ? (
-              <div className="text-sm text-gray-500">No fees assessed yet</div>
+              <div className="text-center py-8">
+                <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-gray-500">No fees assessed yet</p>
+              </div>
             ) : (
-              <div>
+              <div className="overflow-hidden rounded-xl border border-gray-200">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Category
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Fee Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Amount
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Assessed By
-                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Category</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fee Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assessed By</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-gray-100">
                     {application.assessed_fees.map((fee) => (
-                      <tr key={fee.assessed_fee_id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {fee.category_name}
+                      <tr key={fee.assessed_fee_id} className="hover:bg-gray-50/50 transition-colors duration-150">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <span className="bg-gray-100 px-2 py-1 rounded-full">{fee.category_name}</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {fee.fee_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600">
                           ₱ {parseFloat(fee.assessed_amount.toString()).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {fee.assessed_by_name}
-                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.assessed_by_name}</td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-gray-50">
+                  <tfoot className="bg-gradient-to-r from-indigo-50 to-purple-50">
                     <tr>
-                      <td colSpan={2} className="px-6 py-4 text-sm font-medium text-gray-900">
-                        Total
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold text-gray-900">
+                      <td colSpan={2} className="px-6 py-4 text-sm font-semibold text-gray-900">Total</td>
+                      <td className="px-6 py-4 text-lg font-bold text-indigo-600">
                         ₱ {totalFees.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                       </td>
                       <td></td>
@@ -373,14 +492,24 @@ export default function ApplicationDetailPage() {
             )}
           </div>
 
-          <div className="mt-6 bg-white shadow rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Transaction Logs</h2>
-            <div className="space-y-2">
+          {/* Transaction Logs */}
+          <div className="mt-6 bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Transaction Logs
+            </h2>
+            <div className="space-y-3">
               {application.audit_trail.length === 0 ? (
-                <div className="text-sm text-gray-500">No audit trail entries</div>
+                <div className="text-center py-8">
+                  <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm text-gray-500">No audit trail entries</p>
+                </div>
               ) : (
                 application.audit_trail.map((log) => {
-                  // Format amounts in the log details
                   const formatLogDetails = (details: string) => {
                     return details.replace(/₱([\d,]+\.?\d{0,2})/g, (match, amount) => {
                       const num = parseFloat(amount.replace(/,/g, ''));
@@ -392,9 +521,12 @@ export default function ApplicationDetailPage() {
                   };
 
                   return (
-                    <div key={log.log_id} className="border-l-4 border-indigo-500 pl-4 py-2">
+                    <div key={log.log_id} className="border-l-4 border-indigo-500 bg-gradient-to-r from-indigo-50/50 to-transparent pl-4 py-3 rounded-r-lg">
                       <div className="text-sm text-gray-900">{formatLogDetails(log.details)}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
                         {log.user_name} • {new Date(log.timestamp).toLocaleString()}
                       </div>
                     </div>
@@ -404,6 +536,64 @@ export default function ApplicationDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Release Permit Modal */}
+        {showReleaseModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                Release Permit
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Released By <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={releaseData.released_by}
+                    onChange={(e) => setReleaseData({ ...releaseData, released_by: e.target.value })}
+                    placeholder="Name of person releasing the permit"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Received By <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={releaseData.received_by}
+                    onChange={(e) => setReleaseData({ ...releaseData, received_by: e.target.value })}
+                    placeholder="Name of person receiving the permit"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowReleaseModal(false);
+                    setReleaseData({ released_by: '', received_by: '' });
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReleasePermit}
+                  disabled={releasing}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {releasing ? 'Releasing...' : 'Release Permit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Layout>
     </ProtectedRoute>
   );
