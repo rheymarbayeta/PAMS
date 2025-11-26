@@ -273,22 +273,47 @@ async function fetchPermitReport() {
       console.warn('Could not fetch settings, using defaults:', settingsError);
     }
     
-    renderReport(assessmentData, settings, applicationData, permitTypeData);
+    // Fetch payment data
+    let paymentData = {};
+    try {
+      const paymentUrl = `${apiBaseUrl}/api/applications/${applicationId}/payment`;
+      console.log('Fetching payment from:', paymentUrl);
+      
+      const paymentResponse = await fetch(paymentUrl, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include'
+      });
+      if (paymentResponse.ok) {
+        const payments = await paymentResponse.json();
+        if (payments && payments.length > 0) {
+          paymentData = payments[0]; // Get the first/latest payment
+          console.log('✅ Payment data loaded:', paymentData);
+        }
+      } else {
+        console.warn('Payment fetch returned status:', paymentResponse.status);
+      }
+    } catch (paymentError) {
+      console.warn('Could not fetch payment data:', paymentError);
+    }
+    
+    renderReport(assessmentData, settings, applicationData, permitTypeData, paymentData);
   } catch (error) {
     console.error('Error fetching permit data:', error);
     showError(`Failed to load permit report: ${error.message}`);
   }
 }
 
-function renderReport(appData, settings = {}, applicationData = {}, permitTypeData = {}) {
+function renderReport(appData, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}) {
   console.log('\n========== RENDER REPORT ==========');
   console.log('Input parameters:');
   console.log('  - appData:', appData);
   console.log('  - settings:', settings);
   console.log('  - applicationData:', applicationData);
   console.log('  - permitTypeData:', permitTypeData);
+  console.log('  - paymentData:', paymentData);
   
-  const reportHTML = generateReportHTML(appData, settings, applicationData, permitTypeData);
+  const reportHTML = generateReportHTML(appData, settings, applicationData, permitTypeData, paymentData);
   
   document.getElementById('report-content').innerHTML = reportHTML;
   document.getElementById('loading').classList.add('hidden');
@@ -296,8 +321,25 @@ function renderReport(appData, settings = {}, applicationData = {}, permitTypeDa
   console.log('===================================\n');
 }
 
-function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}) {
+function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}) {
   const now = new Date();
+  const currentYear = now.getFullYear();
+  const yearEndDate = new Date(currentYear, 11, 31); // December 31 of current year
+  
+  // Function to format date as ordinal (1st, 2nd, 3rd, etc.)
+  const formatDateWithOrdinal = (date) => {
+    const day = date.getDate();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear();
+    
+    let ordinal = 'th';
+    if (day % 10 === 1 && day !== 11) ordinal = 'st';
+    else if (day % 10 === 2 && day !== 12) ordinal = 'nd';
+    else if (day % 10 === 3 && day !== 13) ordinal = 'rd';
+    
+    return `${day}${ordinal} day of ${month} ${year}`;
+  };
   
   console.log('\n========== GENERATE REPORT HTML ==========');
   console.log('Step 1 - Input Data:');
@@ -421,13 +463,31 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
             ${data.business_name || 'N/A'}
           </div>
           <div style="font-weight: bold; font-size: 16px">
-            Address: ${data.address || 'N/A'}
+            <strong>Address:</strong> <strong>${data.address || 'N/A'}</strong>
           </div>
         </div>
 
         <!-- Permit Body -->
         <div style="text-align: justify; margin-bottom: 30px; margin-top: 40px; font-size: 18px; line-height: 1.6; page-break-after: avoid; margin-left: 40px; margin-right: 40px;">
-          <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating ${permitActivities} at ${barangay}, ${municipality}, ${province} on November 17, 2025 up to December 31, 2025 only.</p>
+          <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${permitActivities}</strong> at <strong>${barangay}, ${municipality}, ${province}</strong> on <strong>${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong> up to <strong>${yearEndDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong> only.</p>
+          <p style="margin: 32px 0 0 0; text-indent: 40px;">This PERMIT is valid on the dates specified above and is subject to all existing laws, rules and ordinance of the municipal government.</p>
+          <p style="margin: 32px 0 0 0; text-indent: 40px;">Further, this office reserves the right to revoke this permit anytime should public safety and interest so warrant.</p>
+          <p style="margin: 32px 0 0 0; text-indent: 40px;">Given this <strong>${formatDateWithOrdinal(now)}</strong> at <strong>Municipal Hall, Dalaguete, Cebu, Philippines.</strong></p>
+        </div>
+        
+        <!-- Approval Section -->
+        <div style="margin-top: 60px; margin-left: 40px; margin-right: 40px; font-size: 14px; line-height: 1.8;">
+          <div style="margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
+          <div style="margin-bottom: 5px;">
+            <div style="font-weight: bold;">${settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA'}</div>
+            <div style="font-weight: normal;">${settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR'}</div>
+          </div>
+          <div style="margin-top: 20px;">
+            <div>PAID: ₱ ${paymentData.amount ? parseFloat(paymentData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '18,700.00'}</div>
+            <div>O.R. NO: ${paymentData.official_receipt_no || '1238282'}</div>
+            <div>DATE: ${paymentData.payment_date ? new Date(paymentData.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div>Dalaguete, Cebu</div>
+          </div>
         </div>
         
         <!-- Spacer to push footer down -->

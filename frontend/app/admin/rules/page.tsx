@@ -153,7 +153,7 @@ export default function RulesPage() {
     }
   };
 
-  const fetchRuleWithFees = async (ruleId: number) => {
+  const fetchRuleWithFees = async (ruleId: string | number) => {
     try {
       const response = await api.get(`/api/assessment-rules/${ruleId}`);
       return response.data;
@@ -213,7 +213,7 @@ export default function RulesPage() {
     }
   };
 
-  const handleDelete = async (ruleId: number) => {
+  const handleDelete = async (ruleId: string | number) => {
     if (!confirm('Are you sure you want to delete this rule?')) return;
     try {
       await api.delete(`/api/assessment-rules/${ruleId}`);
@@ -244,13 +244,15 @@ export default function RulesPage() {
     const updated = [...ruleFees];
     updated[index] = { ...updated[index], [field]: value };
     
-    // If fee_id changed, update fee_name and default_amount
+    // If fee_id changed, update fee_name, default_amount, and amount
     if (field === 'fee_id') {
-      const selectedFee = allFees.find(f => f.fee_id === parseInt(value));
+      const feeIdToMatch = typeof value === 'string' ? value : String(value);
+      const selectedFee = allFees.find(f => String(f.fee_id) === feeIdToMatch);
       if (selectedFee) {
         updated[index].fee_name = selectedFee.fee_name;
         updated[index].default_amount = selectedFee.default_amount;
-        updated[index].amount = selectedFee.default_amount; // Set default amount
+        updated[index].amount = selectedFee.default_amount; // Auto-populate with default amount
+        console.log('[Rules] Fee selected - auto-populating amount:', selectedFee.default_amount);
       }
     }
     

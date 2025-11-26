@@ -63,7 +63,7 @@
     background-color: #1e7e34;
   }
   #page-container {
-    padding: 12mm;
+    padding: 6mm 12mm;
     width: 210mm;
     height: 297mm;
     margin: 0;
@@ -76,7 +76,7 @@
   
   @page {
     size: A4;
-    margin: 12mm;
+    margin: 6mm 12mm;
   }
   
   @media print {
@@ -90,14 +90,16 @@
       margin: 0;
       max-width: 100%;
       height: auto;
+      page-break-inside: avoid;
     }
     .controls {
       display: none;
     }
     #page-container {
-      padding: 12mm;
+      padding: 6mm 12mm;
       margin: 0;
       box-shadow: none;
+      page-break-inside: avoid;
       page-break-after: avoid;
     }
   }
@@ -331,15 +333,15 @@ function generateReportHTML(data, settings = {}) {
   
   return `
   <div id="page-container">
-    <div style="padding: 40px; font-family: Arial, sans-serif; line-height: 1.6; display: flex; flex-direction: column; height: 100%;">
+    <div style="padding: 40px; font-family: Arial, sans-serif; line-height: 1; display: flex; flex-direction: column; height: 100%;">
       <!-- Content wrapper -->
       <div style="flex: 1; display: flex; flex-direction: column;">
         <!-- Logo and Header -->
-        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 0px; page-break-after: avoid;">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 0px; page-break-after: avoid; line-height: 1;">
           <div style="flex-shrink: 0; margin-right: 20px;">
             <img src="/dalaguete-logo.png" alt="Logo" style="height: 60px; width: auto;">
           </div>
-          <div style="text-align: center; line-height: 1.2;">
+          <div style="text-align: center; line-height: 1;">
             <div style="font-size: 12px; font-weight: bold;">REPUBLIC OF THE PHILIPPINES</div>
             <div style="font-size: 12px; font-weight: bold;">MUNICIPALITY OF DALAGUETE</div>
             <div style="font-size: 12px; font-weight: bold;">PROVINCE OF CEBU</div>
@@ -370,7 +372,7 @@ function generateReportHTML(data, settings = {}) {
         </div>
         
         <!-- Assessment Table -->
-        <table style="width: 100%; border-collapse: collapse; margin: 25px 0; font-size: 11px; page-break-inside: avoid;">
+        <table style="width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 11px; page-break-inside: avoid;">
           <thead>
             <tr style="background-color: transparent; font-weight: bold; border-bottom: 2px solid #333;">
               <th style="border: none; padding: 10px; text-align: left;">Tax/Fee</th>
@@ -433,8 +435,8 @@ function generateReportHTML(data, settings = {}) {
         <hr style="border: none; border-top: 1px solid #333; margin: 10px 0;">
         
         <!-- Certification and Signature Section -->
-        <div style="margin-top: 15px; font-size: 11px; page-break-after: avoid;">
-          <div style="margin-bottom: 15px; line-height: 1.6;">
+        <div style="margin-top: 15px; font-size: 11px; page-break-after: avoid; line-height: 1;">
+          <div style="margin-bottom: 15px; line-height: 1;">
             <p style="margin: 0; text-align: justify;">This is to certify that the above information supplied by me is true and correct to the best of my knowledge and belief.</p>
           </div>
           
@@ -443,7 +445,7 @@ function generateReportHTML(data, settings = {}) {
             <div style="border-top: 1px solid #333; width: 200px; margin: 0 auto; font-size: 10px;">(Owner/Proprietor/Administrator)</div>
           </div>
           
-          <div style="margin-bottom: 15px; font-size: 10px; line-height: 1.5;">
+          <div style="margin-bottom: 15px; font-size: 10px; line-height: 1;">
             <p style="margin: 0;">SUBSCRIBED AND SWORN TO before me this _____ day of ______________, 2025, affiant exhibited his/her Residence Certificate No. ______ issued on ______ at DALAGUETE, Philippines.</p>
           </div>
           
@@ -453,7 +455,7 @@ function generateReportHTML(data, settings = {}) {
             <div style="border-top: 1px solid #333; width: 200px; margin: 0 auto;font-weight: bold; margin-bottom: 25px;">${settings.municipal_treasurer_position?.value || 'ACTING MUNICIPAL TREASURER'}</div>
           </div>
           
-          <div style="margin-top: 20px; font-size: 9px; font-style: italic; line-height: 1.4;">
+          <div style="margin-top: 20px; font-size: 9px; font-style: italic; line-height: 1;">
             <p style="margin: 0;">* Subject however to existing rules, relative regulations,</p>
             <p style="margin: 0;">local ordinances of the foregoing</p>
           </div>
