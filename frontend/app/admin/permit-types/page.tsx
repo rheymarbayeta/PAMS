@@ -12,6 +12,7 @@ interface PermitType {
   attribute_name: string | null;
   description: string | null;
   is_active: boolean;
+  validity_date: string | null;
   fees?: PermitTypeFee[];
 }
 
@@ -43,6 +44,7 @@ export default function PermitTypesPage() {
     attribute_id: '',
     description: '',
     is_active: true,
+    validity_date: '',
   });
   const [attributes, setAttributes] = useState<Array<{ attribute_id: string; attribute_name: string }>>([]);
   const [permitTypeFees, setPermitTypeFees] = useState<PermitTypeFee[]>([]);
@@ -159,7 +161,7 @@ export default function PermitTypesPage() {
       }
       setShowModal(false);
       setEditingPermitType(null);
-      setFormData({ permit_type_name: '', attribute_id: '', description: '', is_active: true });
+      setFormData({ permit_type_name: '', attribute_id: '', description: '', is_active: true, validity_date: '' });
       setPermitTypeFees([]);
       fetchPermitTypes();
     } catch (error: any) {
@@ -180,6 +182,7 @@ export default function PermitTypesPage() {
         attribute_id: fullPermitType.attribute_id || '',
         description: fullPermitType.description || '',
         is_active: fullPermitType.is_active,
+        validity_date: fullPermitType.validity_date || '',
       });
       setPermitTypeFees(fullPermitType.fees || []);
       setShowModal(true);
@@ -206,6 +209,7 @@ export default function PermitTypesPage() {
         permit_type_name: permitType.permit_type_name,
         description: permitType.description,
         is_active: permitType.is_active,
+        validity_date: permitType.validity_date || null,
         fees: permitTypeFees,
       });
 
@@ -299,7 +303,7 @@ export default function PermitTypesPage() {
             <button
               onClick={() => {
                 setEditingPermitType(null);
-                setFormData({ permit_type_name: '', attribute_id: '', description: '', is_active: true });
+                setFormData({ permit_type_name: '', attribute_id: '', description: '', is_active: true, validity_date: '' });
                 setPermitTypeFees([]);
                 setShowModal(true);
               }}
@@ -325,6 +329,9 @@ export default function PermitTypesPage() {
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Description
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Validity
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Status
@@ -360,6 +367,15 @@ export default function PermitTypesPage() {
                       <div className="text-sm text-gray-500 max-w-xs truncate">
                         {permitType.description || '-'}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {permitType.validity_date ? (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full font-medium">
+                          {new Date(permitType.validity_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">Not set</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -486,6 +502,23 @@ export default function PermitTypesPage() {
                       }
                       aria-label="Permit type description"
                     />
+                  </div>
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Validity Date
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="date"
+                        className="w-48 bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                        value={formData.validity_date}
+                        onChange={(e) =>
+                          setFormData({ ...formData, validity_date: e.target.value })
+                        }
+                        aria-label="Permit validity date"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">All permits of this type will be valid until this date (e.g., December 31, 2025)</p>
                   </div>
                   <div className="mb-5">
                     <label className="flex items-center gap-2 cursor-pointer">

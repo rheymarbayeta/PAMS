@@ -102,10 +102,11 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   await connection.beginTransaction();
   
   try {
-    const { permit_type_name, attribute_id, description, is_active, fees } = req.body;
+    const { permit_type_name, attribute_id, description, is_active, validity_date, fees } = req.body;
 
     console.log('[PermitTypes] POST request received');
     console.log('[PermitTypes] permit_type_name:', permit_type_name);
+    console.log('[PermitTypes] validity_date:', validity_date);
     console.log('[PermitTypes] attribute_id:', attribute_id);
     console.log('[PermitTypes] attribute_id type:', typeof attribute_id);
     console.log('[PermitTypes] description:', description);
@@ -141,8 +142,8 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     console.log('[PermitTypes] Final validAttributeId:', validAttributeId);
 
     const [result] = await connection.execute(
-      'INSERT INTO Permit_Types (permit_type_id, permit_type_name, attribute_id, description, is_active) VALUES (?, ?, ?, ?, ?)',
-      [permit_type_id, permit_type_name, validAttributeId, description || null, is_active !== undefined ? is_active : true]
+      'INSERT INTO Permit_Types (permit_type_id, permit_type_name, attribute_id, description, is_active, validity_date) VALUES (?, ?, ?, ?, ?, ?)',
+      [permit_type_id, permit_type_name, validAttributeId, description || null, is_active !== undefined ? is_active : true, validity_date || null]
     );
 
     // Insert associated fees if provided
@@ -172,7 +173,8 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       permit_type_name,
       attribute_id: attribute_id || null,
       description,
-      is_active: is_active !== undefined ? is_active : true
+      is_active: is_active !== undefined ? is_active : true,
+      validity_date: validity_date || null
     });
   } catch (error) {
     await connection.rollback();
@@ -195,7 +197,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   await connection.beginTransaction();
   
   try {
-    const { permit_type_name, attribute_id, description, is_active, fees } = req.body;
+    const { permit_type_name, attribute_id, description, is_active, validity_date, fees } = req.body;
     const permitTypeId = req.params.id;
 
     if (!permit_type_name) {
@@ -205,8 +207,8 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     // Update permit type
     const [result] = await connection.execute(
-      'UPDATE Permit_Types SET permit_type_name = ?, attribute_id = ?, description = ?, is_active = ? WHERE permit_type_id = ?',
-      [permit_type_name, attribute_id || null, description || null, is_active !== undefined ? is_active : true, permitTypeId]
+      'UPDATE Permit_Types SET permit_type_name = ?, attribute_id = ?, description = ?, is_active = ?, validity_date = ? WHERE permit_type_id = ?',
+      [permit_type_name, attribute_id || null, description || null, is_active !== undefined ? is_active : true, validity_date || null, permitTypeId]
     );
 
     if (result.affectedRows === 0) {

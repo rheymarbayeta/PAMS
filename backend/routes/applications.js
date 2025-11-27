@@ -1366,9 +1366,13 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
   try {
     const applicationId = req.params.id;
 
-    // Check current status
+    // Check current status and get permit type info for validity
     const [apps] = await pool.execute(
-      'SELECT status, application_number FROM Applications WHERE application_id = ?',
+      `SELECT a.status, a.application_number, a.permit_type_id, a.permit_type,
+              pt.validity_date as permit_type_validity_date
+       FROM Applications a
+       LEFT JOIN Permit_Types pt ON a.permit_type_id = pt.permit_type_id
+       WHERE a.application_id = ?`,
       [applicationId]
     );
 
@@ -1380,21 +1384,32 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       return res.status(400).json({ error: 'Permit can only be issued for paid applications' });
     }
 
-    // Update status to Issued
+    // Get validity date from permit type (or null if not set)
+    const validityDate = apps[0].permit_type_validity_date || null;
+    const validityDateFormatted = validityDate ? new Date(validityDate).toISOString().split('T')[0] : null;
+    
+    // Update status to Issued with validity_date from permit type
     await pool.execute(
-      'UPDATE Applications SET status = ?, issued_by_user_id = ?, issued_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
-      ['Issued', req.user.user_id, applicationId]
+      `UPDATE Applications 
+       SET status = ?, 
+           issued_by_user_id = ?, 
+           issued_at = CURRENT_TIMESTAMP, 
+           validity_date = ?,
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE application_id = ?`,
+      ['Issued', req.user.user_id, validityDateFormatted, applicationId]
     );
 
     // Log action
+    const validityMsg = validityDateFormatted ? `Valid until ${validityDateFormatted}` : 'No validity date set';
     await logAction(
       req.user.user_id,
       'ISSUE_PERMIT',
-      `Issued permit for application ${apps[0].application_number || applicationId}`,
+      `Issued permit for application ${apps[0].application_number || applicationId} (${validityMsg})`,
       applicationId
     );
 
-    res.json({ message: 'Permit issued successfully' });
+    res.json({ message: 'Permit issued successfully', validity_date: validityDateFormatted });
   } catch (error) {
     console.error('Issue permit error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });

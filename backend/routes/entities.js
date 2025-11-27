@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get single entity
+// Get single entity with applications history
 router.get('/:id', async (req, res) => {
   try {
     const [entities] = await pool.execute(
@@ -44,7 +44,59 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Entity not found' });
     }
 
-    res.json(entities[0]);
+    // Get applications/permits for this entity
+    const [applications] = await pool.execute(
+      `SELECT 
+        a.application_id,
+        a.application_number,
+        a.permit_type,
+        a.status,
+        a.validity_date,
+        a.issued_at,
+        a.created_at,
+        a.updated_at,
+        pt.permit_type_name
+       FROM Applications a
+       LEFT JOIN Permit_Types pt ON a.permit_type_id = pt.permit_type_id
+       WHERE a.entity_id = ?
+       ORDER BY a.created_at DESC`,
+      [req.params.id]
+    );
+
+    // Determine permit status for each application
+    const applicationsWithStatus = applications.map(app => {
+      let permit_status = 'Pending';
+      
+      if (app.status === 'Issued' || app.status === 'Released') {
+        if (app.validity_date) {
+          const validityDate = new Date(app.validity_date);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (validityDate < today) {
+            permit_status = 'Expired';
+          } else {
+            permit_status = 'Active';
+          }
+        } else {
+          permit_status = 'Active';
+        }
+      } else if (['Draft', 'Submitted', 'Pending', 'Assessed', 'Approved', 'Paid'].includes(app.status)) {
+        permit_status = 'Pending Application';
+      } else if (app.status === 'Rejected' || app.status === 'Cancelled') {
+        permit_status = app.status;
+      }
+      
+      return {
+        ...app,
+        permit_status
+      };
+    });
+
+    res.json({
+      ...entities[0],
+      applications: applicationsWithStatus
+    });
   } catch (error) {
     console.error('Get entity error:', error);
     res.status(500).json({ error: 'Internal server error' });
