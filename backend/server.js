@@ -77,6 +77,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'PAMS API is running' });
 });
 
+// Track online users: Map<userId, Set<socketId>>
+const onlineUsers = new Map();
+
+// Make onlineUsers available to routes
+app.set('onlineUsers', onlineUsers);
+
 // Socket.io connection handling
 io.use((socket, next) => {
   // Simple authentication - in production, verify JWT token
@@ -97,10 +103,33 @@ io.on('connection', (socket) => {
   if (userId) {
     // Join user's personal room
     socket.join(`user_${userId}`);
+    
+    // Track user as online
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.set(userId, new Set());
+    }
+    onlineUsers.get(userId).add(socket.id);
+    console.log(`User ${userId} is now online (${onlineUsers.get(userId).size} connections)`);
+    
+    // Broadcast online users update to all connected clients
+    io.emit('online_users_updated', Array.from(onlineUsers.keys()));
   }
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
+    
+    if (userId && onlineUsers.has(userId)) {
+      onlineUsers.get(userId).delete(socket.id);
+      
+      // If no more connections for this user, remove them from online list
+      if (onlineUsers.get(userId).size === 0) {
+        onlineUsers.delete(userId);
+        console.log(`User ${userId} is now offline`);
+      }
+      
+      // Broadcast online users update to all connected clients
+      io.emit('online_users_updated', Array.from(onlineUsers.keys()));
+    }
   });
 });
 

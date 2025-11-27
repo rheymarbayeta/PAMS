@@ -9,6 +9,8 @@ interface User {
   full_name: string;
   role_id: number;
   role_name: string;
+  roles: string[]; // Multiple roles support
+  role_names: string[]; // Alias for roles
 }
 
 interface AuthContextType {
@@ -18,6 +20,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   loading: boolean;
+  hasRole: (role: string | string[]) => boolean; // Helper function to check roles
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -80,6 +83,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     window.location.href = '/login';
   };
 
+  // Helper function to check if user has any of the specified roles
+  const hasRole = (role: string | string[]): boolean => {
+    if (!user) return false;
+    const userRoles = user.roles || [user.role_name];
+    if (Array.isArray(role)) {
+      return role.some(r => userRoles.includes(r));
+    }
+    return userRoles.includes(role);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -89,6 +102,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         logout,
         isAuthenticated: !!user && !!token,
         loading,
+        hasRole,
       }}
     >
       {children}

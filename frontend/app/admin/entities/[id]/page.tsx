@@ -154,7 +154,7 @@ export default function EntityDetailPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+      <ProtectedRoute>
         <Layout>
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
             <div className="flex flex-col items-center justify-center py-20">
@@ -172,7 +172,7 @@ export default function EntityDetailPage() {
 
   if (!entity) {
     return (
-      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+      <ProtectedRoute>
         <Layout>
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
             <div className="text-center py-20">
@@ -188,7 +188,7 @@ export default function EntityDetailPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+    <ProtectedRoute>
       <Layout>
         <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
           {/* Back Button */}

@@ -8,6 +8,40 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Get online users for chat
+router.get('/online-users', async (req, res) => {
+  try {
+    const onlineUsers = req.app.get('onlineUsers');
+    const onlineUserIds = onlineUsers ? Array.from(onlineUsers.keys()) : [];
+    
+    if (onlineUserIds.length === 0) {
+      return res.json([]);
+    }
+    
+    // Filter out current user and get user details
+    const filteredIds = onlineUserIds.filter(id => id !== req.user.user_id);
+    
+    if (filteredIds.length === 0) {
+      return res.json([]);
+    }
+    
+    const placeholders = filteredIds.map(() => '?').join(',');
+    const [users] = await pool.execute(
+      `SELECT u.user_id, u.username, u.full_name, u.role_id, r.role_name
+       FROM Users u
+       INNER JOIN Roles r ON u.role_id = r.role_id
+       WHERE u.user_id IN (${placeholders})
+       ORDER BY u.full_name ASC`,
+      filteredIds
+    );
+
+    res.json(users);
+  } catch (error) {
+    console.error('Get online users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get all users for chat (no admin role required)
 // This must come BEFORE the '/' route to avoid conflicts
 router.get('/users', async (req, res) => {
@@ -156,19 +190,11 @@ router.post('/', async (req, res) => {
       // Don't fail the message send if notification fails
     }
 
-    // Emit via Socket.io if available
+    // Emit via Socket.io if available (for real-time chat updates)
     const io = req.app.get('io');
     if (io) {
       io.to(`user_${recipient_id}`).emit('new_message', message);
-      // Also emit a notification event
-      io.to(`user_${recipient_id}`).emit('notification', {
-        notification_id: null,
-        user_id: recipient_id,
-        message: `New message from ${senderName}`,
-        link: `/chat?user_id=${req.user.user_id}`,
-        is_read: false,
-        created_at: new Date().toISOString()
-      });
+      // Note: notification is already emitted by createNotification above
     }
 
     res.status(201).json(message);

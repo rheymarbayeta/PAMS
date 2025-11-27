@@ -25,7 +25,7 @@ interface PermitTypeOption {
 }
 
 export default function NewApplicationPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const router = useRouter();
   const [entities, setEntities] = useState<Entity[]>([]);
   const [filteredEntities, setFilteredEntities] = useState<Entity[]>([]);
@@ -195,7 +195,7 @@ export default function NewApplicationPage() {
     }
   };
 
-  const canCreate = user && ['SuperAdmin', 'Admin', 'Application Creator'].includes(user.role_name);
+  const canCreate = user && hasRole(['SuperAdmin', 'Admin', 'Application Creator']);
   const selectedPermitType = permitTypes.find(
     (pt) => pt.permit_type_name === formData.permit_type
   );

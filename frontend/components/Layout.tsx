@@ -6,13 +6,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import NotificationBell from './NotificationBell';
+import ChatNotification from './ChatNotification';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const pathname = usePathname();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -20,8 +21,15 @@ export default function Layout({ children }: LayoutProps) {
   const isActive = (path: string) => pathname === path;
 
   const canAccess = (roles: string[]) => {
-    return user && roles.includes(user.role_name);
+    if (!user) return false;
+    // Use the hasRole function which checks the roles array
+    return hasRole(roles);
   };
+
+  // Get display roles - either roles array or single role_name
+  const displayRoles = user?.roles && user.roles.length > 0 
+    ? user.roles.join(', ') 
+    : user?.role_name || '';
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -42,6 +50,9 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Global Chat Notification */}
+      <ChatNotification />
+      
       <nav className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -91,18 +102,16 @@ export default function Layout({ children }: LayoutProps) {
                 >
                   Applications
                 </Link>
-                {canAccess(['SuperAdmin', 'Admin']) && (
-                  <Link
-                    href="/admin/entities"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                      isActive('/admin/entities')
-                        ? 'border-teal-600 text-slate-900'
-                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    Entities
-                  </Link>
-                )}
+                <Link
+                  href="/admin/entities"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    isActive('/admin/entities')
+                      ? 'border-teal-600 text-slate-900'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  Entities
+                </Link>
                 {canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && (
                   <Link
                     href="/chat"
@@ -124,7 +133,7 @@ export default function Layout({ children }: LayoutProps) {
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="flex items-center space-x-2 text-sm text-slate-600 hover:text-slate-900 focus:outline-none"
                 >
-                  <span>{user?.full_name} ({user?.role_name})</span>
+                  <span>{user?.full_name} ({displayRoles})</span>
                   <svg
                     className={`w-4 h-4 transition-transform ${showUserMenu ? 'transform rotate-180' : ''}`}
                     fill="none"

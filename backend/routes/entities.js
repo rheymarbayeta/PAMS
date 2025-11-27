@@ -103,8 +103,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create entity (Admin only)
-router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+// Create entity (all roles except Viewer)
+router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator'), async (req, res) => {
   try {
     const { entity_name, contact_person, email, phone, address } = req.body;
 
@@ -135,8 +135,8 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   }
 });
 
-// Update entity (Admin only)
-router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+// Update entity (all roles except Viewer)
+router.put('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator'), async (req, res) => {
   try {
     const { entity_name, contact_person, email, phone, address } = req.body;
     const entityId = req.params.id;
@@ -163,8 +163,8 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   }
 });
 
-// Delete entity (Admin only)
-router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+// Delete entity (all roles except Viewer)
+router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator'), async (req, res) => {
   try {
     const entityId = req.params.id;
 

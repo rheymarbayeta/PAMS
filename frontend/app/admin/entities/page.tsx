@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Entity {
   entity_id: number;
@@ -16,6 +17,7 @@ interface Entity {
 }
 
 export default function EntitiesPage() {
+  const { user, hasRole } = useAuth();
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -82,9 +84,14 @@ export default function EntitiesPage() {
     }
   };
 
+  // Check if user can edit entities (all roles except Viewer)
+  // If user has only Viewer role, they cannot edit. If they have Viewer + other roles, they can edit.
+  const userRoles = user?.roles || [user?.role_name];
+  const canEdit = userRoles.some(role => role && role !== 'Viewer');
+
   if (loading) {
     return (
-      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+      <ProtectedRoute>
         <Layout>
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
             <div className="flex flex-col items-center justify-center py-20">
@@ -101,7 +108,7 @@ export default function EntitiesPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+    <ProtectedRoute>
       <Layout>
         <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
           {/* Page Header */}
@@ -119,19 +126,21 @@ export default function EntitiesPage() {
                 <p className="text-sm text-gray-500">{entities.length} entities registered</p>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setEditingEntity(null);
-                setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
-                setShowModal(true);
-              }}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 focus:ring-4 focus:ring-emerald-200 transition-all duration-200 shadow-lg shadow-emerald-200"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Entity
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => {
+                  setEditingEntity(null);
+                  setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
+                  setShowModal(true);
+                }}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 focus:ring-4 focus:ring-emerald-200 transition-all duration-200 shadow-lg shadow-emerald-200"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add Entity
+              </button>
+            )}
           </div>
 
           {/* Entities List */}
@@ -194,24 +203,28 @@ export default function EntitiesPage() {
                         </svg>
                         View
                       </Link>
-                      <button
-                        onClick={() => handleEdit(entity)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-lg border border-emerald-200 hover:border-emerald-600 transition-all duration-200"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(entity.entity_id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-lg border border-red-200 hover:border-red-600 transition-all duration-200"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Delete
-                      </button>
+                      {canEdit && (
+                        <>
+                          <button
+                            onClick={() => handleEdit(entity)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-lg border border-emerald-200 hover:border-emerald-600 transition-all duration-200"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entity.entity_id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-lg border border-red-200 hover:border-red-600 transition-all duration-200"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </li>

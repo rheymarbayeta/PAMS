@@ -44,11 +44,23 @@ router.post('/login', async (req, res) => {
 
     console.log('[LOGIN] Password valid, generating token...');
 
-    // Get role name
-    const [roles] = await pool.execute(
-      'SELECT role_name FROM Roles WHERE role_id = ?',
-      [user.role_id]
+    // Get all roles for the user from the junction table
+    let [userRoles] = await pool.execute(
+      `SELECT r.role_id, r.role_name 
+       FROM User_Roles ur 
+       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       WHERE ur.user_id = ?`,
+      [user.user_id]
     );
+    
+    // Fallback to single role if no roles in junction table
+    if (userRoles.length === 0) {
+      const [roles] = await pool.execute(
+        'SELECT role_id, role_name FROM Roles WHERE role_id = ?',
+        [user.role_id]
+      );
+      userRoles = roles;
+    }
 
     const token = jwt.sign(
       { userId: user.user_id, username: user.username, roleId: user.role_id },
@@ -60,6 +72,10 @@ router.post('/login', async (req, res) => {
 
     console.log('[LOGIN] Login successful for user:', username);
 
+    // Return all roles
+    const roles = userRoles.map(r => r.role_name);
+    const role_ids = userRoles.map(r => r.role_id);
+
     res.json({
       token,
       user: {
@@ -67,7 +83,9 @@ router.post('/login', async (req, res) => {
         username: user.username,
         full_name: user.full_name,
         role_id: user.role_id,
-        role_name: roles[0]?.role_name
+        role_name: roles[0] || null,  // Primary role for backward compatibility
+        roles: roles,                  // All roles
+        role_ids: role_ids             // All role IDs
       }
     });
   } catch (error) {
@@ -80,17 +98,35 @@ router.post('/login', async (req, res) => {
 // Get current user
 router.get('/me', authenticate, async (req, res) => {
   try {
-    const [roles] = await pool.execute(
-      'SELECT role_name FROM Roles WHERE role_id = ?',
-      [req.user.role_id]
+    // Get all roles for the user from the junction table
+    let [userRoles] = await pool.execute(
+      `SELECT r.role_id, r.role_name 
+       FROM User_Roles ur 
+       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       WHERE ur.user_id = ?`,
+      [req.user.user_id]
     );
+    
+    // Fallback to single role if no roles in junction table
+    if (userRoles.length === 0) {
+      const [roles] = await pool.execute(
+        'SELECT role_id, role_name FROM Roles WHERE role_id = ?',
+        [req.user.role_id]
+      );
+      userRoles = roles;
+    }
+
+    const roles = userRoles.map(r => r.role_name);
+    const role_ids = userRoles.map(r => r.role_id);
 
     res.json({
       user_id: req.user.user_id,
       username: req.user.username,
       full_name: req.user.full_name,
       role_id: req.user.role_id,
-      role_name: roles[0]?.role_name
+      role_name: roles[0] || null,
+      roles: roles,
+      role_ids: role_ids
     });
   } catch (error) {
     console.error('Get me error:', error);

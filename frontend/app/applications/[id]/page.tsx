@@ -50,7 +50,7 @@ interface ApplicationDetail {
 export default function ApplicationDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showReleaseModal, setShowReleaseModal] = useState(false);
@@ -102,16 +102,16 @@ export default function ApplicationDetailPage() {
     }
   };
 
-  const canAssess = user && ['SuperAdmin', 'Admin', 'Assessor'].includes(user.role_name);
-  const canApprove = user && ['SuperAdmin', 'Admin', 'Approver'].includes(user.role_name);
-  const canIssue = user && ['SuperAdmin', 'Admin', 'Approver'].includes(user.role_name) && application?.status === 'Paid';
-  const canRelease = user && ['SuperAdmin', 'Admin', 'Approver'].includes(user.role_name) && application?.status === 'Issued';
+  const canAssess = user && hasRole(['SuperAdmin', 'Admin', 'Assessor']);
+  const canApprove = user && hasRole(['SuperAdmin', 'Admin', 'Approver']);
+  const canIssue = user && hasRole(['SuperAdmin', 'Admin', 'Approver']) && application?.status === 'Paid';
+  const canRelease = user && hasRole(['SuperAdmin', 'Admin', 'Approver']) && application?.status === 'Issued';
   const canPrintPermit = application?.status === 'Paid' || application?.status === 'Issued' || application?.status === 'Released';
-  const canRenew = user && ['SuperAdmin', 'Admin', 'Application Creator'].includes(user.role_name) && 
+  const canRenew = user && hasRole(['SuperAdmin', 'Admin', 'Application Creator']) && 
     (application?.status === 'Issued' || application?.status === 'Released');
   const canDelete =
     user &&
-    ['SuperAdmin', 'Admin'].includes(user.role_name) &&
+    hasRole(['SuperAdmin', 'Admin']) &&
     application?.status === 'Pending';
 
   const handleIssuePermit = async () => {
@@ -302,7 +302,7 @@ export default function ApplicationDetailPage() {
                       Record Payment
                     </button>
                   )}
-                  {application.status === 'Paid' && (
+                  {canIssue && (
                     <button
                       onClick={handleIssuePermit}
                       disabled={issuing}
@@ -314,7 +314,7 @@ export default function ApplicationDetailPage() {
                       {issuing ? 'Issuing...' : 'Issue Permit'}
                     </button>
                   )}
-                  {application.status === 'Issued' && (
+                  {canRelease && (
                     <button
                       onClick={() => setShowReleaseModal(true)}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"

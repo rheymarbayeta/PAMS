@@ -21,7 +21,7 @@ interface Application {
 
 export default function ApplicationsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
@@ -200,7 +200,7 @@ export default function ApplicationsPage() {
                         </div>
                       </div>
                       <div className="ml-4 flex items-center gap-3">
-                        {user?.role_name === 'SuperAdmin' && (
+                        {hasRole('SuperAdmin') && (
                           <button
                             onClick={(e) => handleDeleteApplication(e, app.application_id)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200"

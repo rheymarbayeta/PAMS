@@ -11,7 +11,7 @@ const router = express.Router();
 router.use(authenticate);
 router.use(authorize('SuperAdmin', 'Admin'));
 
-// Get all users
+// Get all users with their roles
 router.get('/', async (req, res) => {
   try {
     const [users] = await pool.execute(
@@ -21,6 +21,26 @@ router.get('/', async (req, res) => {
        ORDER BY u.created_at DESC`
     );
 
+    // Get all roles for each user
+    for (const user of users) {
+      const [userRoles] = await pool.execute(
+        `SELECT r.role_id, r.role_name 
+         FROM User_Roles ur 
+         INNER JOIN Roles r ON ur.role_id = r.role_id 
+         WHERE ur.user_id = ?`,
+        [user.user_id]
+      );
+      
+      if (userRoles.length > 0) {
+        user.roles = userRoles.map(r => r.role_name);
+        user.role_ids = userRoles.map(r => r.role_id);
+      } else {
+        // Fallback to single role
+        user.roles = [user.role_name];
+        user.role_ids = [user.role_id];
+      }
+    }
+
     res.json(users);
   } catch (error) {
     console.error('Get users error:', error);
@@ -28,7 +48,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get single user
+// Get single user with roles
 router.get('/:id', async (req, res) => {
   try {
     const [users] = await pool.execute(
@@ -43,20 +63,42 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(users[0]);
+    const user = users[0];
+    
+    // Get all roles for the user
+    const [userRoles] = await pool.execute(
+      `SELECT r.role_id, r.role_name 
+       FROM User_Roles ur 
+       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       WHERE ur.user_id = ?`,
+      [user.user_id]
+    );
+    
+    if (userRoles.length > 0) {
+      user.roles = userRoles.map(r => r.role_name);
+      user.role_ids = userRoles.map(r => r.role_id);
+    } else {
+      user.roles = [user.role_name];
+      user.role_ids = [user.role_id];
+    }
+
+    res.json(user);
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Create user
+// Create user with multiple roles
 router.post('/', async (req, res) => {
   try {
-    const { username, password, full_name, role_id } = req.body;
+    const { username, password, full_name, role_id, role_ids } = req.body;
 
-    if (!username || !password || !full_name || !role_id) {
-      return res.status(400).json({ error: 'All fields are required' });
+    // Support both single role_id and multiple role_ids
+    const roleIdsToAssign = role_ids && role_ids.length > 0 ? role_ids : (role_id ? [role_id] : []);
+
+    if (!username || !password || !full_name || roleIdsToAssign.length === 0) {
+      return res.status(400).json({ error: 'Username, password, full name, and at least one role are required' });
     }
 
     // Check if username exists
@@ -71,19 +113,40 @@ router.post('/', async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, 10);
     const user_id = generateId(ID_PREFIXES.USER);
+    
+    // Use the first role as the primary role
+    const primaryRoleId = roleIdsToAssign[0];
 
-    const [result] = await pool.execute(
+    // Create user with primary role
+    await pool.execute(
       'INSERT INTO Users (user_id, username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?, ?)',
-      [user_id, username, password_hash, full_name, role_id]
+      [user_id, username, password_hash, full_name, primaryRoleId]
     );
 
-    await logAction(req.user.user_id, 'CREATE_USER', `Created user '${username}'`);
+    // Add all roles to the junction table
+    for (const roleId of roleIdsToAssign) {
+      const userRoleId = generateId('UR');
+      await pool.execute(
+        'INSERT INTO User_Roles (user_role_id, user_id, role_id) VALUES (?, ?, ?)',
+        [userRoleId, user_id, roleId]
+      );
+    }
+
+    await logAction(req.user.user_id, 'CREATE_USER', `Created user '${username}' with ${roleIdsToAssign.length} role(s)`);
+
+    // Get role names for response
+    const [roles] = await pool.execute(
+      `SELECT role_id, role_name FROM Roles WHERE role_id IN (${roleIdsToAssign.map(() => '?').join(',')})`,
+      roleIdsToAssign
+    );
 
     res.status(201).json({
       user_id,
       username,
       full_name,
-      role_id
+      role_id: primaryRoleId,
+      role_ids: roleIdsToAssign,
+      roles: roles.map(r => r.role_name)
     });
   } catch (error) {
     console.error('Create user error:', error);
@@ -91,10 +154,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update user
+// Update user with multiple roles
 router.put('/:id', async (req, res) => {
   try {
-    const { username, password, full_name, role_id } = req.body;
+    const { username, password, full_name, role_id, role_ids } = req.body;
     const userId = req.params.id;
 
     // Check if user exists
@@ -128,9 +191,25 @@ router.put('/:id', async (req, res) => {
       values.push(full_name);
     }
 
-    if (role_id) {
+    // Handle multiple roles
+    const roleIdsToAssign = role_ids && role_ids.length > 0 ? role_ids : (role_id ? [role_id] : null);
+    
+    if (roleIdsToAssign) {
+      // Update primary role in Users table
       updates.push('role_id = ?');
-      values.push(role_id);
+      values.push(roleIdsToAssign[0]);
+      
+      // Delete existing roles from junction table
+      await pool.execute('DELETE FROM User_Roles WHERE user_id = ?', [userId]);
+      
+      // Add new roles to junction table
+      for (const rId of roleIdsToAssign) {
+        const userRoleId = generateId('UR');
+        await pool.execute(
+          'INSERT INTO User_Roles (user_role_id, user_id, role_id) VALUES (?, ?, ?)',
+          [userRoleId, userId, rId]
+        );
+      }
     }
 
     if (password) {
@@ -139,16 +218,13 @@ router.put('/:id', async (req, res) => {
       values.push(password_hash);
     }
 
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
+    if (updates.length > 0) {
+      values.push(userId);
+      await pool.execute(
+        `UPDATE Users SET ${updates.join(', ')} WHERE user_id = ?`,
+        values
+      );
     }
-
-    values.push(userId);
-
-    await pool.execute(
-      `UPDATE Users SET ${updates.join(', ')} WHERE user_id = ?`,
-      values
-    );
 
     await logAction(req.user.user_id, 'UPDATE_USER', `Updated user ID ${userId}`);
 

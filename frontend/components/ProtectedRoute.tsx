@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, hasRole } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -20,11 +20,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
         return;
       }
 
-      if (allowedRoles && user && !allowedRoles.includes(user.role_name)) {
+      // Check if user has any of the allowed roles
+      if (allowedRoles && user && !hasRole(allowedRoles)) {
         router.push('/dashboard');
       }
     }
-  }, [isAuthenticated, loading, user, allowedRoles, router]);
+  }, [isAuthenticated, loading, user, allowedRoles, router, hasRole]);
 
   if (loading) {
     return (
@@ -38,7 +39,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     return null;
   }
 
-  if (allowedRoles && user && !allowedRoles.includes(user.role_name)) {
+  // Check if user has any of the allowed roles
+  if (allowedRoles && user && !hasRole(allowedRoles)) {
     return null;
   }
 

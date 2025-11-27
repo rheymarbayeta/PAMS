@@ -52,7 +52,7 @@ type NoticeType = 'info' | 'success' | 'warning' | 'error';
 export default function AssessApplicationPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
 
   // Format currency with Philippine Peso symbol
   const formatCurrency = (amount: number): string => {
@@ -288,7 +288,7 @@ export default function AssessApplicationPage() {
     }
   };
 
-  const canAssess = user && ['SuperAdmin', 'Admin', 'Assessor'].includes(user.role_name);
+  const canAssess = user && hasRole(['SuperAdmin', 'Admin', 'Assessor']);
 
   const getNoticeClasses = (type: NoticeType) => {
     switch (type) {

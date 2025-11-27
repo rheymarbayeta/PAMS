@@ -11,6 +11,8 @@ interface User {
   full_name: string;
   role_id: number;
   role_name: string;
+  roles?: string[];
+  role_ids?: number[];
 }
 
 interface Role {
@@ -28,7 +30,7 @@ export default function UsersPage() {
     username: '',
     password: '',
     full_name: '',
-    role_id: '',
+    role_ids: [] as number[],
   });
 
   useEffect(() => {
@@ -59,6 +61,10 @@ export default function UsersPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (formData.role_ids.length === 0) {
+        alert('Please select at least one role');
+        return;
+      }
       if (editingUser) {
         await api.put(`/api/users/${editingUser.user_id}`, formData);
       } else {
@@ -66,7 +72,7 @@ export default function UsersPage() {
       }
       setShowModal(false);
       setEditingUser(null);
-      setFormData({ username: '', password: '', full_name: '', role_id: '' });
+      setFormData({ username: '', password: '', full_name: '', role_ids: [] });
       fetchUsers();
     } catch (error: any) {
       alert(error.response?.data?.error || 'Error saving user');
@@ -79,7 +85,7 @@ export default function UsersPage() {
       username: user.username,
       password: '',
       full_name: user.full_name,
-      role_id: user.role_id.toString(),
+      role_ids: user.role_ids || [user.role_id],
     });
     setShowModal(true);
   };
@@ -137,7 +143,7 @@ export default function UsersPage() {
             <button
               onClick={() => {
                 setEditingUser(null);
-                setFormData({ username: '', password: '', full_name: '', role_id: '' });
+                setFormData({ username: '', password: '', full_name: '', role_ids: [] });
                 setShowModal(true);
               }}
               className="inline-flex items-center gap-2 bg-slate-800 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-slate-700 focus:ring-4 focus:ring-slate-300 transition-all duration-200"
@@ -165,12 +171,14 @@ export default function UsersPage() {
                         <div className="text-sm font-semibold text-slate-800">
                           {user.full_name}
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className="text-sm text-slate-500">@{user.username}</span>
                           <span className="text-slate-300">•</span>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                            {user.role_name}
-                          </span>
+                          {(user.roles && user.roles.length > 0 ? user.roles : [user.role_name]).map((role, idx) => (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                              {role}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -263,24 +271,30 @@ export default function UsersPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Role
+                        Roles
                       </label>
-                      <select
-                        required
-                        title="Select user role"
-                        className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-slate-900 bg-slate-50 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none cursor-pointer"
-                        value={formData.role_id}
-                        onChange={(e) =>
-                          setFormData({ ...formData, role_id: e.target.value })
-                        }
-                      >
-                        <option value="">Select a role</option>
+                      <div className="space-y-2 border border-slate-200 rounded-lg p-3 bg-slate-50 max-h-48 overflow-y-auto">
                         {roles.map((role) => (
-                          <option key={role.role_id} value={role.role_id}>
-                            {role.role_name}
-                          </option>
+                          <label key={role.role_id} className="flex items-center gap-3 cursor-pointer hover:bg-white p-2 rounded-md transition-colors">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 text-teal-600 border-slate-300 rounded focus:ring-teal-500 cursor-pointer"
+                              checked={formData.role_ids.includes(role.role_id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({ ...formData, role_ids: [...formData.role_ids, role.role_id] });
+                                } else {
+                                  setFormData({ ...formData, role_ids: formData.role_ids.filter(id => id !== role.role_id) });
+                                }
+                              }}
+                            />
+                            <span className="text-sm text-slate-700">{role.role_name}</span>
+                          </label>
                         ))}
-                      </select>
+                      </div>
+                      {formData.role_ids.length === 0 && (
+                        <p className="mt-1 text-xs text-red-500">Please select at least one role</p>
+                      )}
                     </div>
                     <div className="flex justify-end gap-3 pt-4">
                       <button

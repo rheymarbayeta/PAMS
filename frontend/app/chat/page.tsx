@@ -32,35 +32,61 @@ export default function ChatPage() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(
     searchParams.get('user_id') ? parseInt(searchParams.get('user_id')!) : null
   );
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Update selectedUserId when URL changes (e.g., from notification click)
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const userIdParam = searchParams.get('user_id');
+    if (userIdParam) {
+      const parsedId = parseInt(userIdParam);
+      if (parsedId !== selectedUserId) {
+        setSelectedUserId(parsedId);
+      }
+    }
+  }, [searchParams]);
 
   useEffect(() => {
+    fetchOnlineUsers();
+  }, []);
+
+  // Fetch selected user info and messages when selectedUserId changes
+  useEffect(() => {
     if (selectedUserId) {
+      fetchSelectedUserInfo();
       fetchMessages();
+    } else {
+      setSelectedUser(null);
+      setMessages([]);
     }
   }, [selectedUserId]);
 
   useEffect(() => {
-    if (socket && selectedUserId) {
+    if (socket) {
+      // Listen for new messages - just update the chat view
+      // (notification popup is handled by ChatNotification component in Layout)
       socket.on('new_message', (message: Message) => {
+        // Add to messages if this is part of the current conversation
         if (
           (message.sender_id === selectedUserId && message.recipient_id === user?.user_id) ||
-          (message.recipient_id === selectedUserId && message.sender_id === user?.user_id)
+          (message.sender_id === user?.user_id && message.recipient_id === selectedUserId)
         ) {
           setMessages((prev) => [...prev, message]);
           scrollToBottom();
         }
       });
 
+      // Listen for online users updates
+      socket.on('online_users_updated', () => {
+        fetchOnlineUsers();
+      });
+
       return () => {
         socket.off('new_message');
+        socket.off('online_users_updated');
       };
     }
   }, [socket, selectedUserId, user]);
@@ -69,46 +95,41 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-  const fetchUsers = async () => {
+  const fetchOnlineUsers = async () => {
     try {
-      // Get all users first (this should always work)
-      const allUsersResponse = await api.get('/api/messages/users');
-      const allUsers = allUsersResponse.data || [];
-      
-      // Try to get conversations (optional - if it fails, just show all users)
-      let conversationUsers: any[] = [];
-      try {
-        const conversationsResponse = await api.get('/api/messages/conversations');
-        conversationUsers = conversationsResponse.data || [];
-      } catch (conversationError) {
-        console.log('No conversations yet or endpoint not available:', conversationError);
-        // This is fine - just show all users
-      }
-
-      // Combine: users with conversations first, then other users
-      const conversationUserIds = new Set(conversationUsers.map((u: any) => u.user_id));
-      const otherUsers = allUsers.filter((u: User) => 
-        u.user_id !== user?.user_id && !conversationUserIds.has(u.user_id)
-      );
-
-      // Map conversation users to match User interface
-      const mappedConversationUsers = conversationUsers.map((c: any) => ({
-        user_id: c.user_id,
-        full_name: c.full_name,
-        role_name: c.role_name
-      }));
-
-      // If we have conversation users, show them first, otherwise just show all users
-      if (mappedConversationUsers.length > 0) {
-        setUsers([...mappedConversationUsers, ...otherUsers]);
-      } else {
-        setUsers(allUsers.filter((u: User) => u.user_id !== user?.user_id));
-      }
+      // Get only online users
+      const response = await api.get('/api/messages/online-users');
+      const onlineUsers = response.data || [];
+      setUsers(onlineUsers);
+      // Don't clear selection - user may have come from notification
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error fetching online users:', error);
       setUsers([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSelectedUserInfo = async () => {
+    if (!selectedUserId) return;
+    
+    try {
+      // First check if user is in online list
+      const onlineUser = users.find((u) => u.user_id === selectedUserId);
+      if (onlineUser) {
+        setSelectedUser(onlineUser);
+        return;
+      }
+      
+      // If not online, fetch user info from all users endpoint
+      const response = await api.get('/api/messages/users');
+      const allUsers = response.data || [];
+      const foundUser = allUsers.find((u: User) => u.user_id === selectedUserId);
+      if (foundUser) {
+        setSelectedUser(foundUser);
+      }
+    } catch (error) {
+      console.error('Error fetching selected user info:', error);
     }
   };
 
@@ -142,8 +163,6 @@ export default function ChatPage() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-
-  const selectedUser = users.find((u) => u.user_id === selectedUserId);
 
   if (loading) {
     return (
@@ -188,7 +207,7 @@ export default function ChatPage() {
                   <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                   </svg>
-                  Team Members
+                  Online ({users.length})
                 </h2>
               </div>
               <div className="flex-1 overflow-y-auto p-3">
@@ -196,7 +215,10 @@ export default function ChatPage() {
                   {users.map((u) => (
                     <li
                       key={u.user_id}
-                      onClick={() => setSelectedUserId(u.user_id)}
+                      onClick={() => {
+                        setSelectedUserId(u.user_id);
+                        setSelectedUser(u);
+                      }}
                       className={`p-3 rounded-xl cursor-pointer transition-all duration-200 ${
                         selectedUserId === u.user_id 
                           ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30 scale-[1.02]' 
@@ -325,8 +347,12 @@ export default function ChatPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
                     </svg>
                   </div>
-                  <p className="text-lg font-medium text-gray-500">Select a user to start chatting</p>
-                  <p className="text-sm text-gray-400 mt-1">Choose from the list on the left</p>
+                  <p className="text-lg font-medium text-gray-500">
+                    {users.length === 0 ? 'No team members online' : 'Select a user to start chatting'}
+                  </p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {users.length === 0 ? 'Wait for others to come online' : 'Choose from the list on the left'}
+                  </p>
                 </div>
               )}
             </div>

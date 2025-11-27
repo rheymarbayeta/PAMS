@@ -28,7 +28,32 @@ const authenticate = async (req, res, next) => {
     }
 
     req.user = users[0];
-    console.log('[Auth] Authentication successful for user:', req.user.username);
+    
+    // Get all roles for the user
+    const [userRoles] = await pool.execute(
+      `SELECT r.role_id, r.role_name 
+       FROM User_Roles ur 
+       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       WHERE ur.user_id = ?`,
+      [decoded.userId]
+    );
+    
+    // If user has roles in the junction table, use those
+    // Otherwise fall back to the single role_id for backward compatibility
+    if (userRoles.length > 0) {
+      req.user.roles = userRoles.map(r => r.role_name);
+      req.user.role_ids = userRoles.map(r => r.role_id);
+    } else {
+      // Fallback to single role
+      const [roles] = await pool.execute(
+        'SELECT role_name FROM Roles WHERE role_id = ?',
+        [req.user.role_id]
+      );
+      req.user.roles = roles.length > 0 ? [roles[0].role_name] : [];
+      req.user.role_ids = [req.user.role_id];
+    }
+    
+    console.log('[Auth] Authentication successful for user:', req.user.username, 'roles:', req.user.roles);
     next();
   } catch (error) {
     console.error('[Auth] Authentication error:', error.name, error.message);
@@ -48,22 +73,19 @@ const authorize = (...allowedRoles) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // Get role name
-    const [roles] = await pool.execute(
-      'SELECT role_name FROM Roles WHERE role_id = ?',
-      [req.user.role_id]
-    );
-
-    if (roles.length === 0) {
-      console.log('[Auth] Role not found for user');
-      return res.status(403).json({ error: 'Role not found' });
-    }
-
-    const userRole = roles[0].role_name;
-    console.log('[Auth] User role:', userRole);
+    const userRoles = req.user.roles || [];
+    console.log('[Auth] User roles:', userRoles);
 
     // SuperAdmin has access to everything
-    if (userRole === 'SuperAdmin' || allowedRoles.includes(userRole)) {
+    if (userRoles.includes('SuperAdmin')) {
+      console.log('[Auth] Authorization granted (SuperAdmin)');
+      return next();
+    }
+
+    // Check if user has any of the allowed roles
+    const hasAllowedRole = userRoles.some(role => allowedRoles.includes(role));
+    
+    if (hasAllowedRole) {
       console.log('[Auth] Authorization granted');
       return next();
     }

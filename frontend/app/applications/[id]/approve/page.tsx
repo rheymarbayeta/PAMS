@@ -25,7 +25,7 @@ interface Application {
 export default function ApproveApplicationPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [application, setApplication] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -102,7 +102,7 @@ export default function ApproveApplicationPage() {
     }
   };
 
-  const canApprove = user && ['SuperAdmin', 'Admin', 'Approver'].includes(user.role_name);
+  const canApprove = user && hasRole(['SuperAdmin', 'Admin', 'Approver']);
 
   if (!canApprove) {
     return (
