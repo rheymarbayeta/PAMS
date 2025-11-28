@@ -493,14 +493,14 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
               <td style="width: 50%; vertical-align: top; padding: 0; padding-left: 10px;">
                 <table style="width: 100%; border-collapse: collapse;">
                   <tr>
-                    <td style="width: 60%; text-align: right; padding: 2px; padding-right: 8px;"><strong style="font-size: 13px;">TOTAL AMOUNT DUE:</strong></td>
-                    <td style="width: 40%; text-align: right; padding: 2px; font-weight: bold; font-size: 14px;">
+                    <td style="width: 60%; text-align: right; padding: 4px 8px 4px 0;"><strong style="font-size: 13px;">TOTAL AMOUNT DUE:</strong></td>
+                    <td style="width: 40%; text-align: right; padding: 4px 0; font-weight: bold; font-size: 14px;">
                       ${formatCurrency(data.total_amount_due || 0)}
                     </td>
                   </tr>
                   <tr>
-                    <td style="width: 60%; text-align: right; padding: 2px; padding-right: 8px;"><strong>BILL IS VALID UNTIL:</strong></td>
-                    <td style="width: 40%; text-align: right; padding: 2px; font-weight: bold;">
+                    <td style="width: 60%; text-align: right; padding: 4px 8px 4px 0;"><strong>BILL IS VALID UNTIL:</strong></td>
+                    <td style="width: 40%; text-align: right; padding: 4px 0; font-weight: bold;">
                       ${validityDateFormatted}
                     </td>
                   </tr>
