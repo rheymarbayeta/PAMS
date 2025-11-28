@@ -44,7 +44,7 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
-      - "5000:5000"
+      - "5040:5000"
     volumes:
       - backend_uploads:/app/uploads
       - ./backend/assets:/app/assets:ro
