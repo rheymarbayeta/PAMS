@@ -569,13 +569,10 @@ function printReport() {
 }
 
 function downloadPDF() {
-  if (!authToken) {
-    alert('Please login to download the PDF.');
-    return;
-  }
-  
-  const pdfUrl = `${apiBaseUrl}/api/applications/${applicationId}/assessment?token=${encodeURIComponent(authToken)}`;
-  window.open(pdfUrl, '_blank');
+  // Use browser's print dialog to save as PDF
+  // This ensures the PDF looks exactly like the HTML version
+  alert('To save as PDF, use the Print dialog and select "Save as PDF" as the destination.');
+  window.print();
 }
 </script>
 </body>
