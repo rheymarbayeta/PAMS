@@ -43,10 +43,7 @@ export default function NewApplicationPage() {
     province: '',
     country: '',
     barangay: '',
-    parameters: [
-      { param_name: 'Business_Type', param_value: '' },
-      { param_name: 'Description', param_value: '' },
-    ],
+    parameters: [] as { param_name: string; param_value: string }[],
   });
 
   useEffect(() => {
