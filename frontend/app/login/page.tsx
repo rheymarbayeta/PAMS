@@ -136,11 +136,7 @@ export default function LoginPage() {
           </form>
 
           {/* Footer */}
-          <div className="text-center pt-4 border-t border-slate-100">
-            <p className="text-xs text-slate-400">
-              Default credentials: <span className="font-medium text-slate-500">admin / admin123</span>
-            </p>
-          </div>
+
         </div>
       </div>
     </div>
