@@ -21,7 +21,7 @@ router.post('/login', async (req, res) => {
     }
 
     const [users] = await pool.execute(
-      'SELECT user_id, username, password_hash, full_name, role_id FROM Users WHERE username = ?',
+      'SELECT user_id, username, password_hash, full_name, role_id FROM users WHERE username = ?',
       [username]
     );
 
@@ -145,7 +145,7 @@ router.post('/register', authenticate, authorize('SuperAdmin', 'Admin'), async (
 
     // Check if username exists
     const [existing] = await pool.execute(
-      'SELECT user_id FROM Users WHERE username = ?',
+      'SELECT user_id FROM users WHERE username = ?',
       [username]
     );
 
@@ -159,7 +159,7 @@ router.post('/register', authenticate, authorize('SuperAdmin', 'Admin'), async (
 
     // Create user
     const [result] = await pool.execute(
-      'INSERT INTO Users (user_id, username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO users (user_id, username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?, ?)',
       [user_id, username, password_hash, full_name, role_id]
     );
 
