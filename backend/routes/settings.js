@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/', authenticate, async (req, res) => {
   try {
     const [settings] = await pool.execute(
-      'SELECT setting_key, setting_value, description FROM System_Settings ORDER BY setting_key'
+      'SELECT setting_key, setting_value, description FROM system_settings ORDER BY setting_key'
     );
 
     // Convert to key-value object
@@ -50,7 +50,7 @@ router.put('/:key', authenticate, authorize('SuperAdmin', 'Admin'), async (req, 
     // Check if table exists, if not return helpful error
     try {
       const [result] = await pool.execute(
-        'UPDATE System_Settings SET setting_value = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?',
+        'UPDATE system_settings SET setting_value = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?',
         [value, description || null, key]
       );
 
@@ -61,7 +61,7 @@ router.put('/:key', authenticate, authorize('SuperAdmin', 'Admin'), async (req, 
         console.log(`[Settings] Inserting new setting: ${key}`);
         const setting_id = generateId(ID_PREFIXES.SYSTEM_SETTING);
         await pool.execute(
-          'INSERT INTO System_Settings (setting_id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)',
+          'INSERT INTO system_settings (setting_id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)',
           [setting_id, key, value, description || null]
         );
       }
@@ -71,7 +71,7 @@ router.put('/:key', authenticate, authorize('SuperAdmin', 'Admin'), async (req, 
       console.error(`[Settings] Database error for ${key}:`, dbError);
       // Check if it's a table doesn't exist error
       if (dbError.code === 'ER_NO_SUCH_TABLE' || dbError.message.includes("doesn't exist")) {
-        console.error('System_Settings table does not exist. Please run the migration:');
+        console.error('system_settings table does not exist. Please run the migration:');
         console.error('mysql -u root -p < database/migrations/add_system_settings.sql');
         return res.status(500).json({ 
           error: 'System settings table not found. Please run the database migration first.',
@@ -96,7 +96,7 @@ router.get('/:key', authenticate, async (req, res) => {
   try {
     const { key } = req.params;
     const [settings] = await pool.execute(
-      'SELECT setting_key, setting_value, description FROM System_Settings WHERE setting_key = ?',
+      'SELECT setting_key, setting_value, description FROM system_settings WHERE setting_key = ?',
       [key]
     );
 

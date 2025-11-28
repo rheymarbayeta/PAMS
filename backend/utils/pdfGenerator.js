@@ -20,9 +20,9 @@ const generatePermitPDF = async (applicationId) => {
           e.email,
           e.phone,
           u1.full_name as creator_name
-         FROM Applications a
-         INNER JOIN Entities e ON a.entity_id = e.entity_id
-         INNER JOIN Users u1 ON a.creator_id = u1.user_id
+         FROM applications a
+         INNER JOIN entities e ON a.entity_id = e.entity_id
+         INNER JOIN users u1 ON a.creator_id = u1.user_id
          WHERE a.application_id = ? AND a.status = 'Approved'`,
         [applicationId]
       );
@@ -35,7 +35,7 @@ const generatePermitPDF = async (applicationId) => {
 
       // Get parameters
       const [parameters] = await pool.execute(
-        'SELECT * FROM Application_Parameters WHERE application_id = ?',
+        'SELECT * FROM application_parameters WHERE application_id = ?',
         [applicationId]
       );
 
@@ -45,9 +45,9 @@ const generatePermitPDF = async (applicationId) => {
           fc.fee_name,
           fcat.category_name,
           af.assessed_amount
-         FROM Assessed_Fees af
-         INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id
-         INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
+         FROM assessed_fees af
+         INNER JOIN fees_charges fc ON af.fee_id = fc.fee_id
+         INNER JOIN fees_categories fcat ON fc.category_id = fcat.category_id
          WHERE af.application_id = ?
          ORDER BY fcat.category_name, fc.fee_name`,
         [applicationId]
@@ -157,9 +157,9 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
           ar.*,
           u1.full_name as prepared_by_name,
           u2.full_name as approved_by_name
-         FROM Assessment_Records ar
-         LEFT JOIN Users u1 ON ar.prepared_by_user_id = u1.user_id
-         LEFT JOIN Users u2 ON ar.approved_by_user_id = u2.user_id
+         FROM assessment_records ar
+         LEFT JOIN users u1 ON ar.prepared_by_user_id = u1.user_id
+         LEFT JOIN users u2 ON ar.approved_by_user_id = u2.user_id
          WHERE ar.application_id = ?`,
         [applicationId]
       );
@@ -174,7 +174,7 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
 
       // Get application parameters for additional info
       const [parameters] = await pool.execute(
-        'SELECT * FROM Application_Parameters WHERE application_id = ?',
+        'SELECT * FROM application_parameters WHERE application_id = ?',
         [applicationId]
       );
 
@@ -196,9 +196,9 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
           arf.total,
           fc.category_id,
           fcat.category_name
-         FROM Assessment_Record_Fees arf
-         INNER JOIN Fees_Charges fc ON arf.fee_id = fc.fee_id
-         INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
+         FROM assessment_record_fees arf
+         INNER JOIN fees_charges fc ON arf.fee_id = fc.fee_id
+         INNER JOIN fees_categories fcat ON fc.category_id = fcat.category_id
          WHERE arf.assessment_id = ?
          ORDER BY fcat.category_name, arf.fee_name`,
         [assessment.assessment_id]
@@ -220,7 +220,7 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
 
       // Get system settings
       const [settings] = await pool.execute(
-        'SELECT setting_key, setting_value FROM System_Settings WHERE setting_key IN (?, ?, ?)',
+        'SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?, ?, ?)',
         ['default_municipality', 'default_province', 'default_country']
       );
 
@@ -618,11 +618,11 @@ const getAssessmentData = async (applicationId) => {
       e.address as entity_address,
       u1.full_name as prepared_by_name,
       u2.full_name as approved_by_name
-     FROM Assessment_Records ar
-     INNER JOIN Applications a ON ar.application_id = a.application_id
-     INNER JOIN Entities e ON a.entity_id = e.entity_id
-     LEFT JOIN Users u1 ON ar.prepared_by_user_id = u1.user_id
-     LEFT JOIN Users u2 ON ar.approved_by_user_id = u2.user_id
+     FROM assessment_records ar
+     INNER JOIN applications a ON ar.application_id = a.application_id
+     INNER JOIN entities e ON a.entity_id = e.entity_id
+     LEFT JOIN users u1 ON ar.prepared_by_user_id = u1.user_id
+     LEFT JOIN users u2 ON ar.approved_by_user_id = u2.user_id
      WHERE ar.application_id = ?`,
     [applicationId]
   );
@@ -635,7 +635,7 @@ const getAssessmentData = async (applicationId) => {
 
   // Get application parameters for additional info
   const [parameters] = await pool.execute(
-    'SELECT * FROM Application_Parameters WHERE application_id = ?',
+    'SELECT * FROM application_parameters WHERE application_id = ?',
     [applicationId]
   );
 
@@ -657,9 +657,9 @@ const getAssessmentData = async (applicationId) => {
       arf.total,
       fc.category_id,
       fcat.category_name
-     FROM Assessment_Record_Fees arf
-     INNER JOIN Fees_Charges fc ON arf.fee_id = fc.fee_id
-     INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
+     FROM assessment_record_fees arf
+     INNER JOIN fees_charges fc ON arf.fee_id = fc.fee_id
+     INNER JOIN fees_categories fcat ON fc.category_id = fcat.category_id
      WHERE arf.assessment_id = ?
      ORDER BY fcat.category_name, arf.fee_name`,
     [assessment.assessment_id]
@@ -681,7 +681,7 @@ const getAssessmentData = async (applicationId) => {
 
   // Get system settings
   const [settings] = await pool.execute(
-    'SELECT setting_key, setting_value FROM System_Settings WHERE setting_key IN (?, ?, ?)',
+    'SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?, ?, ?)',
     ['default_municipality', 'default_province', 'default_country']
   );
 

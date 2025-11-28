@@ -15,7 +15,7 @@ router.use(authenticate);
 router.get('/categories', async (req, res) => {
   try {
     const [categories] = await pool.execute(
-      'SELECT * FROM Fees_Categories ORDER BY category_name'
+      'SELECT * FROM fees_categories ORDER BY category_name'
     );
     res.json(categories);
   } catch (error) {
@@ -36,7 +36,7 @@ router.post('/categories', authorize('SuperAdmin', 'Admin'), async (req, res) =>
     const category_id = generateId(ID_PREFIXES.CATEGORY);
 
     const [result] = await pool.execute(
-      'INSERT INTO Fees_Categories (category_id, category_name) VALUES (?, ?)',
+      'INSERT INTO fees_categories (category_id, category_name) VALUES (?, ?)',
       [category_id, category_name]
     );
 
@@ -66,7 +66,7 @@ router.put('/categories/:id', authorize('SuperAdmin', 'Admin'), async (req, res)
     }
 
     const [result] = await pool.execute(
-      'UPDATE Fees_Categories SET category_name = ? WHERE category_id = ?',
+      'UPDATE fees_categories SET category_name = ? WHERE category_id = ?',
       [category_name, categoryId]
     );
 
@@ -93,7 +93,7 @@ router.delete('/categories/:id', authorize('SuperAdmin', 'Admin'), async (req, r
 
     // Check if category has fees
     const [fees] = await pool.execute(
-      'SELECT fee_id FROM Fees_Charges WHERE category_id = ?',
+      'SELECT fee_id FROM fees_charges WHERE category_id = ?',
       [categoryId]
     );
 
@@ -102,7 +102,7 @@ router.delete('/categories/:id', authorize('SuperAdmin', 'Admin'), async (req, r
     }
 
     const [result] = await pool.execute(
-      'DELETE FROM Fees_Categories WHERE category_id = ?',
+      'DELETE FROM fees_categories WHERE category_id = ?',
       [categoryId]
     );
 
@@ -126,8 +126,8 @@ router.get('/charges', async (req, res) => {
   try {
     const [fees] = await pool.execute(
       `SELECT f.fee_id, f.category_id, f.fee_name, f.default_amount, c.category_name
-       FROM Fees_Charges f
-       INNER JOIN Fees_Categories c ON f.category_id = c.category_id
+       FROM fees_charges f
+       INNER JOIN fees_categories c ON f.category_id = c.category_id
        ORDER BY c.category_name, f.fee_name`
     );
     // Convert default_amount to number (MySQL DECIMAL can return as string)
@@ -148,7 +148,7 @@ router.get('/charges', async (req, res) => {
 router.get('/charges/category/:categoryId', async (req, res) => {
   try {
     const [fees] = await pool.execute(
-      'SELECT * FROM Fees_Charges WHERE category_id = ? ORDER BY fee_name',
+      'SELECT * FROM fees_charges WHERE category_id = ? ORDER BY fee_name',
       [req.params.categoryId]
     );
     // Convert default_amount to number
@@ -177,7 +177,7 @@ router.post('/charges', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     const fee_id = generateId(ID_PREFIXES.FEE);
 
     const [result] = await pool.execute(
-      'INSERT INTO Fees_Charges (fee_id, category_id, fee_name, default_amount) VALUES (?, ?, ?, ?)',
+      'INSERT INTO fees_charges (fee_id, category_id, fee_name, default_amount) VALUES (?, ?, ?, ?)',
       [fee_id, category_id, fee_name, parseFloat(default_amount)]
     );
 
@@ -206,7 +206,7 @@ router.put('/charges/:id', authorize('SuperAdmin', 'Admin'), async (req, res) =>
     }
 
     const [result] = await pool.execute(
-      'UPDATE Fees_Charges SET category_id = ?, fee_name = ?, default_amount = ? WHERE fee_id = ?',
+      'UPDATE fees_charges SET category_id = ?, fee_name = ?, default_amount = ? WHERE fee_id = ?',
       [category_id, fee_name, parseFloat(default_amount), feeId]
     );
 
@@ -230,7 +230,7 @@ router.delete('/charges/:id', authorize('SuperAdmin', 'Admin'), async (req, res)
 
     // Check if fee is used in assessed fees
     const [assessed] = await pool.execute(
-      'SELECT assessed_fee_id FROM Assessed_Fees WHERE fee_id = ?',
+      'SELECT assessed_fee_id FROM assessed_fees WHERE fee_id = ?',
       [feeId]
     );
 
@@ -239,7 +239,7 @@ router.delete('/charges/:id', authorize('SuperAdmin', 'Admin'), async (req, res)
     }
 
     const [result] = await pool.execute(
-      'DELETE FROM Fees_Charges WHERE fee_id = ?',
+      'DELETE FROM fees_charges WHERE fee_id = ?',
       [feeId]
     );
 

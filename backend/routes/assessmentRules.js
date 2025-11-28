@@ -15,9 +15,9 @@ router.get('/', async (req, res) => {
     const [rules] = await pool.execute(
       `SELECT ar.rule_id, ar.permit_type_id, ar.attribute_id, ar.rule_name, ar.description, ar.is_active,
               pt.permit_type_name, a.attribute_name
-       FROM Assessment_Rules ar
-       INNER JOIN Permit_Types pt ON ar.permit_type_id = pt.permit_type_id
-       LEFT JOIN Attributes a ON ar.attribute_id = a.attribute_id
+       FROM assessment_rules ar
+       INNER JOIN permit_types pt ON ar.permit_type_id = pt.permit_type_id
+       LEFT JOIN attributes a ON ar.attribute_id = a.attribute_id
        ORDER BY pt.permit_type_name, a.attribute_name, ar.rule_name`
     );
     res.json(rules);
@@ -35,9 +35,9 @@ router.get('/:id', async (req, res) => {
     // Get rule
     const [rules] = await pool.execute(
       `SELECT ar.*, pt.permit_type_name, a.attribute_name
-       FROM Assessment_Rules ar
-       INNER JOIN Permit_Types pt ON ar.permit_type_id = pt.permit_type_id
-       LEFT JOIN Attributes a ON ar.attribute_id = a.attribute_id
+       FROM assessment_rules ar
+       INNER JOIN permit_types pt ON ar.permit_type_id = pt.permit_type_id
+       LEFT JOIN attributes a ON ar.attribute_id = a.attribute_id
        WHERE ar.rule_id = ?`,
       [ruleId]
     );
@@ -91,9 +91,9 @@ router.get('/lookup/:permitTypeId/:attributeId', async (req, res) => {
     
     const [rules] = await pool.execute(
       `SELECT ar.*, pt.permit_type_name, a.attribute_name
-       FROM Assessment_Rules ar
-       INNER JOIN Permit_Types pt ON ar.permit_type_id = pt.permit_type_id
-       LEFT JOIN Attributes a ON ar.attribute_id = a.attribute_id
+       FROM assessment_rules ar
+       INNER JOIN permit_types pt ON ar.permit_type_id = pt.permit_type_id
+       LEFT JOIN attributes a ON ar.attribute_id = a.attribute_id
        WHERE ar.permit_type_id = ? AND ar.attribute_id = ? AND ar.is_active = TRUE`,
       [permitTypeId, attributeId]
     );
@@ -108,9 +108,9 @@ router.get('/lookup/:permitTypeId/:attributeId', async (req, res) => {
     const [fees] = await pool.execute(
       `SELECT arf.rule_fee_id, arf.fee_id, arf.fee_name, arf.amount, arf.is_required, arf.fee_order,
               fc.fee_name as default_fee_name, fc.default_amount, cat.category_name
-       FROM Assessment_Rule_Fees arf
-       LEFT JOIN Fees_Charges fc ON arf.fee_id = fc.fee_id
-       LEFT JOIN Fees_Categories cat ON fc.category_id = cat.category_id
+       FROM assessment_rule_fees arf
+       LEFT JOIN fees_charges fc ON arf.fee_id = fc.fee_id
+       LEFT JOIN fees_categories cat ON fc.category_id = cat.category_id
        WHERE arf.rule_id = ?
        ORDER BY arf.fee_order, arf.fee_name`,
       [ruleId]
@@ -194,7 +194,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       if (attributeColumnAvailable && attributeName) {
         // Include attribute column (legacy schema)
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO assessment_rules (rule_id, permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [
             rule_id,
             permit_type_id,
@@ -208,7 +208,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       } else {
         // Use new schema (without legacy column)
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO assessment_rules (rule_id, permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
           [
             rule_id,
             permit_type_id,
@@ -225,7 +225,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         attributeColumnAvailable = false;
         // Retry without attribute column
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO assessment_rules (rule_id, permit_type_id, attribute_id, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?)',
           [
             rule_id,
             permit_type_id,
@@ -239,7 +239,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         console.log('[AssessmentRules] Attribute column requires value. Retrying with attribute name.');
         attributeColumnAvailable = true;
         [result] = await connection.execute(
-          'INSERT INTO Assessment_Rules (rule_id, permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO assessment_rules (rule_id, permit_type_id, attribute_id, attribute, rule_name, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [
             rule_id,
             permit_type_id,
@@ -271,7 +271,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
           if (!feeName && fee.fee_id) {
             console.log('[AssessmentRules] Fetching fee name for fee_id:', fee.fee_id);
             const [feeData] = await connection.execute(
-              'SELECT fee_name FROM Fees_Charges WHERE fee_id = ?',
+              'SELECT fee_name FROM fees_charges WHERE fee_id = ?',
               [fee.fee_id]
             );
             if (feeData.length > 0) {
@@ -294,7 +294,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
           const rule_fee_id = generateId(ID_PREFIXES.ASSESSMENT_RULE_FEE);
 
           await connection.execute(
-            'INSERT INTO Assessment_Rule_Fees (rule_fee_id, rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO assessment_rule_fees (rule_fee_id, rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
               rule_fee_id,
               rule_id,
@@ -391,7 +391,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     try {
       if (attributeColumnAvailable && attributeName) {
         [result] = await connection.execute(
-          'UPDATE Assessment_Rules SET permit_type_id = ?, attribute_id = ?, attribute = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
+          'UPDATE assessment_rules SET permit_type_id = ?, attribute_id = ?, attribute = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
           [
             permit_type_id,
             attribute_id,
@@ -405,7 +405,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       } else {
         // Try without attribute column
         [result] = await connection.execute(
-          'UPDATE Assessment_Rules SET permit_type_id = ?, attribute_id = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
+          'UPDATE assessment_rules SET permit_type_id = ?, attribute_id = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
           [
             permit_type_id,
             attribute_id,
@@ -421,7 +421,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         console.log('[AssessmentRules] Attribute column dropped, retrying update without it.');
         attributeColumnAvailable = false;
         [result] = await connection.execute(
-          'UPDATE Assessment_Rules SET permit_type_id = ?, attribute_id = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
+          'UPDATE assessment_rules SET permit_type_id = ?, attribute_id = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
           [
             permit_type_id,
             attribute_id,
@@ -433,7 +433,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         );
       } else if (updateError.code === 'ER_BAD_NULL_ERROR' && attributeName) {
         [result] = await connection.execute(
-          'UPDATE Assessment_Rules SET permit_type_id = ?, attribute_id = ?, attribute = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
+          'UPDATE assessment_rules SET permit_type_id = ?, attribute_id = ?, attribute = ?, rule_name = ?, description = ?, is_active = ? WHERE rule_id = ?',
           [
             permit_type_id,
             attribute_id,
@@ -458,7 +458,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     if (fees && Array.isArray(fees)) {
       // Delete existing fees
       await connection.execute(
-        'DELETE FROM Assessment_Rule_Fees WHERE rule_id = ?',
+        'DELETE FROM assessment_rule_fees WHERE rule_id = ?',
         [ruleId]
       );
 
@@ -470,7 +470,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
           let feeName = fee.fee_name;
           if (!feeName && fee.fee_id) {
             const [feeData] = await connection.execute(
-              'SELECT fee_name FROM Fees_Charges WHERE fee_id = ?',
+              'SELECT fee_name FROM fees_charges WHERE fee_id = ?',
               [fee.fee_id]
             );
             if (feeData.length > 0) {
@@ -479,7 +479,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
           }
           
           await connection.execute(
-            'INSERT INTO Assessment_Rule_Fees (rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO assessment_rule_fees (rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?)',
             [
               ruleId,
               fee.fee_id,
@@ -517,7 +517,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     const ruleId = req.params.id;
 
     const [result] = await pool.execute(
-      'DELETE FROM Assessment_Rules WHERE rule_id = ?',
+      'DELETE FROM assessment_rules WHERE rule_id = ?',
       [ruleId]
     );
 

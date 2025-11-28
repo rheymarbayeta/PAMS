@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
   console.log('[Attributes] GET / - Fetching all attributes');
   try {
     const [attributes] = await pool.execute(
-      'SELECT * FROM Attributes ORDER BY attribute_name'
+      'SELECT * FROM attributes ORDER BY attribute_name'
     );
     console.log('[Attributes] Found', attributes.length, 'attributes');
     res.json(attributes);
@@ -40,7 +40,7 @@ router.get('/active', async (req, res) => {
   console.log('[Attributes] GET /active - Fetching active attributes');
   try {
     const [attributes] = await pool.execute(
-      'SELECT * FROM Attributes WHERE is_active = TRUE ORDER BY attribute_name'
+      'SELECT * FROM attributes WHERE is_active = TRUE ORDER BY attribute_name'
     );
     console.log('[Attributes] Found', attributes.length, 'active attributes');
     res.json(attributes);
@@ -56,7 +56,7 @@ router.get('/active', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const [attributes] = await pool.execute(
-      'SELECT * FROM Attributes WHERE attribute_id = ?',
+      'SELECT * FROM attributes WHERE attribute_id = ?',
       [req.params.id]
     );
 
@@ -89,7 +89,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     console.log('[Attributes] Inserting attribute into database...');
     const [result] = await pool.execute(
-      'INSERT INTO Attributes (attribute_id, attribute_name, description, is_active) VALUES (?, ?, ?, ?)',
+      'INSERT INTO attributes (attribute_id, attribute_name, description, is_active) VALUES (?, ?, ?, ?)',
       [attribute_id, attribute_name, description || null, is_active !== undefined ? is_active : true]
     );
 
@@ -132,7 +132,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      'UPDATE Attributes SET attribute_name = ?, description = ?, is_active = ? WHERE attribute_id = ?',
+      'UPDATE attributes SET attribute_name = ?, description = ?, is_active = ? WHERE attribute_id = ?',
       [attribute_name, description || null, is_active !== undefined ? is_active : true, attributeId]
     );
 
@@ -161,7 +161,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     // Check if attribute is used in permit types
     const [permitTypes] = await pool.execute(
-      'SELECT permit_type_id FROM Permit_Types WHERE attribute_id = ?',
+      'SELECT permit_type_id FROM permit_types WHERE attribute_id = ?',
       [attributeId]
     );
 
@@ -171,7 +171,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     // Check if attribute is used in assessment rules
     const [rules] = await pool.execute(
-      'SELECT rule_id FROM Assessment_Rules WHERE attribute_id = ?',
+      'SELECT rule_id FROM assessment_rules WHERE attribute_id = ?',
       [attributeId]
     );
 
@@ -180,7 +180,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      'DELETE FROM Attributes WHERE attribute_id = ?',
+      'DELETE FROM attributes WHERE attribute_id = ?',
       [attributeId]
     );
 

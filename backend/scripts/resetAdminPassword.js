@@ -21,7 +21,7 @@ async function resetAdminPassword() {
   try {
     // Update admin password
     const [result] = await connection.execute(
-      'UPDATE Users SET password_hash = ? WHERE username = ?',
+      'UPDATE users SET password_hash = ? WHERE username = ?',
       [password_hash, 'admin']
     );
 
@@ -34,7 +34,7 @@ async function resetAdminPassword() {
       
       // Get SuperAdmin role_id
       const [roles] = await connection.execute(
-        'SELECT role_id FROM Roles WHERE role_name = ?',
+        'SELECT role_id FROM roles WHERE role_name = ?',
         ['SuperAdmin']
       );
 
@@ -45,7 +45,7 @@ async function resetAdminPassword() {
 
       // Create admin user
       await connection.execute(
-        'INSERT INTO Users (username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?)',
+        'INSERT INTO users (username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?)',
         ['admin', password_hash, 'System Administrator', roles[0].role_id]
       );
 
@@ -56,7 +56,7 @@ async function resetAdminPassword() {
 
     // Verify the password works
     const [users] = await connection.execute(
-      'SELECT password_hash FROM Users WHERE username = ?',
+      'SELECT password_hash FROM users WHERE username = ?',
       ['admin']
     );
 

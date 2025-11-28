@@ -14,8 +14,8 @@ router.get('/', async (req, res) => {
   try {
     const [permitTypes] = await pool.execute(
       `SELECT pt.*, a.attribute_name, a.attribute_id, a.description AS attribute_description
-       FROM Permit_Types pt
-       LEFT JOIN Attributes a ON pt.attribute_id = a.attribute_id
+       FROM permit_types pt
+       LEFT JOIN attributes a ON pt.attribute_id = a.attribute_id
        ORDER BY pt.permit_type_name`
     );
     res.json(permitTypes);
@@ -36,8 +36,8 @@ router.get('/:id', async (req, res) => {
     // Get permit type
     const [permitTypes] = await pool.execute(
       `SELECT pt.*, a.attribute_name, a.attribute_id, a.description AS attribute_description
-       FROM Permit_Types pt
-       LEFT JOIN Attributes a ON pt.attribute_id = a.attribute_id
+       FROM permit_types pt
+       LEFT JOIN attributes a ON pt.attribute_id = a.attribute_id
        WHERE pt.permit_type_id = ?`,
       [permitTypeId]
     );
@@ -60,9 +60,9 @@ router.get('/:id', async (req, res) => {
     const [fees] = await pool.execute(
       `SELECT ptf.permit_type_fee_id, ptf.fee_id, ptf.default_amount, ptf.is_required,
               fc.fee_name, fc.category_id, cat.category_name
-       FROM Permit_Type_Fees ptf
-       INNER JOIN Fees_Charges fc ON ptf.fee_id = fc.fee_id
-       INNER JOIN Fees_Categories cat ON fc.category_id = cat.category_id
+       FROM permit_type_fees ptf
+       INNER JOIN fees_charges fc ON ptf.fee_id = fc.fee_id
+       INNER JOIN fees_categories cat ON fc.category_id = cat.category_id
        WHERE ptf.permit_type_id = ?
        ORDER BY cat.category_name, fc.fee_name`,
       [permitTypeId]
@@ -127,7 +127,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       console.log('[PermitTypes] Validating attribute_id:', attribute_id);
       // Check if attribute exists
       const [attrCheck] = await connection.execute(
-        'SELECT attribute_id FROM Attributes WHERE attribute_id = ?',
+        'SELECT attribute_id FROM attributes WHERE attribute_id = ?',
         [attribute_id]
       );
       if (attrCheck.length > 0) {
@@ -142,7 +142,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     console.log('[PermitTypes] Final validAttributeId:', validAttributeId);
 
     const [result] = await connection.execute(
-      'INSERT INTO Permit_Types (permit_type_id, permit_type_name, attribute_id, description, is_active, validity_date) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO permit_types (permit_type_id, permit_type_name, attribute_id, description, is_active, validity_date) VALUES (?, ?, ?, ?, ?, ?)',
       [permit_type_id, permit_type_name, validAttributeId, description || null, is_active !== undefined ? is_active : true, validity_date || null]
     );
 
@@ -152,7 +152,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         if (fee.fee_id && fee.default_amount !== undefined) {
           const permit_type_fee_id = generateId(ID_PREFIXES.PERMIT_TYPE_FEE);
           await connection.execute(
-            'INSERT INTO Permit_Type_Fees (permit_type_fee_id, permit_type_id, fee_id, default_amount, is_required) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO permit_type_fees (permit_type_fee_id, permit_type_id, fee_id, default_amount, is_required) VALUES (?, ?, ?, ?, ?)',
             [
               permit_type_fee_id,
               permit_type_id,
@@ -207,7 +207,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     // Update permit type
     const [result] = await connection.execute(
-      'UPDATE Permit_Types SET permit_type_name = ?, attribute_id = ?, description = ?, is_active = ?, validity_date = ? WHERE permit_type_id = ?',
+      'UPDATE permit_types SET permit_type_name = ?, attribute_id = ?, description = ?, is_active = ?, validity_date = ? WHERE permit_type_id = ?',
       [permit_type_name, attribute_id || null, description || null, is_active !== undefined ? is_active : true, validity_date || null, permitTypeId]
     );
 
@@ -220,7 +220,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     if (fees && Array.isArray(fees)) {
       // Delete existing fees
       await connection.execute(
-        'DELETE FROM Permit_Type_Fees WHERE permit_type_id = ?',
+        'DELETE FROM permit_type_fees WHERE permit_type_id = ?',
         [permitTypeId]
       );
 
@@ -229,7 +229,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
         if (fee.fee_id && fee.default_amount !== undefined) {
           const permit_type_fee_id = generateId(ID_PREFIXES.PERMIT_TYPE_FEE);
           await connection.execute(
-            'INSERT INTO Permit_Type_Fees (permit_type_fee_id, permit_type_id, fee_id, default_amount, is_required) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO permit_type_fees (permit_type_fee_id, permit_type_id, fee_id, default_amount, is_required) VALUES (?, ?, ?, ?, ?)',
             [
               permit_type_fee_id,
               permitTypeId,
@@ -267,7 +267,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     // Check if permit type has applications
     const [applications] = await pool.execute(
-      'SELECT application_id FROM Applications WHERE permit_type = (SELECT permit_type_name FROM Permit_Types WHERE permit_type_id = ?)',
+      'SELECT application_id FROM applications WHERE permit_type = (SELECT permit_type_name FROM permit_types WHERE permit_type_id = ?)',
       [permitTypeId]
     );
 
@@ -276,7 +276,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      'DELETE FROM Permit_Types WHERE permit_type_id = ?',
+      'DELETE FROM permit_types WHERE permit_type_id = ?',
       [permitTypeId]
     );
 

@@ -29,7 +29,7 @@ const logAction = async (userId, action, details, applicationId = null) => {
     console.log('  - details:', details);
 
     await pool.execute(
-      'INSERT INTO Audit_Trail (log_id, user_id, application_id, action, details) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO audit_trail (log_id, user_id, application_id, action, details) VALUES (?, ?, ?, ?, ?)',
       [audit_log_id, userId, applicationId, action, details]
     );
 

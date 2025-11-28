@@ -62,11 +62,11 @@ router.get('/', async (req, res) => {
         u1.full_name as creator_name,
         u2.full_name as assessor_name,
         u3.full_name as approver_name
-      FROM Applications a
-      INNER JOIN Entities e ON a.entity_id = e.entity_id
-      INNER JOIN Users u1 ON a.creator_id = u1.user_id
-      LEFT JOIN Users u2 ON a.assessor_id = u2.user_id
-      LEFT JOIN Users u3 ON a.approver_id = u3.user_id
+      FROM applications a
+      INNER JOIN entities e ON a.entity_id = e.entity_id
+      INNER JOIN users u1 ON a.creator_id = u1.user_id
+      LEFT JOIN users u2 ON a.assessor_id = u2.user_id
+      LEFT JOIN users u3 ON a.approver_id = u3.user_id
     `;
 
     const conditions = [];
@@ -199,11 +199,11 @@ router.get('/:id', async (req, res) => {
         u1.full_name as creator_name,
         u2.full_name as assessor_name,
         u3.full_name as approver_name
-       FROM Applications a
-       INNER JOIN Entities e ON a.entity_id = e.entity_id
-       INNER JOIN Users u1 ON a.creator_id = u1.user_id
-       LEFT JOIN Users u2 ON a.assessor_id = u2.user_id
-       LEFT JOIN Users u3 ON a.approver_id = u3.user_id
+       FROM applications a
+       INNER JOIN entities e ON a.entity_id = e.entity_id
+       INNER JOIN users u1 ON a.creator_id = u1.user_id
+       LEFT JOIN users u2 ON a.assessor_id = u2.user_id
+       LEFT JOIN users u3 ON a.approver_id = u3.user_id
        WHERE a.application_id = ?`,
       [applicationId]
     );
@@ -225,7 +225,7 @@ router.get('/:id', async (req, res) => {
 
     // Get parameters
     const [parameters] = await pool.execute(
-      'SELECT * FROM Application_Parameters WHERE application_id = ?',
+      'SELECT * FROM application_parameters WHERE application_id = ?',
       [applicationId]
     );
 
@@ -243,10 +243,10 @@ router.get('/:id', async (req, res) => {
         fc.default_amount,
         fcat.category_name,
         u.full_name as assessed_by_name
-       FROM Assessed_Fees af
-       INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id
-       INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
-       INNER JOIN Users u ON af.assessed_by_user_id = u.user_id
+       FROM assessed_fees af
+       INNER JOIN fees_charges fc ON af.fee_id = fc.fee_id
+       INNER JOIN fees_categories fcat ON fc.category_id = fcat.category_id
+       INNER JOIN users u ON af.assessed_by_user_id = u.user_id
        WHERE af.application_id = ?
        ORDER BY fcat.category_name, fc.fee_name`,
       [applicationId]
@@ -257,8 +257,8 @@ router.get('/:id', async (req, res) => {
       `SELECT 
         at.*,
         u.full_name as user_name
-       FROM Audit_Trail at
-       INNER JOIN Users u ON at.user_id = u.user_id
+       FROM audit_trail at
+       INNER JOIN users u ON at.user_id = u.user_id
        WHERE at.application_id = ?
        ORDER BY at.timestamp DESC`,
       [applicationId]
@@ -295,7 +295,7 @@ router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
 
     // Get application details
     const [applications] = await connection.execute(
-      'SELECT application_id, application_number, status FROM Applications WHERE application_id = ?',
+      'SELECT application_id, application_number, status FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -307,47 +307,47 @@ router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
     const application = applications[0];
 
     // Delete related records in order (child tables first)
-    // 1. Delete Assessment_Record_Fees (child of Assessment_Records)
+    // 1. Delete assessment_record_fees (child of assessment_records)
     await connection.execute(
-      `DELETE arf FROM Assessment_Record_Fees arf
-       INNER JOIN Assessment_Records ar ON arf.assessment_id = ar.assessment_id
+      `DELETE arf FROM assessment_record_fees arf
+       INNER JOIN assessment_records ar ON arf.assessment_id = ar.assessment_id
        WHERE ar.application_id = ?`,
       [applicationId]
     );
     
-    // 2. Delete Assessment_Records
+    // 2. Delete assessment_records
     await connection.execute(
-      'DELETE FROM Assessment_Records WHERE application_id = ?',
+      'DELETE FROM assessment_records WHERE application_id = ?',
       [applicationId]
     );
     
-    // 3. Delete Assessed_Fees
+    // 3. Delete assessed_fees
     await connection.execute(
-      'DELETE FROM Assessed_Fees WHERE application_id = ?',
+      'DELETE FROM assessed_fees WHERE application_id = ?',
       [applicationId]
     );
     
-    // 4. Delete Application_Parameters
+    // 4. Delete application_parameters
     await connection.execute(
-      'DELETE FROM Application_Parameters WHERE application_id = ?',
+      'DELETE FROM application_parameters WHERE application_id = ?',
       [applicationId]
     );
     
-    // 5. Delete Payments
+    // 5. Delete payments
     await connection.execute(
-      'DELETE FROM Payments WHERE application_id = ?',
+      'DELETE FROM payments WHERE application_id = ?',
       [applicationId]
     );
     
-    // 6. Update Audit_Trail to set application_id to NULL (preserve audit history)
+    // 6. Update audit_trail to set application_id to NULL (preserve audit history)
     await connection.execute(
-      'UPDATE Audit_Trail SET application_id = NULL WHERE application_id = ?',
+      'UPDATE audit_trail SET application_id = NULL WHERE application_id = ?',
       [applicationId]
     );
     
-    // 7. Finally delete the Application itself
+    // 7. Finally delete the application itself
     await connection.execute(
-      'DELETE FROM Applications WHERE application_id = ?',
+      'DELETE FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -412,13 +412,13 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
 
       // Get permit_type_id from permit_type name
       const [permitTypes] = await connection.execute(
-        'SELECT permit_type_id FROM Permit_Types WHERE permit_type_name = ? LIMIT 1',
+        'SELECT permit_type_id FROM permit_types WHERE permit_type_name = ? LIMIT 1',
         [permit_type]
       );
       const permit_type_id = permitTypes.length > 0 ? permitTypes[0].permit_type_id : null;
 
       const [result] = await connection.execute(
-        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, permit_type_id, 'Pending']
       );
 
@@ -428,7 +428,7 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
           if (param.param_name && param.param_value !== undefined) {
             const param_id = generateId(ID_PREFIXES.PARAMETER);
             await connection.execute(
-              'INSERT INTO Application_Parameters (parameter_id, application_id, param_name, param_value) VALUES (?, ?, ?, ?)',
+              'INSERT INTO application_parameters (parameter_id, application_id, param_name, param_value) VALUES (?, ?, ?, ?)',
               [param_id, application_id, param.param_name, param.param_value]
             );
           }
@@ -514,7 +514,7 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
     const feeUnitAmount = parseFloat(unit_amount) || parseFloat(assessed_amount);
 
     const [result] = await pool.execute(
-      'INSERT INTO Assessed_Fees (assessed_fee_id, application_id, fee_id, assessed_amount, unit_amount, quantity, assessed_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO assessed_fees (assessed_fee_id, application_id, fee_id, assessed_amount, unit_amount, quantity, assessed_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [assessed_fee_id, applicationId, fee_id, parseFloat(assessed_amount), feeUnitAmount, feeQuantity, req.user.user_id]
     );
 
@@ -529,7 +529,7 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
 
     // Get fee name for logging
     const [feeInfo] = await pool.execute(
-      'SELECT fee_name FROM Fees_Charges WHERE fee_id = ?',
+      'SELECT fee_name FROM fees_charges WHERE fee_id = ?',
       [fee_id]
     );
     const feeName = feeInfo.length > 0 ? feeInfo[0].fee_name : 'Unknown Fee';
@@ -540,7 +540,7 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
 
     // Get application number for logging
     const [appInfo] = await pool.execute(
-      'SELECT application_number FROM Applications WHERE application_id = ?',
+      'SELECT application_number FROM applications WHERE application_id = ?',
       [applicationId]
     );
     const appNumber = appInfo.length > 0 ? appInfo[0].application_number : applicationId;

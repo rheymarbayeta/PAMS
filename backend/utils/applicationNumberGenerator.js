@@ -25,7 +25,7 @@ const generateApplicationNumber = async (connection = null) => {
     // Use FOR UPDATE to lock the row for this transaction
     // This ensures only one transaction can read and update at a time
     const [sequences] = await dbConnection.execute(
-      'SELECT sequence_number FROM Application_Sequence WHERE period = ? FOR UPDATE',
+      'SELECT sequence_number FROM application_sequence WHERE period = ? FOR UPDATE',
       [yearMonth]
     );
 
@@ -35,12 +35,12 @@ const generateApplicationNumber = async (connection = null) => {
       // Use INSERT ... ON DUPLICATE KEY UPDATE to handle race condition
       sequenceNumber = 1;
       await dbConnection.execute(
-        'INSERT INTO Application_Sequence (sequence_id, period, sequence_number) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE sequence_number = sequence_number + 1',
+        'INSERT INTO application_sequence (sequence_id, period, sequence_number) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE sequence_number = sequence_number + 1',
         [require('../utils/idGenerator').generateId(require('../utils/idGenerator').ID_PREFIXES.APPLICATION_SEQUENCE), yearMonth, sequenceNumber]
       );
       // Check if insert succeeded or if another transaction created it
       const [updatedSequences] = await dbConnection.execute(
-        'SELECT sequence_number FROM Application_Sequence WHERE period = ? FOR UPDATE',
+        'SELECT sequence_number FROM application_sequence WHERE period = ? FOR UPDATE',
         [yearMonth]
       );
       if (updatedSequences.length > 0) {
@@ -53,7 +53,7 @@ const generateApplicationNumber = async (connection = null) => {
 
     // Update the sequence number atomically
     await dbConnection.execute(
-      'UPDATE Application_Sequence SET sequence_number = ? WHERE period = ?',
+      'UPDATE application_sequence SET sequence_number = ? WHERE period = ?',
       [sequenceNumber, yearMonth]
     );
 

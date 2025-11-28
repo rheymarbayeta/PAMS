@@ -13,22 +13,22 @@ router.get('/stats', async (req, res) => {
     const userId = req.user.user_id;
     const roleName = req.user.role_name;
 
-    let pendingQuery = 'SELECT COUNT(*) as count FROM Applications WHERE status = ?';
+    let pendingQuery = 'SELECT COUNT(*) as count FROM applications WHERE status = ?';
     let pendingParams = ['Pending'];
 
-    let pendingApprovalQuery = 'SELECT COUNT(*) as count FROM Applications WHERE status = ?';
+    let pendingApprovalQuery = 'SELECT COUNT(*) as count FROM applications WHERE status = ?';
     let pendingApprovalParams = ['Pending Approval'];
 
-    let approvedQuery = 'SELECT COUNT(*) as count FROM Applications WHERE status IN (?, ?)';
+    let approvedQuery = 'SELECT COUNT(*) as count FROM applications WHERE status IN (?, ?)';
     let approvedParams = ['Approved', 'Paid'];
 
-    let issuedQuery = 'SELECT COUNT(*) as count FROM Applications WHERE status IN (?, ?)';
+    let issuedQuery = 'SELECT COUNT(*) as count FROM applications WHERE status IN (?, ?)';
     let issuedParams = ['Issued', 'Released'];
 
-    let releasedQuery = 'SELECT COUNT(*) as count FROM Applications WHERE status = ?';
+    let releasedQuery = 'SELECT COUNT(*) as count FROM applications WHERE status = ?';
     let releasedParams = ['Released'];
 
-    let totalQuery = 'SELECT COUNT(*) as count FROM Applications';
+    let totalQuery = 'SELECT COUNT(*) as count FROM applications';
     let totalParams = [];
 
     // Role-based filtering
