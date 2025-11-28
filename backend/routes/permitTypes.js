@@ -180,9 +180,9 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     await connection.rollback();
     console.error('Create permit type error:', error);
     
-    // Check for duplicate entry
+    // Check for duplicate entry (same permit_type_name + attribute_id combination)
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ error: 'Permit type name already exists' });
+      return res.status(400).json({ error: 'A permit type with this name and attribute combination already exists' });
     }
     
     res.status(500).json({ error: 'Internal server error' });
@@ -250,8 +250,9 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     await connection.rollback();
     console.error('Update permit type error:', error);
     
+    // Check for duplicate entry (same permit_type_name + attribute_id combination)
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ error: 'Permit type name already exists' });
+      return res.status(400).json({ error: 'A permit type with this name and attribute combination already exists' });
     }
     
     res.status(500).json({ error: 'Internal server error' });
