@@ -13,7 +13,7 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const search = req.query.search || '';
-    let query = 'SELECT * FROM Entities';
+    let query = 'SELECT * FROM entities';
     const params = [];
 
     if (search) {
@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const [entities] = await pool.execute(
-      'SELECT * FROM Entities WHERE entity_id = ?',
+      'SELECT * FROM entities WHERE entity_id = ?',
       [req.params.id]
     );
 
@@ -56,8 +56,8 @@ router.get('/:id', async (req, res) => {
         a.created_at,
         a.updated_at,
         pt.permit_type_name
-       FROM Applications a
-       LEFT JOIN Permit_Types pt ON a.permit_type_id = pt.permit_type_id
+       FROM applications a
+       LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id
        WHERE a.entity_id = ?
        ORDER BY a.created_at DESC`,
       [req.params.id]
@@ -115,7 +115,7 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Appli
     const entity_id = generateId(ID_PREFIXES.ENTITY);
 
     const [result] = await pool.execute(
-      'INSERT INTO Entities (entity_id, entity_name, contact_person, email, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO entities (entity_id, entity_name, contact_person, email, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
       [entity_id, entity_name, contact_person || null, email || null, phone || null, address || null]
     );
 
@@ -146,7 +146,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'App
     }
 
     const [result] = await pool.execute(
-      'UPDATE Entities SET entity_name = ?, contact_person = ?, email = ?, phone = ?, address = ? WHERE entity_id = ?',
+      'UPDATE entities SET entity_name = ?, contact_person = ?, email = ?, phone = ?, address = ? WHERE entity_id = ?',
       [entity_name, contact_person || null, email || null, phone || null, address || null, entityId]
     );
 
@@ -170,7 +170,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', '
 
     // Check if entity has applications
     const [applications] = await pool.execute(
-      'SELECT application_id FROM Applications WHERE entity_id = ?',
+      'SELECT application_id FROM applications WHERE entity_id = ?',
       [entityId]
     );
 
@@ -179,7 +179,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', '
     }
 
     const [result] = await pool.execute(
-      'DELETE FROM Entities WHERE entity_id = ?',
+      'DELETE FROM entities WHERE entity_id = ?',
       [entityId]
     );
 

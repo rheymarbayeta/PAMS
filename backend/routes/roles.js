@@ -12,7 +12,7 @@ router.use(authorize('SuperAdmin', 'Admin'));
 router.get('/', async (req, res) => {
   try {
     const [roles] = await pool.execute(
-      'SELECT role_id, role_name, created_at, updated_at FROM Roles ORDER BY role_id'
+      'SELECT role_id, role_name, created_at, updated_at FROM roles ORDER BY role_id'
     );
 
     res.json(roles);

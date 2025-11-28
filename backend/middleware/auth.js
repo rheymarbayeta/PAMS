@@ -18,7 +18,7 @@ const authenticate = async (req, res, next) => {
     
     // Verify user still exists
     const [users] = await pool.execute(
-      'SELECT user_id, username, full_name, role_id FROM Users WHERE user_id = ?',
+      'SELECT user_id, username, full_name, role_id FROM users WHERE user_id = ?',
       [decoded.userId]
     );
 
@@ -32,8 +32,8 @@ const authenticate = async (req, res, next) => {
     // Get all roles for the user
     const [userRoles] = await pool.execute(
       `SELECT r.role_id, r.role_name 
-       FROM User_Roles ur 
-       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       FROM user_roles ur 
+       INNER JOIN roles r ON ur.role_id = r.role_id 
        WHERE ur.user_id = ?`,
       [decoded.userId]
     );
@@ -46,7 +46,7 @@ const authenticate = async (req, res, next) => {
     } else {
       // Fallback to single role
       const [roles] = await pool.execute(
-        'SELECT role_name FROM Roles WHERE role_id = ?',
+        'SELECT role_name FROM roles WHERE role_id = ?',
         [req.user.role_id]
       );
       req.user.roles = roles.length > 0 ? [roles[0].role_name] : [];

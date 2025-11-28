@@ -21,7 +21,7 @@ const createNotification = async (userId, message, link = null) => {
     const notification_id = generateId(ID_PREFIXES.NOTIFICATION);
 
     const [result] = await pool.execute(
-      'INSERT INTO Notifications (notification_id, user_id, message, link) VALUES (?, ?, ?, ?)',
+      'INSERT INTO notifications (notification_id, user_id, message, link) VALUES (?, ?, ?, ?)',
       [notification_id, userId, message, link]
     );
 
@@ -50,9 +50,9 @@ const createNotification = async (userId, message, link = null) => {
 const notifyRole = async (roleName, message, link = null) => {
   try {
     const [users] = await pool.execute(
-      `SELECT user_id FROM Users 
-       INNER JOIN Roles ON Users.role_id = Roles.role_id 
-       WHERE Roles.role_name = ?`,
+      `SELECT user_id FROM users 
+       INNER JOIN roles ON users.role_id = roles.role_id 
+       WHERE roles.role_name = ?`,
       [roleName]
     );
 

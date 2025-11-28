@@ -11,7 +11,7 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const [notifications] = await pool.execute(
-      `SELECT * FROM Notifications 
+      `SELECT * FROM notifications 
        WHERE user_id = ? 
        ORDER BY created_at DESC 
        LIMIT 50`,
@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
 router.get('/unread-count', async (req, res) => {
   try {
     const [result] = await pool.execute(
-      'SELECT COUNT(*) as count FROM Notifications WHERE user_id = ? AND is_read = FALSE',
+      'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = FALSE',
       [req.user.user_id]
     );
     res.json({ count: result[0].count });
@@ -42,7 +42,7 @@ router.get('/unread-count', async (req, res) => {
 router.put('/:id/read', async (req, res) => {
   try {
     await pool.execute(
-      'UPDATE Notifications SET is_read = TRUE WHERE notification_id = ? AND user_id = ?',
+      'UPDATE notifications SET is_read = TRUE WHERE notification_id = ? AND user_id = ?',
       [req.params.id, req.user.user_id]
     );
     res.json({ message: 'Notification marked as read' });
@@ -56,7 +56,7 @@ router.put('/:id/read', async (req, res) => {
 router.put('/read-all', async (req, res) => {
   try {
     await pool.execute(
-      'UPDATE Notifications SET is_read = TRUE WHERE user_id = ? AND is_read = FALSE',
+      'UPDATE notifications SET is_read = TRUE WHERE user_id = ? AND is_read = FALSE',
       [req.user.user_id]
     );
     res.json({ message: 'All notifications marked as read' });

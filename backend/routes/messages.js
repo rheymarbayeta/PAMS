@@ -28,8 +28,8 @@ router.get('/online-users', async (req, res) => {
     const placeholders = filteredIds.map(() => '?').join(',');
     const [users] = await pool.execute(
       `SELECT u.user_id, u.username, u.full_name, u.role_id, r.role_name
-       FROM Users u
-       INNER JOIN Roles r ON u.role_id = r.role_id
+       FROM users u
+       INNER JOIN roles r ON u.role_id = r.role_id
        WHERE u.user_id IN (${placeholders})
        ORDER BY u.full_name ASC`,
       filteredIds
@@ -48,8 +48,8 @@ router.get('/users', async (req, res) => {
   try {
     const [users] = await pool.execute(
       `SELECT u.user_id, u.username, u.full_name, u.role_id, r.role_name
-       FROM Users u
-       INNER JOIN Roles r ON u.role_id = r.role_id
+       FROM users u
+       INNER JOIN roles r ON u.role_id = r.role_id
        WHERE u.user_id != ?
        ORDER BY u.full_name ASC`,
       [req.user.user_id]
@@ -75,14 +75,14 @@ router.get('/conversations', async (req, res) => {
         END as user_id,
         u.full_name,
         r.role_name
-       FROM Messages m
-       INNER JOIN Users u ON (
+       FROM messages m
+       INNER JOIN users u ON (
          CASE WHEN m.sender_id = ? THEN m.recipient_id ELSE m.sender_id END = u.user_id
        )
-       INNER JOIN Roles r ON u.role_id = r.role_id
+       INNER JOIN roles r ON u.role_id = r.role_id
        WHERE m.sender_id = ? OR m.recipient_id = ?
        ORDER BY (
-         SELECT MAX(timestamp) FROM Messages m2 
+         SELECT MAX(timestamp) FROM messages m2 
          WHERE (m2.sender_id = ? AND m2.recipient_id = CASE WHEN m.sender_id = ? THEN m.recipient_id ELSE m.sender_id END)
             OR (m2.recipient_id = ? AND m2.sender_id = CASE WHEN m.sender_id = ? THEN m.recipient_id ELSE m.sender_id END)
        ) DESC`,
@@ -116,9 +116,9 @@ router.get('/', async (req, res) => {
         m.*,
         sender.full_name as sender_name,
         recipient.full_name as recipient_name
-      FROM Messages m
-      INNER JOIN Users sender ON m.sender_id = sender.user_id
-      INNER JOIN Users recipient ON m.recipient_id = recipient.user_id
+      FROM messages m
+      INNER JOIN users sender ON m.sender_id = sender.user_id
+      INNER JOIN users recipient ON m.recipient_id = recipient.user_id
       WHERE (m.sender_id = ? AND m.recipient_id = ?) 
          OR (m.sender_id = ? AND m.recipient_id = ?)
     `;
@@ -151,7 +151,7 @@ router.post('/', async (req, res) => {
     const message_id = generateId(ID_PREFIXES.MESSAGE);
 
     const [result] = await pool.execute(
-      'INSERT INTO Messages (message_id, sender_id, recipient_id, content, application_context_id) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO messages (message_id, sender_id, recipient_id, content, application_context_id) VALUES (?, ?, ?, ?, ?)',
       [message_id, req.user.user_id, recipient_id, content, application_context_id || null]
     );
 
@@ -161,9 +161,9 @@ router.post('/', async (req, res) => {
         m.*,
         sender.full_name as sender_name,
         recipient.full_name as recipient_name
-       FROM Messages m
-       INNER JOIN Users sender ON m.sender_id = sender.user_id
-       INNER JOIN Users recipient ON m.recipient_id = recipient.user_id
+       FROM messages m
+       INNER JOIN users sender ON m.sender_id = sender.user_id
+       INNER JOIN users recipient ON m.recipient_id = recipient.user_id
        WHERE m.message_id = ?`,
       [message_id]
     );
@@ -172,7 +172,7 @@ router.post('/', async (req, res) => {
 
     // Get sender's full name once
     const [senderInfo] = await pool.execute(
-      'SELECT full_name, username FROM Users WHERE user_id = ?',
+      'SELECT full_name, username FROM users WHERE user_id = ?',
       [req.user.user_id]
     );
     const senderName = senderInfo[0]?.full_name || senderInfo[0]?.username || 'Someone';

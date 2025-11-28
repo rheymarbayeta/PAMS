@@ -47,8 +47,8 @@ router.post('/login', async (req, res) => {
     // Get all roles for the user from the junction table
     let [userRoles] = await pool.execute(
       `SELECT r.role_id, r.role_name 
-       FROM User_Roles ur 
-       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       FROM user_roles ur 
+       INNER JOIN roles r ON ur.role_id = r.role_id 
        WHERE ur.user_id = ?`,
       [user.user_id]
     );
@@ -56,7 +56,7 @@ router.post('/login', async (req, res) => {
     // Fallback to single role if no roles in junction table
     if (userRoles.length === 0) {
       const [roles] = await pool.execute(
-        'SELECT role_id, role_name FROM Roles WHERE role_id = ?',
+        'SELECT role_id, role_name FROM roles WHERE role_id = ?',
         [user.role_id]
       );
       userRoles = roles;
@@ -101,8 +101,8 @@ router.get('/me', authenticate, async (req, res) => {
     // Get all roles for the user from the junction table
     let [userRoles] = await pool.execute(
       `SELECT r.role_id, r.role_name 
-       FROM User_Roles ur 
-       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       FROM user_roles ur 
+       INNER JOIN roles r ON ur.role_id = r.role_id 
        WHERE ur.user_id = ?`,
       [req.user.user_id]
     );
@@ -110,7 +110,7 @@ router.get('/me', authenticate, async (req, res) => {
     // Fallback to single role if no roles in junction table
     if (userRoles.length === 0) {
       const [roles] = await pool.execute(
-        'SELECT role_id, role_name FROM Roles WHERE role_id = ?',
+        'SELECT role_id, role_name FROM roles WHERE role_id = ?',
         [req.user.role_id]
       );
       userRoles = roles;

@@ -16,8 +16,8 @@ router.get('/', async (req, res) => {
   try {
     const [users] = await pool.execute(
       `SELECT u.user_id, u.username, u.full_name, u.role_id, r.role_name, u.created_at, u.updated_at
-       FROM Users u
-       INNER JOIN Roles r ON u.role_id = r.role_id
+       FROM users u
+       INNER JOIN roles r ON u.role_id = r.role_id
        ORDER BY u.created_at DESC`
     );
 
@@ -25,8 +25,8 @@ router.get('/', async (req, res) => {
     for (const user of users) {
       const [userRoles] = await pool.execute(
         `SELECT r.role_id, r.role_name 
-         FROM User_Roles ur 
-         INNER JOIN Roles r ON ur.role_id = r.role_id 
+         FROM user_roles ur 
+         INNER JOIN roles r ON ur.role_id = r.role_id 
          WHERE ur.user_id = ?`,
         [user.user_id]
       );
@@ -53,8 +53,8 @@ router.get('/:id', async (req, res) => {
   try {
     const [users] = await pool.execute(
       `SELECT u.user_id, u.username, u.full_name, u.role_id, r.role_name, u.created_at, u.updated_at
-       FROM Users u
-       INNER JOIN Roles r ON u.role_id = r.role_id
+       FROM users u
+       INNER JOIN roles r ON u.role_id = r.role_id
        WHERE u.user_id = ?`,
       [req.params.id]
     );
@@ -68,8 +68,8 @@ router.get('/:id', async (req, res) => {
     // Get all roles for the user
     const [userRoles] = await pool.execute(
       `SELECT r.role_id, r.role_name 
-       FROM User_Roles ur 
-       INNER JOIN Roles r ON ur.role_id = r.role_id 
+       FROM user_roles ur 
+       INNER JOIN roles r ON ur.role_id = r.role_id 
        WHERE ur.user_id = ?`,
       [user.user_id]
     );
@@ -103,7 +103,7 @@ router.post('/', async (req, res) => {
 
     // Check if username exists
     const [existing] = await pool.execute(
-      'SELECT user_id FROM Users WHERE username = ?',
+      'SELECT user_id FROM users WHERE username = ?',
       [username]
     );
 
@@ -119,7 +119,7 @@ router.post('/', async (req, res) => {
 
     // Create user with primary role
     await pool.execute(
-      'INSERT INTO Users (user_id, username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO users (user_id, username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?, ?)',
       [user_id, username, password_hash, full_name, primaryRoleId]
     );
 
@@ -127,7 +127,7 @@ router.post('/', async (req, res) => {
     for (const roleId of roleIdsToAssign) {
       const userRoleId = generateId('UR');
       await pool.execute(
-        'INSERT INTO User_Roles (user_role_id, user_id, role_id) VALUES (?, ?, ?)',
+        'INSERT INTO user_roles (user_role_id, user_id, role_id) VALUES (?, ?, ?)',
         [userRoleId, user_id, roleId]
       );
     }
@@ -136,7 +136,7 @@ router.post('/', async (req, res) => {
 
     // Get role names for response
     const [roles] = await pool.execute(
-      `SELECT role_id, role_name FROM Roles WHERE role_id IN (${roleIdsToAssign.map(() => '?').join(',')})`,
+      `SELECT role_id, role_name FROM roles WHERE role_id IN (${roleIdsToAssign.map(() => '?').join(',')})`,
       roleIdsToAssign
     );
 
@@ -162,7 +162,7 @@ router.put('/:id', async (req, res) => {
 
     // Check if user exists
     const [users] = await pool.execute(
-      'SELECT username FROM Users WHERE user_id = ?',
+      'SELECT username FROM users WHERE user_id = ?',
       [userId]
     );
 
@@ -176,7 +176,7 @@ router.put('/:id', async (req, res) => {
     if (username) {
       // Check if new username is taken
       const [existing] = await pool.execute(
-        'SELECT user_id FROM Users WHERE username = ? AND user_id != ?',
+        'SELECT user_id FROM users WHERE username = ? AND user_id != ?',
         [username, userId]
       );
       if (existing.length > 0) {
@@ -195,18 +195,18 @@ router.put('/:id', async (req, res) => {
     const roleIdsToAssign = role_ids && role_ids.length > 0 ? role_ids : (role_id ? [role_id] : null);
     
     if (roleIdsToAssign) {
-      // Update primary role in Users table
+      // Update primary role in users table
       updates.push('role_id = ?');
       values.push(roleIdsToAssign[0]);
       
       // Delete existing roles from junction table
-      await pool.execute('DELETE FROM User_Roles WHERE user_id = ?', [userId]);
+      await pool.execute('DELETE FROM user_roles WHERE user_id = ?', [userId]);
       
       // Add new roles to junction table
       for (const rId of roleIdsToAssign) {
         const userRoleId = generateId('UR');
         await pool.execute(
-          'INSERT INTO User_Roles (user_role_id, user_id, role_id) VALUES (?, ?, ?)',
+          'INSERT INTO user_roles (user_role_id, user_id, role_id) VALUES (?, ?, ?)',
           [userRoleId, userId, rId]
         );
       }
@@ -221,7 +221,7 @@ router.put('/:id', async (req, res) => {
     if (updates.length > 0) {
       values.push(userId);
       await pool.execute(
-        `UPDATE Users SET ${updates.join(', ')} WHERE user_id = ?`,
+        `UPDATE users SET ${updates.join(', ')} WHERE user_id = ?`,
         values
       );
     }
@@ -247,27 +247,27 @@ router.delete('/:id', async (req, res) => {
 
     // Check for dependencies that prevent deletion
     const [createdApps] = await pool.execute(
-      'SELECT COUNT(*) as count FROM Applications WHERE creator_id = ?',
+      'SELECT COUNT(*) as count FROM applications WHERE creator_id = ?',
       [userId]
     );
 
     const [assessedFees] = await pool.execute(
-      'SELECT COUNT(*) as count FROM Assessed_Fees WHERE assessed_by_user_id = ?',
+      'SELECT COUNT(*) as count FROM assessed_fees WHERE assessed_by_user_id = ?',
       [userId]
     );
 
     const [auditTrail] = await pool.execute(
-      'SELECT COUNT(*) as count FROM Audit_Trail WHERE user_id = ?',
+      'SELECT COUNT(*) as count FROM audit_trail WHERE user_id = ?',
       [userId]
     );
 
     const [sentMessages] = await pool.execute(
-      'SELECT COUNT(*) as count FROM Messages WHERE sender_id = ?',
+      'SELECT COUNT(*) as count FROM messages WHERE sender_id = ?',
       [userId]
     );
 
     const [receivedMessages] = await pool.execute(
-      'SELECT COUNT(*) as count FROM Messages WHERE recipient_id = ?',
+      'SELECT COUNT(*) as count FROM messages WHERE recipient_id = ?',
       [userId]
     );
 
@@ -292,7 +292,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      'DELETE FROM Users WHERE user_id = ?',
+      'DELETE FROM users WHERE user_id = ?',
       [userId]
     );
 
