@@ -40,6 +40,48 @@ router.get('/:id/assessment/html', async (req, res, next) => {
   }
 });
 
+// Print assessment report (PDF) - must be defined BEFORE global authenticate
+// This route needs special handling because it's opened in a new window with token in query
+router.get('/:id/assessment', async (req, res, next) => {
+  // Check if token is in query parameter (for new window/download requests)
+  const tokenFromQuery = req.query.token;
+  
+  if (tokenFromQuery) {
+    // Temporarily set Authorization header for authentication middleware
+    req.headers.authorization = `Bearer ${tokenFromQuery}`;
+  }
+  
+  // Continue to authentication middleware
+  next();
+}, authenticate, async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const printedBy = req.user ? req.user.full_name : 'System';
+
+    console.log(`[PDF] Generating assessment PDF for application ${applicationId}, printed by: ${printedBy}`);
+    
+    const pdfBuffer = await generateAssessmentReportPDF(applicationId, printedBy);
+
+    console.log(`[PDF] PDF generated successfully, size: ${pdfBuffer.length} bytes`);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="assessment-${applicationId}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('[PDF] Generate assessment report error:', error);
+    console.error('[PDF] Error stack:', error.stack);
+    
+    // If it's a PDF generation error, return a proper error response
+    if (error.message) {
+      return res.status(500).json({ 
+        error: error.message || 'Error generating assessment report',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+    res.status(500).json({ error: 'Error generating assessment report' });
+  }
+});
+
 // All routes require authentication
 router.use(authenticate);
 
@@ -130,36 +172,6 @@ router.get('/:id/assessment-record', async (req, res) => {
   } catch (error) {
     console.error('Get assessment record error:', error);
     res.status(500).json({ error: error.message || 'Error retrieving assessment record' });
-  }
-});
-
-// Print assessment report (PDF) - must come before /:id route
-router.get('/:id/assessment', async (req, res) => {
-  try {
-    const applicationId = req.params.id;
-    const printedBy = req.user ? req.user.full_name : 'System';
-
-    console.log(`[PDF] Generating assessment PDF for application ${applicationId}, printed by: ${printedBy}`);
-    
-    const pdfBuffer = await generateAssessmentReportPDF(applicationId, printedBy);
-
-    console.log(`[PDF] PDF generated successfully, size: ${pdfBuffer.length} bytes`);
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="assessment-${applicationId}.pdf"`);
-    res.send(pdfBuffer);
-  } catch (error) {
-    console.error('[PDF] Generate assessment report error:', error);
-    console.error('[PDF] Error stack:', error.stack);
-    
-    // If it's a PDF generation error, return a proper error response
-    if (error.message) {
-      return res.status(500).json({ 
-        error: error.message || 'Error generating assessment report',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      });
-    }
-    res.status(500).json({ error: 'Error generating assessment report' });
   }
 });
 
