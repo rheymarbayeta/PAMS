@@ -134,7 +134,16 @@ if (typeof window !== 'undefined') {
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     apiBaseUrl = 'http://localhost:5000';
   } else {
-    apiBaseUrl = window.location.origin.replace(':3000', ':5000');
+    // Handle different port mappings (frontend:6070 -> backend:5040, frontend:3000 -> backend:5000)
+    const origin = window.location.origin;
+    if (origin.includes(':6070')) {
+      apiBaseUrl = origin.replace(':6070', ':5040');
+    } else if (origin.includes(':3000')) {
+      apiBaseUrl = origin.replace(':3000', ':5000');
+    } else {
+      // Default: assume backend is on port 5000
+      apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+    }
   }
 }
 
@@ -153,7 +162,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function fetchAssessmentReport() {
   try {
-    // First fetch the assessment record
+    // Fetch both application and assessment data
+    const applicationUrl = `${apiBaseUrl}/api/applications/${applicationId}`;
     const assessmentUrl = `${apiBaseUrl}/api/applications/${applicationId}/assessment-record`;
     const settingsUrl = `${apiBaseUrl}/api/settings`;
     
@@ -165,6 +175,29 @@ async function fetchAssessmentReport() {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
     
+    // First fetch application data (always available)
+    console.log('Fetching application from:', applicationUrl);
+    const applicationResponse = await fetch(applicationUrl, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'include'
+    });
+    
+    if (!applicationResponse.ok) {
+      if (applicationResponse.status === 401) {
+        throw new Error('Unauthorized. Please login again.');
+      }
+      if (applicationResponse.status === 404) {
+        throw new Error('Application not found.');
+      }
+      throw new Error(`HTTP Error: ${applicationResponse.status} ${applicationResponse.statusText}`);
+    }
+    
+    const applicationData = await applicationResponse.json();
+    console.log('Application data loaded:', applicationData);
+    
+    // Now try to fetch assessment record
+    let assessmentData = null;
     console.log('Fetching assessment from:', assessmentUrl);
     
     const assessmentResponse = await fetch(assessmentUrl, {
@@ -173,18 +206,41 @@ async function fetchAssessmentReport() {
       credentials: 'include'
     });
     
-    if (!assessmentResponse.ok) {
-      if (assessmentResponse.status === 401) {
-        throw new Error('Unauthorized. Please login again.');
-      }
-      if (assessmentResponse.status === 404) {
-        throw new Error('Assessment record not found. Please submit the assessment first.');
-      }
+    if (assessmentResponse.ok) {
+      assessmentData = await assessmentResponse.json();
+      console.log('Assessment data loaded:', assessmentData);
+    } else if (assessmentResponse.status === 404) {
+      // No assessment record - build from application data
+      console.warn('Assessment record not found, building from application data');
+      assessmentData = {
+        business_name: applicationData.entity_name || 'N/A',
+        owner_name: applicationData.contact_person || applicationData.entity_name || 'N/A',
+        address: applicationData.parameters?.find(p => p.param_name.toLowerCase().includes('address'))?.param_value || 'N/A',
+        app_number: applicationData.application_number || `#${applicationData.application_id}`,
+        app_type: applicationData.permit_type || 'NEW',
+        app_date: applicationData.created_at,
+        created_at: applicationData.updated_at || applicationData.created_at,
+        fees: (applicationData.assessed_fees || []).map(fee => ({
+          fee_name: fee.fee_name,
+          amount: fee.assessed_amount,
+          quantity: 1,
+          balance_due: fee.assessed_amount,
+          surcharge: 0,
+          interest: 0,
+          total: fee.assessed_amount,
+          category_name: fee.category_name
+        })),
+        total_amount_due: (applicationData.assessed_fees || []).reduce((sum, fee) => sum + parseFloat(fee.assessed_amount || 0), 0),
+        q1_amount: 0,
+        q2_amount: 0,
+        q3_amount: 0,
+        q4_amount: 0
+      };
+    } else if (assessmentResponse.status === 401) {
+      throw new Error('Unauthorized. Please login again.');
+    } else {
       throw new Error(`HTTP Error: ${assessmentResponse.status} ${assessmentResponse.statusText}`);
     }
-    
-    const assessmentData = await assessmentResponse.json();
-    console.log('Assessment data loaded:', assessmentData);
     
     // Fetch settings
     let settings = {};
@@ -201,22 +257,22 @@ async function fetchAssessmentReport() {
       console.warn('Could not fetch settings, using defaults:', settingsError);
     }
     
-    renderReport(assessmentData, settings);
+    renderReport(assessmentData, settings, applicationData);
   } catch (error) {
     console.error('Error fetching assessment data:', error);
     showError(`Failed to load assessment report: ${error.message}`);
   }
 }
 
-function renderReport(appData, settings = {}) {
-  const reportHTML = generateReportHTML(appData, settings);
+function renderReport(appData, settings = {}, applicationData = {}) {
+  const reportHTML = generateReportHTML(appData, settings, applicationData);
   
   document.getElementById('report-content').innerHTML = reportHTML;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('report-content').classList.remove('hidden');
 }
 
-function generateReportHTML(data, settings = {}) {
+function generateReportHTML(data, settings = {}, applicationData = {}) {
   const now = new Date();
   
   const formatDate = (dateStr) => {

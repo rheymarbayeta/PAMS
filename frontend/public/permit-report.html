@@ -221,7 +221,16 @@ if (typeof window !== 'undefined') {
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     apiBaseUrl = 'http://localhost:5000';
   } else {
-    apiBaseUrl = window.location.origin.replace(':3000', ':5000');
+    // Handle different port mappings (frontend:6070 -> backend:5040, frontend:3000 -> backend:5000)
+    const origin = window.location.origin;
+    if (origin.includes(':6070')) {
+      apiBaseUrl = origin.replace(':6070', ':5040');
+    } else if (origin.includes(':3000')) {
+      apiBaseUrl = origin.replace(':3000', ':5000');
+    } else {
+      // Default: assume backend is on port 5000
+      apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+    }
   }
 }
 
@@ -240,8 +249,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function fetchPermitReport() {
   try {
-    const assessmentUrl = `${apiBaseUrl}/api/applications/${applicationId}/assessment-record`;
     const applicationUrl = `${apiBaseUrl}/api/applications/${applicationId}`;
+    const assessmentUrl = `${apiBaseUrl}/api/applications/${applicationId}/assessment-record`;
     const settingsUrl = `${apiBaseUrl}/api/settings`;
     
     const headers = {
@@ -252,53 +261,70 @@ async function fetchPermitReport() {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
     
-    console.log('Fetching assessment from:', assessmentUrl);
+    // First, fetch application data (required)
+    console.log('\n========== FETCH APPLICATION DATA ==========');
+    console.log('Fetching application from:', applicationUrl);
     
-    const assessmentResponse = await fetch(assessmentUrl, {
+    const applicationResponse = await fetch(applicationUrl, {
       method: 'GET',
       headers: headers,
       credentials: 'include'
     });
     
-    if (!assessmentResponse.ok) {
-      if (assessmentResponse.status === 401) {
+    if (!applicationResponse.ok) {
+      if (applicationResponse.status === 401) {
         throw new Error('Unauthorized. Please login again.');
       }
-      if (assessmentResponse.status === 404) {
-        throw new Error('Assessment record not found. Please submit the assessment first.');
+      if (applicationResponse.status === 404) {
+        throw new Error('Application not found.');
       }
-      throw new Error(`HTTP Error: ${assessmentResponse.status} ${assessmentResponse.statusText}`);
+      throw new Error(`HTTP Error: ${applicationResponse.status} ${applicationResponse.statusText}`);
     }
     
-    const assessmentData = await assessmentResponse.json();
-    console.log('Assessment data loaded:', assessmentData);
+    const applicationData = await applicationResponse.json();
+    console.log('✅ Application data loaded successfully');
+    console.log('Full applicationData:', applicationData);
+    console.log('  - application_id:', applicationData.application_id);
+    console.log('  - permit_type:', applicationData.permit_type);
+    console.log('  - permit_type_id:', applicationData.permit_type_id);
+    console.log('  - entity_id:', applicationData.entity_id);
+    console.log('  - entity_name:', applicationData.entity_name);
+    console.log('  - parameters:', applicationData.parameters);
+    console.log('============================================\n');
     
-    // Fetch application data to get permit type name
-    let applicationData = {};
+    // Fetch assessment data (optional - may not exist for all applications)
+    let assessmentData = {};
     try {
-      console.log('\n========== FETCH APPLICATION DATA ==========');
-      console.log('Fetching application from:', applicationUrl);
+      console.log('Fetching assessment from:', assessmentUrl);
       
-      const applicationResponse = await fetch(applicationUrl, {
+      const assessmentResponse = await fetch(assessmentUrl, {
         method: 'GET',
         headers: headers,
         credentials: 'include'
       });
-      if (applicationResponse.ok) {
-        applicationData = await applicationResponse.json();
-        console.log('✅ Application data loaded successfully');
-        console.log('Full applicationData:', applicationData);
-        console.log('  - application_id:', applicationData.application_id);
-        console.log('  - permit_type:', applicationData.permit_type);
-        console.log('  - permit_type_id:', applicationData.permit_type_id);
-        console.log('  - entity_id:', applicationData.entity_id);
-        console.log('  - parameters:', applicationData.parameters);
-        console.log('============================================\n');
+      
+      if (assessmentResponse.ok) {
+        assessmentData = await assessmentResponse.json();
+        console.log('✅ Assessment data loaded:', assessmentData);
       } else {
-        console.error('❌ Application fetch failed with status:', applicationResponse.status);
+        console.warn('⚠️ Assessment record not found, using application data only');
+        // Create assessment data from application data
+        assessmentData = {
+          business_name: applicationData.entity_name || 'N/A',
+          address: applicationData.parameters?.find(p => p.param_name.toLowerCase().includes('address'))?.param_value || 'N/A',
+          app_type: applicationData.permit_type,
+          fees: applicationData.assessed_fees || []
+        };
       }
-    } catch (appError) {
-      console.error('❌ Could not fetch application data:', appError);
+    } catch (assessError) {
+      console.warn('⚠️ Could not fetch assessment data:', assessError);
+      // Create assessment data from application data
+      assessmentData = {
+        business_name: applicationData.entity_name || 'N/A',
+        address: applicationData.parameters?.find(p => p.param_name.toLowerCase().includes('address'))?.param_value || 'N/A',
+        app_type: applicationData.permit_type,
+        fees: applicationData.assessed_fees || []
+      };
     }
     
     // Fetch permit type to get attribute details
@@ -686,6 +712,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('All variables being used in template:');
   console.log('  - permitTypeName:', permitTypeName);
   console.log('  - data.business_name:', data.business_name);
+  console.log('  - applicationData.entity_name:', applicationData.entity_name);
   console.log('  - data.address:', data.address);
   console.log('  - permitActivities:', permitActivities);
   console.log('  - barangay:', barangay);
@@ -694,6 +721,25 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - displayInfo.mode:', displayInfo.mode);
   console.log('  - now:', now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
   console.log('=======================================\n');
+
+  // Get business name with fallback to application data
+  const businessName = data.business_name || applicationData.entity_name || 'N/A';
+  
+  // Get address - try from assessment data, then parameters, then construct from components
+  let businessAddress = data.address;
+  if (!businessAddress || businessAddress === 'N/A') {
+    // Try to get from parameters
+    const addressParam = addressParameters.find(p => 
+      p.param_name.toLowerCase().includes('address') || 
+      p.param_name.toLowerCase().includes('location')
+    );
+    if (addressParam && addressParam.param_value) {
+      businessAddress = addressParam.param_value;
+    } else {
+      // Construct from components
+      businessAddress = `${barangay}, ${municipality}, ${province}`;
+    }
+  }
 
   // Generate permit activities content based on display mode
   const permitActivitiesContent = generatePermitActivitiesHTML(
@@ -710,7 +756,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   // Store metadata for pagination
   window.permitReportMeta = {
     permitTypeName,
-    businessName: data.business_name || 'N/A',
+    businessName: businessName,
     issueDate: now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   };
 
@@ -743,10 +789,10 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
         <!-- Business Information -->
         <div class="avoid-break" style="text-align: center; margin-bottom: 20px; font-size: 25px; text-transform: uppercase;">
           <div style="text-decoration: underline; font-weight: bold; margin-bottom: 10px;">
-            ${data.business_name || 'N/A'}
+            ${businessName}
           </div>
           <div style="font-weight: bold; font-size: 16px">
-            <strong>Address:</strong> <strong>${data.address || 'N/A'}</strong>
+            <strong>Address:</strong> <strong>${businessAddress}</strong>
           </div>
         </div>
 
