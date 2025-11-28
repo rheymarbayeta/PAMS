@@ -285,13 +285,17 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Delete application (only if not assessed yet)
-router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
+// Delete application
+// - SuperAdmin: Can delete any application
+// - Admin, Application Creator: Can only delete applications with status 'Pending'
+// - Viewer: Cannot delete
+router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     
     const applicationId = req.params.id;
+    const userRole = req.user.role_name;
 
     // Get application details
     const [applications] = await connection.execute(
@@ -305,6 +309,12 @@ router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
     }
 
     const application = applications[0];
+
+    // Non-SuperAdmin users can only delete Pending applications
+    if (userRole !== 'SuperAdmin' && application.status !== 'Pending') {
+      await connection.rollback();
+      return res.status(403).json({ error: 'You can only delete applications that are not yet assessed (Pending status)' });
+    }
 
     // Delete related records in order (child tables first)
     // 1. Delete assessment_record_fees (child of assessment_records)

@@ -109,10 +109,11 @@ export default function ApplicationDetailPage() {
   const canPrintPermit = application?.status === 'Paid' || application?.status === 'Issued' || application?.status === 'Released';
   const canRenew = user && hasRole(['SuperAdmin', 'Admin', 'Application Creator']) && 
     (application?.status === 'Issued' || application?.status === 'Released');
+  // SuperAdmin can delete any application, others can only delete Pending applications
   const canDelete =
     user &&
-    hasRole(['SuperAdmin', 'Admin']) &&
-    application?.status === 'Pending';
+    (hasRole('SuperAdmin') || 
+     (hasRole(['Admin', 'Application Creator']) && application?.status === 'Pending'));
 
   const handleIssuePermit = async () => {
     if (!application) return;
