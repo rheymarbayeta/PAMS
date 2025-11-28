@@ -474,18 +474,18 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
               <td style="width: 50%; vertical-align: top; padding: 0;">
                 <table style="width: 100%; border-collapse: collapse;">
                   <tr>
-                    <td style="width: 70%; text-align: right; padding: 0px; padding-right: 8px;"><strong>Total Balance Due:</strong></td>
-                    <td style="width: 30%; text-align: right; padding: 0px; font-weight: bold; font-size: 12px;">
+                    <td style="width: 70%; text-align: right; padding: 4px 8px 4px 0;"><strong>Total Balance Due:</strong></td>
+                    <td style="width: 30%; text-align: right; padding: 4px 0; font-weight: bold; font-size: 12px;">
                       ${formatCurrency(data.total_balance_due || 0)}
                     </td>
                   </tr>
                   <tr>
-                    <td style="width: 70%; text-align: right; padding: 0px; padding-right: 8px;"><strong>Total Surcharge:</strong></td>
-                    <td style="width: 30%; text-align: right; padding: 0px;">${formatCurrency(data.total_surcharge || 0)}</td>
+                    <td style="width: 70%; text-align: right; padding: 4px 8px 4px 0;"><strong>Total Surcharge:</strong></td>
+                    <td style="width: 30%; text-align: right; padding: 4px 0;">${formatCurrency(data.total_surcharge || 0)}</td>
                   </tr>
                   <tr>
-                    <td style="width: 70%; text-align: right; padding: 0px; padding-right: 8px;"><strong>Total Interest:</strong></td>
-                    <td style="width: 30%; text-align: right; padding: 0px;">${formatCurrency(data.total_interest || 0)}</td>
+                    <td style="width: 70%; text-align: right; padding: 4px 8px 4px 0;"><strong>Total Interest:</strong></td>
+                    <td style="width: 30%; text-align: right; padding: 4px 0;">${formatCurrency(data.total_interest || 0)}</td>
                   </tr>
                 </table>
               </td>
