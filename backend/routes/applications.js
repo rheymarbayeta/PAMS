@@ -451,8 +451,8 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
       }
 
       const [result] = await connection.execute(
-        'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, permit_type_id, 'Pending']
+        'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, rule_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, permit_type_id, rule_id || null, 'Pending']
       );
 
       // Insert parameters
@@ -477,6 +477,7 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
       console.log('  - entity_id:', entity_id);
       console.log('  - permit_type:', permit_type);
       console.log('  - permit_type_id:', permit_type_id);
+      console.log('  - rule_id:', rule_id);
       console.log('  - creator_id:', req.user.user_id);
 
       // Log and notify

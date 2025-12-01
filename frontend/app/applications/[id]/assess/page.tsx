@@ -26,16 +26,9 @@ interface Application {
   application_id: string;
   application_number: string | null;
   permit_type: string;
+  rule_id: string | null;
   status: string;
   assessed_fees: AssessedFee[];
-}
-
-interface PermitTypeOption {
-  permit_type_id: number;
-  permit_type_name: string;
-  attribute_id: number | null;
-  attribute_name: string | null;
-  is_active?: boolean;
 }
 
 interface RuleFeeDefinition {
@@ -126,34 +119,20 @@ export default function AssessApplicationPage() {
   }, [params.id]);
 
   const autoPopulateFees = async (
-    app: Application,
-    availablePermitTypes: PermitTypeOption[]
+    app: Application
   ): Promise<AutoPopulateResult> => {
     try {
-      if (!availablePermitTypes.length) {
-        console.warn('[Assess] No permit types available for auto population');
-        return 'error';
-      }
-
-      const permitType = availablePermitTypes.find(
-        (pt) => pt.permit_type_name === app.permit_type
-      );
-
-      if (!permitType) {
-        console.warn('[Assess] No matching permit type found for', app.permit_type);
+      // If application has a rule_id, use it directly to fetch fees
+      if (!app.rule_id) {
+        console.warn('[Assess] Application does not have a rule_id assigned');
         return 'no-rule';
       }
 
-      if (!permitType.attribute_id) {
-        console.warn('[Assess] Permit type has no attribute assigned');
-        return 'no-rule';
-      }
-
-      const ruleResponse = await api.get(`/api/assessment-rules/lookup/${permitType.permit_type_id}/${permitType.attribute_id}`);
+      const ruleResponse = await api.get(`/api/assessment-rules/${app.rule_id}`);
       const ruleFees: RuleFeeDefinition[] = ruleResponse.data?.fees || [];
 
       if (!ruleFees.length) {
-        console.warn('[Assess] No fees found for matching assessment rule');
+        console.warn('[Assess] No fees found for assessment rule:', app.rule_id);
         return 'no-rule';
       }
 
@@ -180,7 +159,7 @@ export default function AssessApplicationPage() {
       return 'success';
     } catch (error: any) {
       if (error?.response?.status === 404) {
-        console.warn('[Assess] No assessment rule found for this permit/attribute combination');
+        console.warn('[Assess] Assessment rule not found:', app.rule_id);
         return 'no-rule';
       }
       console.error('[Assess] Error auto-populating fees:', error);
@@ -192,14 +171,12 @@ export default function AssessApplicationPage() {
     setLoading(true);
     setAutoNotice(null);
     try {
-      const [appResponse, feesResponse, permitTypesResponse] = await Promise.all([
+      const [appResponse, feesResponse] = await Promise.all([
         api.get(`/api/applications/${params.id}`),
         api.get('/api/fees/charges'),
-        api.get('/api/permit-types'),
       ]);
 
       let appData: Application = appResponse.data;
-      const permitTypeData: PermitTypeOption[] = permitTypesResponse.data || [];
 
       if (!autoPopulateAttemptedRef.current && appData.assessed_fees.length === 0) {
         autoPopulateAttemptedRef.current = true;
@@ -207,7 +184,7 @@ export default function AssessApplicationPage() {
           type: 'info',
           message: 'Loading default fees based on the assessment rule...',
         });
-        const result = await autoPopulateFees(appData, permitTypeData);
+        const result = await autoPopulateFees(appData);
         if (result === 'success') {
           const refreshedApp = await api.get(`/api/applications/${params.id}`);
           appData = refreshedApp.data;
