@@ -829,7 +829,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     // Create or update assessment record
     const [existingRecords] = await connection.execute(
-      'SELECT assessment_id FROM Assessment_Records WHERE application_id = ?',
+      'SELECT assessment_id FROM assessment_records WHERE application_id = ?',
       [applicationId]
     );
 
