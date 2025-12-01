@@ -237,7 +237,7 @@ export default function ApplicationDetailPage() {
                 </div>
                 
                 {/* Action Buttons - Horizontal scroll on mobile */}
-                <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide touch-scroll">
+                <div className={`flex gap-2 pb-2 -mx-2 px-2 scrollbar-hide touch-scroll ${showReportsDropdown ? 'overflow-visible' : 'overflow-x-auto'}`}>
                   {/* Reports Dropdown - shows when there are reports available */}
                   {((canPrintPermit && application.status !== 'Paid') || ((application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0)) && (
                     <div className="relative flex-shrink-0">
@@ -255,7 +255,7 @@ export default function ApplicationDetailPage() {
                         </svg>
                       </button>
                       {showReportsDropdown && (
-                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50">
+                        <div className="absolute left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50">
                           {canPrintPermit && application.status !== 'Paid' && (
                             <button
                               onClick={() => {
