@@ -478,9 +478,12 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
             }
           }
           
+          const rule_fee_id = generateId(ID_PREFIXES.ASSESSMENT_RULE_FEE);
+          
           await connection.execute(
-            'INSERT INTO assessment_rule_fees (rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO assessment_rule_fees (rule_fee_id, rule_id, fee_id, fee_name, amount, is_required, fee_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
+              rule_fee_id,
               ruleId,
               fee.fee_id,
               feeName || 'Unknown Fee',
