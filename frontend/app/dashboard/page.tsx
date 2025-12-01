@@ -26,14 +26,31 @@ export default function DashboardPage() {
     total: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [permitCategories, setPermitCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+
+  useEffect(() => {
+    fetchPermitCategories();
+  }, []);
 
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [selectedCategory]);
+
+  const fetchPermitCategories = async () => {
+    try {
+      const response = await api.get('/api/dashboard/permit-categories');
+      setPermitCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching permit categories:', error);
+    }
+  };
 
   const fetchStats = async () => {
     try {
-      const response = await api.get('/api/dashboard/stats');
+      setLoading(true);
+      const params = selectedCategory ? `?permitCategory=${encodeURIComponent(selectedCategory)}` : '';
+      const response = await api.get(`/api/dashboard/stats${params}`);
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -80,6 +97,37 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Permit Category Tabs */}
+          {permitCategories.length > 0 && (
+            <div className="mb-6">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setSelectedCategory('')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    selectedCategory === ''
+                      ? 'bg-slate-800 text-white shadow-md'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  All Permits
+                </button>
+                {permitCategories.map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      selectedCategory === category
+                        ? 'bg-slate-800 text-white shadow-md'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Stats Grid - 2 columns on mobile, 3 on tablet, 6 on desktop */}
           <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-5 sm:grid-cols-3 xl:grid-cols-6">

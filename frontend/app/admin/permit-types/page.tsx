@@ -14,6 +14,7 @@ interface PermitType {
   description: string | null;
   is_active: boolean;
   validity_date: string | null;
+  validity_type: 'fixed' | 'custom';
   fees?: PermitTypeFee[];
 }
 
@@ -43,10 +44,10 @@ export default function PermitTypesPage() {
   const [editingPermitType, setEditingPermitType] = useState<PermitType | null>(null);
   const [formData, setFormData] = useState({
     permit_type_name: '',
-    attribute_id: '',
     description: '',
     is_active: true,
     validity_date: '',
+    validity_type: 'fixed' as 'fixed' | 'custom',
   });
   const [attributes, setAttributes] = useState<Array<{ attribute_id: string; attribute_name: string }>>([]);
   const [permitTypeFees, setPermitTypeFees] = useState<PermitTypeFee[]>([]);
@@ -61,7 +62,6 @@ export default function PermitTypesPage() {
   useEffect(() => {
     fetchPermitTypes();
     fetchAllFees();
-    fetchAttributes();
   }, []);
 
   const fetchAttributes = async () => {
@@ -148,7 +148,7 @@ export default function PermitTypesPage() {
     try {
       const payload = {
         ...formData,
-        attribute_id: formData.attribute_id || null,
+        attribute_id: null, // No longer using attribute on permit types
         fees: permitTypeFees,
       };
 
@@ -163,7 +163,7 @@ export default function PermitTypesPage() {
       }
       setShowModal(false);
       setEditingPermitType(null);
-      setFormData({ permit_type_name: '', attribute_id: '', description: '', is_active: true, validity_date: '' });
+      setFormData({ permit_type_name: '', description: '', is_active: true, validity_date: '', validity_type: 'fixed' });
       setPermitTypeFees([]);
       fetchPermitTypes();
     } catch (error: any) {
@@ -181,10 +181,10 @@ export default function PermitTypesPage() {
       setEditingPermitType(fullPermitType);
       setFormData({
         permit_type_name: fullPermitType.permit_type_name,
-        attribute_id: fullPermitType.attribute_id || '',
         description: fullPermitType.description || '',
         is_active: fullPermitType.is_active,
         validity_date: fullPermitType.validity_date || '',
+        validity_type: fullPermitType.validity_type || 'fixed',
       });
       setPermitTypeFees(fullPermitType.fees || []);
       setShowModal(true);
@@ -305,7 +305,7 @@ export default function PermitTypesPage() {
             <button
               onClick={() => {
                 setEditingPermitType(null);
-                setFormData({ permit_type_name: '', attribute_id: '', description: '', is_active: true, validity_date: '' });
+                setFormData({ permit_type_name: '', description: '', is_active: true, validity_date: '', validity_type: 'fixed' });
                 setPermitTypeFees([]);
                 setShowModal(true);
               }}
@@ -325,9 +325,6 @@ export default function PermitTypesPage() {
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Permit Type
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Attribute
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Description
@@ -356,22 +353,17 @@ export default function PermitTypesPage() {
                         <span className="text-sm font-medium text-gray-900">{permitType.permit_type_name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {permitType.attribute_name ? (
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
-                          {permitType.attribute_name}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-gray-400">-</span>
-                      )}
-                    </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-500 max-w-xs truncate">
                         {permitType.description || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {permitType.validity_date ? (
+                      {permitType.validity_type === 'custom' ? (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-medium">
+                          Custom (N/A)
+                        </span>
+                      ) : permitType.validity_date ? (
                         <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full font-medium">
                           {new Date(permitType.validity_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
@@ -461,37 +453,10 @@ export default function PermitTypesPage() {
                       onChange={(e) =>
                         setFormData({ ...formData, permit_type_name: e.target.value })
                       }
+                      placeholder="e.g., Mayor's Permit, Special Mayor's Permit"
                       aria-label="Permit type name"
                     />
-                  </div>
-                  <div className="mb-5">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Attribute
-                    </label>
-                    <div className="flex gap-2">
-                      <select
-                        className="flex-1 bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        value={formData.attribute_id}
-                        onChange={(e) =>
-                          setFormData({ ...formData, attribute_id: e.target.value })
-                        }
-                        aria-label="Select attribute"
-                      >
-                        <option value="">No Attribute</option>
-                        {attributes.map((attr) => (
-                          <option key={attr.attribute_id} value={attr.attribute_id}>
-                            {attr.attribute_name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => setShowAttributeModal(true)}
-                        className="px-4 py-2.5 text-sm bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200"
-                      >
-                        + Add New
-                      </button>
-                    </div>
+                    <p className="text-xs text-gray-400 mt-1">This will serve as the permit category for grouping in the dashboard</p>
                   </div>
                   <div className="mb-5">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -509,20 +474,42 @@ export default function PermitTypesPage() {
                   </div>
                   <div className="mb-5">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Validity Date
+                      Validity
                     </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="date"
-                        className="w-48 bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        value={formData.validity_date}
-                        onChange={(e) =>
-                          setFormData({ ...formData, validity_date: e.target.value })
-                        }
-                        aria-label="Permit validity date"
-                      />
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                          checked={formData.validity_type === 'custom'}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, validity_type: 'custom', validity_date: '' });
+                            } else {
+                              setFormData({ ...formData, validity_type: 'fixed' });
+                            }
+                          }}
+                        />
+                        <div>
+                          <span className="text-sm font-medium text-gray-700">N/A (Custom Validity)</span>
+                          <p className="text-xs text-gray-400">Validity will be based on the "Date" parameter in the application</p>
+                        </div>
+                      </label>
+                      {formData.validity_type === 'fixed' && (
+                        <div className="flex items-center gap-3 pl-1">
+                          <input
+                            type="date"
+                            className="w-48 bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                            value={formData.validity_date}
+                            onChange={(e) =>
+                              setFormData({ ...formData, validity_date: e.target.value })
+                            }
+                            aria-label="Permit validity date"
+                          />
+                          <p className="text-xs text-gray-400">e.g., December 31, 2025</p>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">All permits of this type will be valid until this date (e.g., December 31, 2025)</p>
                   </div>
                   <div className="mb-5">
                     <label className="flex items-center gap-2 cursor-pointer">

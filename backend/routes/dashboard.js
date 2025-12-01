@@ -7,69 +7,103 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Get distinct permit type names for dashboard grouping
+router.get('/permit-categories', async (req, res) => {
+  try {
+    const [categories] = await pool.execute(
+      `SELECT DISTINCT permit_type_name 
+       FROM permit_types 
+       WHERE is_active = 1 
+       ORDER BY permit_type_name`
+    );
+    res.json(categories.map(c => c.permit_type_name));
+  } catch (error) {
+    console.error('Get permit categories error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get dashboard statistics
 router.get('/stats', async (req, res) => {
   try {
     const userId = req.user.user_id;
     const roleName = req.user.role_name;
+    const permitCategory = req.query.permitCategory; // Optional filter by permit type name
 
-    let pendingQuery = 'SELECT COUNT(*) as count FROM applications WHERE status = ?';
+    let pendingQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status = ?';
     let pendingParams = ['Pending'];
 
-    let pendingApprovalQuery = 'SELECT COUNT(*) as count FROM applications WHERE status = ?';
+    let pendingApprovalQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status = ?';
     let pendingApprovalParams = ['Pending Approval'];
 
-    let approvedQuery = 'SELECT COUNT(*) as count FROM applications WHERE status IN (?, ?)';
+    let approvedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status IN (?, ?)';
     let approvedParams = ['Approved', 'Paid'];
 
-    let issuedQuery = 'SELECT COUNT(*) as count FROM applications WHERE status IN (?, ?)';
+    let issuedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status IN (?, ?)';
     let issuedParams = ['Issued', 'Released'];
 
-    let releasedQuery = 'SELECT COUNT(*) as count FROM applications WHERE status = ?';
+    let releasedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status = ?';
     let releasedParams = ['Released'];
 
-    let totalQuery = 'SELECT COUNT(*) as count FROM applications';
+    let totalQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name';
     let totalParams = [];
+    let hasWhere = false;
+
+    // Filter by permit category (permit_type_name) if provided
+    if (permitCategory) {
+      pendingQuery += ' AND pt.permit_type_name = ?';
+      pendingParams.push(permitCategory);
+      pendingApprovalQuery += ' AND pt.permit_type_name = ?';
+      pendingApprovalParams.push(permitCategory);
+      approvedQuery += ' AND pt.permit_type_name = ?';
+      approvedParams.push(permitCategory);
+      issuedQuery += ' AND pt.permit_type_name = ?';
+      issuedParams.push(permitCategory);
+      releasedQuery += ' AND pt.permit_type_name = ?';
+      releasedParams.push(permitCategory);
+      totalQuery += ' WHERE pt.permit_type_name = ?';
+      totalParams.push(permitCategory);
+      hasWhere = true;
+    }
 
     // Role-based filtering
     if (roleName === 'Application Creator') {
-      pendingQuery += ' AND creator_id = ?';
+      pendingQuery += ' AND a.creator_id = ?';
       pendingParams.push(userId);
-      pendingApprovalQuery += ' AND creator_id = ?';
+      pendingApprovalQuery += ' AND a.creator_id = ?';
       pendingApprovalParams.push(userId);
-      approvedQuery += ' AND creator_id = ?';
+      approvedQuery += ' AND a.creator_id = ?';
       approvedParams.push(userId);
-      issuedQuery += ' AND creator_id = ?';
+      issuedQuery += ' AND a.creator_id = ?';
       issuedParams.push(userId);
-      releasedQuery += ' AND creator_id = ?';
+      releasedQuery += ' AND a.creator_id = ?';
       releasedParams.push(userId);
-      totalQuery += ' WHERE creator_id = ?';
+      totalQuery += (hasWhere ? ' AND' : ' WHERE') + ' a.creator_id = ?';
       totalParams.push(userId);
     } else if (roleName === 'Assessor') {
-      pendingQuery += ' AND (status = ? OR assessor_id = ?)';
-      pendingParams = ['Pending', userId];
-      pendingApprovalQuery += ' AND assessor_id = ?';
+      pendingQuery += ' AND (a.status = ? OR a.assessor_id = ?)';
+      pendingParams.push('Pending', userId);
+      pendingApprovalQuery += ' AND a.assessor_id = ?';
       pendingApprovalParams.push(userId);
-      approvedQuery += ' AND assessor_id = ?';
+      approvedQuery += ' AND a.assessor_id = ?';
       approvedParams.push(userId);
-      issuedQuery += ' AND assessor_id = ?';
+      issuedQuery += ' AND a.assessor_id = ?';
       issuedParams.push(userId);
-      releasedQuery += ' AND assessor_id = ?';
+      releasedQuery += ' AND a.assessor_id = ?';
       releasedParams.push(userId);
-      totalQuery += ' WHERE assessor_id = ? OR status = ?';
-      totalParams = [userId, 'Pending'];
+      totalQuery += (hasWhere ? ' AND' : ' WHERE') + ' (a.assessor_id = ? OR a.status = ?)';
+      totalParams.push(userId, 'Pending');
     } else if (roleName === 'Approver') {
-      pendingQuery += ' AND status = ?';
-      pendingApprovalQuery += ' AND (status = ? OR approver_id = ?)';
-      pendingApprovalParams = ['Pending Approval', userId];
-      approvedQuery += ' AND approver_id = ?';
+      pendingApprovalQuery += ' AND (a.status = ? OR a.approver_id = ?)';
+      pendingApprovalParams.push('Pending Approval', userId);
+      approvedQuery += ' AND a.approver_id = ?';
       approvedParams.push(userId);
-      issuedQuery += ' AND approver_id = ?';
+      issuedQuery += ' AND a.approver_id = ?';
       issuedParams.push(userId);
-      releasedQuery += ' AND approver_id = ?';
+      releasedQuery += ' AND a.approver_id = ?';
       releasedParams.push(userId);
-      totalQuery += ' WHERE approver_id = ? OR status = ?';
-      totalParams = [userId, 'Pending Approval'];
+      totalQuery += (hasWhere ? ' AND' : ' WHERE') + ' (a.approver_id = ? OR a.status = ?)';
+      totalParams.push(userId, 'Pending Approval');
     }
 
     const [pending] = await pool.execute(pendingQuery, pendingParams);

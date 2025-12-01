@@ -16,12 +16,15 @@ interface Entity {
   phone: string | null;
 }
 
-interface PermitTypeOption {
+interface AssessmentRuleOption {
+  rule_id: string;
   permit_type_id: string;
   permit_type_name: string;
-  attribute_id?: string | null;
-  attribute_name?: string | null;
-  is_active?: boolean;
+  attribute_id: string;
+  attribute_name: string;
+  rule_name: string;
+  is_active: boolean;
+  validity_type?: 'fixed' | 'custom';
 }
 
 export default function NewApplicationPage() {
@@ -32,13 +35,14 @@ export default function NewApplicationPage() {
   const [entitySearch, setEntitySearch] = useState('');
   const [showEntityDropdown, setShowEntityDropdown] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
-  const [permitTypes, setPermitTypes] = useState<PermitTypeOption[]>([]);
+  const [assessmentRules, setAssessmentRules] = useState<AssessmentRuleOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [availableMunicipalities] = useState<string[]>(Object.keys(BARANGAYS_BY_MUNICIPALITY));
   const [availableBarangays, setAvailableBarangays] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     entity_id: '',
     permit_type: '',
+    rule_id: '',
     municipality: '',
     province: '',
     country: '',
@@ -48,17 +52,18 @@ export default function NewApplicationPage() {
 
   useEffect(() => {
     fetchEntities();
-    fetchPermitTypes();
+    fetchAssessmentRules();
     fetchDefaultSettings();
   }, []);
 
-  const fetchPermitTypes = async () => {
+  const fetchAssessmentRules = async () => {
     try {
-      const response = await api.get('/api/permit-types');
-      const activePermitTypes = response.data.filter((pt: PermitTypeOption) => pt.is_active);
-      setPermitTypes(activePermitTypes);
+      const response = await api.get('/api/assessment-rules');
+      // Filter only active rules
+      const activeRules = response.data.filter((rule: AssessmentRuleOption) => rule.is_active);
+      setAssessmentRules(activeRules);
     } catch (error) {
-      console.error('Error fetching permit types:', error);
+      console.error('Error fetching assessment rules:', error);
     }
   };
 
@@ -165,6 +170,12 @@ export default function NewApplicationPage() {
       return;
     }
 
+    // Validate rule is selected
+    if (!formData.rule_id) {
+      alert('Please select a permit type');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -180,6 +191,7 @@ export default function NewApplicationPage() {
       const response = await api.post('/api/applications', {
         entity_id: formData.entity_id,
         permit_type: formData.permit_type,
+        rule_id: formData.rule_id,
         parameters: parameters,
       });
 
@@ -193,8 +205,8 @@ export default function NewApplicationPage() {
   };
 
   const canCreate = user && hasRole(['SuperAdmin', 'Admin', 'Application Creator']);
-  const selectedPermitType = permitTypes.find(
-    (pt) => pt.permit_type_name === formData.permit_type
+  const selectedRule = assessmentRules.find(
+    (r) => r.rule_id === formData.rule_id
   );
 
   if (!canCreate) {
@@ -330,28 +342,33 @@ export default function NewApplicationPage() {
                 id="permit_type"
                 required
                 className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                value={formData.permit_type}
-                onChange={(e) => setFormData({ ...formData, permit_type: e.target.value })}
+                value={formData.rule_id}
+                onChange={(e) => {
+                  const selectedRule = assessmentRules.find(r => r.rule_id === e.target.value);
+                  setFormData({ 
+                    ...formData, 
+                    rule_id: e.target.value,
+                    permit_type: selectedRule ? selectedRule.rule_name : ''
+                  });
+                }}
                 aria-label="Select permit type"
               >
                 <option value="">Select a permit type</option>
-                {permitTypes.map((permitType) => {
-                  const label = permitType.attribute_name
-                    ? `${permitType.permit_type_name} (${permitType.attribute_name})`
-                    : permitType.permit_type_name;
+                {assessmentRules.map((rule) => {
+                  const label = `${rule.permit_type_name} - ${rule.attribute_name}`;
                   return (
-                    <option key={permitType.permit_type_id} value={permitType.permit_type_name}>
+                    <option key={rule.rule_id} value={rule.rule_id}>
                       {label}
                     </option>
                   );
                 })}
               </select>
-              {selectedPermitType?.attribute_name && (
+              {formData.rule_id && (
                 <p className="mt-2 text-sm text-indigo-600 flex items-center gap-1">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                   </svg>
-                  Attribute: <span className="font-medium">{selectedPermitType.attribute_name}</span>
+                  Selected: <span className="font-medium">{formData.permit_type}</span>
                 </p>
               )}
             </div>

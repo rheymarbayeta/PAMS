@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
   try {
     const [rules] = await pool.execute(
       `SELECT ar.rule_id, ar.permit_type_id, ar.attribute_id, ar.rule_name, ar.description, ar.is_active,
-              pt.permit_type_name, a.attribute_name
+              pt.permit_type_name, pt.validity_type, a.attribute_name
        FROM assessment_rules ar
        INNER JOIN permit_types pt ON ar.permit_type_id = pt.permit_type_id
        LEFT JOIN attributes a ON ar.attribute_id = a.attribute_id

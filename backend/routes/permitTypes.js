@@ -102,11 +102,12 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   await connection.beginTransaction();
   
   try {
-    const { permit_type_name, attribute_id, description, is_active, validity_date, fees } = req.body;
+    const { permit_type_name, attribute_id, description, is_active, validity_date, validity_type, fees } = req.body;
 
     console.log('[PermitTypes] POST request received');
     console.log('[PermitTypes] permit_type_name:', permit_type_name);
     console.log('[PermitTypes] validity_date:', validity_date);
+    console.log('[PermitTypes] validity_type:', validity_type);
     console.log('[PermitTypes] attribute_id:', attribute_id);
     console.log('[PermitTypes] attribute_id type:', typeof attribute_id);
     console.log('[PermitTypes] description:', description);
@@ -141,9 +142,14 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 
     console.log('[PermitTypes] Final validAttributeId:', validAttributeId);
 
+    // Handle validity_type - default to 'fixed' if not provided
+    const validityTypeValue = validity_type || 'fixed';
+    // If validity_type is 'custom', validity_date should be null
+    const validityDateValue = validityTypeValue === 'custom' ? null : (validity_date || null);
+
     const [result] = await connection.execute(
-      'INSERT INTO permit_types (permit_type_id, permit_type_name, attribute_id, description, is_active, validity_date) VALUES (?, ?, ?, ?, ?, ?)',
-      [permit_type_id, permit_type_name, validAttributeId, description || null, is_active !== undefined ? is_active : true, validity_date || null]
+      'INSERT INTO permit_types (permit_type_id, permit_type_name, attribute_id, description, is_active, validity_date, validity_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [permit_type_id, permit_type_name, validAttributeId, description || null, is_active !== undefined ? is_active : true, validityDateValue, validityTypeValue]
     );
 
     // Insert associated fees if provided
@@ -171,10 +177,11 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     res.status(201).json({
       permit_type_id,
       permit_type_name,
-      attribute_id: attribute_id || null,
+      attribute_id: validAttributeId || null,
       description,
       is_active: is_active !== undefined ? is_active : true,
-      validity_date: validity_date || null
+      validity_date: validityDateValue,
+      validity_type: validityTypeValue
     });
   } catch (error) {
     await connection.rollback();
@@ -197,7 +204,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   await connection.beginTransaction();
   
   try {
-    const { permit_type_name, attribute_id, description, is_active, validity_date, fees } = req.body;
+    const { permit_type_name, attribute_id, description, is_active, validity_date, validity_type, fees } = req.body;
     const permitTypeId = req.params.id;
 
     if (!permit_type_name) {
@@ -205,10 +212,15 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       return res.status(400).json({ error: 'Permit type name is required' });
     }
 
+    // Handle validity_type - default to 'fixed' if not provided
+    const validityTypeValue = validity_type || 'fixed';
+    // If validity_type is 'custom', validity_date should be null
+    const validityDateValue = validityTypeValue === 'custom' ? null : (validity_date || null);
+
     // Update permit type
     const [result] = await connection.execute(
-      'UPDATE permit_types SET permit_type_name = ?, attribute_id = ?, description = ?, is_active = ?, validity_date = ? WHERE permit_type_id = ?',
-      [permit_type_name, attribute_id || null, description || null, is_active !== undefined ? is_active : true, validity_date || null, permitTypeId]
+      'UPDATE permit_types SET permit_type_name = ?, attribute_id = ?, description = ?, is_active = ?, validity_date = ?, validity_type = ? WHERE permit_type_id = ?',
+      [permit_type_name, attribute_id || null, description || null, is_active !== undefined ? is_active : true, validityDateValue, validityTypeValue, permitTypeId]
     );
 
     if (result.affectedRows === 0) {

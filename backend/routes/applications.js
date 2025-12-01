@@ -414,7 +414,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Application Creator'), a
 // Create new application
 router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
   try {
-    const { entity_id, permit_type, parameters } = req.body;
+    const { entity_id, permit_type, rule_id, parameters } = req.body;
 
     if (!entity_id || !permit_type) {
       return res.status(400).json({ error: 'Entity ID and permit type are required' });
@@ -432,12 +432,23 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
       // Create application
       const application_id = generateId(ID_PREFIXES.APPLICATION);
 
-      // Get permit_type_id from permit_type name
-      const [permitTypes] = await connection.execute(
-        'SELECT permit_type_id FROM permit_types WHERE permit_type_name = ? LIMIT 1',
-        [permit_type]
-      );
-      const permit_type_id = permitTypes.length > 0 ? permitTypes[0].permit_type_id : null;
+      // Get permit_type_id from rule_id if provided, otherwise from permit_type name
+      let permit_type_id = null;
+      if (rule_id) {
+        const [rules] = await connection.execute(
+          'SELECT permit_type_id FROM assessment_rules WHERE rule_id = ? LIMIT 1',
+          [rule_id]
+        );
+        permit_type_id = rules.length > 0 ? rules[0].permit_type_id : null;
+      }
+      
+      if (!permit_type_id) {
+        const [permitTypes] = await connection.execute(
+          'SELECT permit_type_id FROM permit_types WHERE permit_type_name = ? LIMIT 1',
+          [permit_type]
+        );
+        permit_type_id = permitTypes.length > 0 ? permitTypes[0].permit_type_id : null;
+      }
 
       const [result] = await connection.execute(
         'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -1391,7 +1402,8 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
     // Check current status and get permit type info for validity
     const [apps] = await pool.execute(
       `SELECT a.status, a.application_number, a.permit_type_id, a.permit_type,
-              pt.validity_date as permit_type_validity_date
+              pt.validity_date as permit_type_validity_date,
+              pt.validity_type as permit_type_validity_type
        FROM Applications a
        LEFT JOIN Permit_Types pt ON a.permit_type_id = pt.permit_type_id
        WHERE a.application_id = ?`,
@@ -1406,11 +1418,37 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       return res.status(400).json({ error: 'Permit can only be issued for paid applications' });
     }
 
-    // Get validity date from permit type (or null if not set)
-    const validityDate = apps[0].permit_type_validity_date || null;
-    const validityDateFormatted = validityDate ? new Date(validityDate).toISOString().split('T')[0] : null;
+    // Determine validity date based on validity_type
+    let validityDate = null;
+    let validityMsg = 'No validity date set';
     
-    // Update status to Issued with validity_date from permit type
+    if (apps[0].permit_type_validity_type === 'custom') {
+      // For custom validity, look for "Date" parameter in application_parameters
+      const [dateParams] = await pool.execute(
+        `SELECT param_value FROM application_parameters 
+         WHERE application_id = ? AND param_name = 'Date'
+         LIMIT 1`,
+        [applicationId]
+      );
+      
+      if (dateParams.length > 0 && dateParams[0].param_value) {
+        // Store the custom date string as-is (e.g., "December 3 to 8, 2025")
+        validityDate = dateParams[0].param_value;
+        validityMsg = `Custom validity: ${validityDate}`;
+      } else {
+        validityMsg = 'Custom validity (no Date parameter found)';
+      }
+    } else {
+      // For fixed validity, use the permit_type_validity_date
+      validityDate = apps[0].permit_type_validity_date || null;
+      if (validityDate) {
+        validityDate = new Date(validityDate).toISOString().split('T')[0];
+        validityMsg = `Valid until ${validityDate}`;
+      }
+    }
+    
+    // Update status to Issued with validity_date
+    // Note: For custom validity, we store the text as-is; for fixed, it's a date
     await pool.execute(
       `UPDATE Applications 
        SET status = ?, 
@@ -1419,11 +1457,10 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
            validity_date = ?,
            updated_at = CURRENT_TIMESTAMP 
        WHERE application_id = ?`,
-      ['Issued', req.user.user_id, validityDateFormatted, applicationId]
+      ['Issued', req.user.user_id, validityDate, applicationId]
     );
 
     // Log action
-    const validityMsg = validityDateFormatted ? `Valid until ${validityDateFormatted}` : 'No validity date set';
     await logAction(
       req.user.user_id,
       'ISSUE_PERMIT',
@@ -1431,7 +1468,7 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       applicationId
     );
 
-    res.json({ message: 'Permit issued successfully', validity_date: validityDateFormatted });
+    res.json({ message: 'Permit issued successfully', validity_date: validityDate, validity_type: apps[0].permit_type_validity_type || 'fixed' });
   } catch (error) {
     console.error('Issue permit error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });

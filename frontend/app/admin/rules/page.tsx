@@ -70,6 +70,12 @@ export default function RulesPage() {
     is_active: true,
   });
   const [ruleFees, setRuleFees] = useState<RuleFee[]>([]);
+  const [showAttributeModal, setShowAttributeModal] = useState(false);
+  const [attributeFormData, setAttributeFormData] = useState({
+    attribute_name: '',
+    description: '',
+    is_active: true,
+  });
   useEffect(() => {
     fetchRules();
     fetchPermitTypes();
@@ -273,6 +279,27 @@ export default function RulesPage() {
     console.log('[Rules] Form data updated');
   };
 
+  const handleCreateAttribute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('[Rules] Creating attribute:', attributeFormData);
+    try {
+      const response = await api.post('/api/attributes', attributeFormData);
+      console.log('[Rules] Attribute created successfully:', response.data);
+      setShowAttributeModal(false);
+      setAttributeFormData({ attribute_name: '', description: '', is_active: true });
+      await fetchAttributes();
+      // Auto-select the newly created attribute
+      if (response.data.attribute_id) {
+        setFormData({ ...formData, attribute_id: response.data.attribute_id.toString() });
+        console.log('[Rules] Auto-selected new attribute:', response.data.attribute_id);
+      }
+      alert('Attribute created successfully!');
+    } catch (error: any) {
+      console.error('[Rules] Error creating attribute:', error);
+      alert(error.response?.data?.error || 'Error creating attribute');
+    }
+  };
+
   if (loading) {
     return (
       <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
@@ -468,20 +495,29 @@ export default function RulesPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Attribute *
                       </label>
-                      <select
-                        required
-                        className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                        value={formData.attribute_id}
-                        onChange={(e) => handleAttributeChange(e.target.value)}
-                        aria-label="Select attribute"
-                      >
-                        <option value="">Select Attribute</option>
-                        {attributes.map((attr) => (
-                          <option key={attr.attribute_id} value={attr.attribute_id}>
-                            {attr.attribute_name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex gap-2">
+                        <select
+                          required
+                          className="flex-1 bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                          value={formData.attribute_id}
+                          onChange={(e) => handleAttributeChange(e.target.value)}
+                          aria-label="Select attribute"
+                        >
+                          <option value="">Select Attribute</option>
+                          {attributes.map((attr) => (
+                            <option key={attr.attribute_id} value={attr.attribute_id}>
+                              {attr.attribute_name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowAttributeModal(true)}
+                          className="px-4 py-2.5 text-sm bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200"
+                        >
+                          + Add New
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -637,6 +673,80 @@ export default function RulesPage() {
                       className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200"
                     >
                       {editingRule ? 'Update' : 'Create'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Add Attribute Modal */}
+          {showAttributeModal && (
+            <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm overflow-y-auto h-full w-full z-[60] flex items-start justify-center pt-20">
+              <div className="relative w-full max-w-md mx-4 bg-white shadow-2xl rounded-2xl border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+                  <h3 className="text-lg font-semibold text-white">Add New Attribute</h3>
+                </div>
+                <form onSubmit={handleCreateAttribute} className="p-6">
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Attribute Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                      value={attributeFormData.attribute_name}
+                      onChange={(e) =>
+                        setAttributeFormData({ ...attributeFormData, attribute_name: e.target.value })
+                      }
+                      placeholder="e.g., Cellsite, Special Cockfight"
+                      aria-label="Attribute name"
+                    />
+                  </div>
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                      rows={3}
+                      value={attributeFormData.description}
+                      onChange={(e) =>
+                        setAttributeFormData({ ...attributeFormData, description: e.target.value })
+                      }
+                      aria-label="Attribute description"
+                    />
+                  </div>
+                  <div className="mb-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        checked={attributeFormData.is_active}
+                        onChange={(e) =>
+                          setAttributeFormData({ ...attributeFormData, is_active: e.target.checked })
+                        }
+                      />
+                      <span className="text-sm font-medium text-gray-700">Active</span>
+                    </label>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAttributeModal(false);
+                        setAttributeFormData({ attribute_name: '', description: '', is_active: true });
+                      }}
+                      className="px-5 py-2.5 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all duration-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200"
+                    >
+                      Create
                     </button>
                   </div>
                 </form>
