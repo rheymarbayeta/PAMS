@@ -50,9 +50,9 @@ router.get('/:id', async (req, res) => {
     const [fees] = await pool.execute(
       `SELECT arf.rule_fee_id, arf.fee_id, arf.fee_name, arf.amount, arf.is_required, arf.fee_order,
               fc.fee_name as default_fee_name, fc.default_amount, cat.category_name
-       FROM Assessment_Rule_Fees arf
-       LEFT JOIN Fees_Charges fc ON arf.fee_id = fc.fee_id
-       LEFT JOIN Fees_Categories cat ON fc.category_id = cat.category_id
+       FROM assessment_rule_fees arf
+       LEFT JOIN fees_charges fc ON arf.fee_id = fc.fee_id
+       LEFT JOIN fees_categories cat ON fc.category_id = cat.category_id
        WHERE arf.rule_id = ?
        ORDER BY arf.fee_order, arf.fee_name`,
       [ruleId]
@@ -173,7 +173,7 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     if (attribute_id) {
       try {
         const [attrData] = await connection.execute(
-          'SELECT attribute_name FROM Attributes WHERE attribute_id = ?',
+          'SELECT attribute_name FROM attributes WHERE attribute_id = ?',
           [attribute_id]
         );
         if (attrData.length > 0) {
@@ -375,7 +375,7 @@ router.put('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     if (attribute_id) {
       try {
         const [attrData] = await connection.execute(
-          'SELECT attribute_name FROM Attributes WHERE attribute_id = ?',
+          'SELECT attribute_name FROM attributes WHERE attribute_id = ?',
           [attribute_id]
         );
         if (attrData.length > 0) {
