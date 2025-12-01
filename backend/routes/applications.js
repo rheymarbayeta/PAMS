@@ -627,7 +627,7 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
     }
 
     await pool.execute(
-      'DELETE FROM Assessed_Fees WHERE assessed_fee_id = ? AND application_id = ?',
+      'DELETE FROM assessed_fees WHERE assessed_fee_id = ? AND application_id = ?',
       [feeId, applicationId]
     );
 
@@ -639,7 +639,7 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
 
     // Get fee name for logging
     const [removeFeeInfo] = await pool.execute(
-      'SELECT fc.fee_name FROM Assessed_Fees af INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id WHERE af.assessed_fee_id = ?',
+      'SELECT fc.fee_name FROM assessed_fees af INNER JOIN fees_charges fc ON af.fee_id = fc.fee_id WHERE af.assessed_fee_id = ?',
       [feeId]
     );
     const removedFeeName = removeFeeInfo.length > 0 ? removeFeeInfo[0].fee_name : 'Unknown Fee';
@@ -692,7 +692,7 @@ router.put('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Approver'), asy
 
     // Get old amount for audit
     const [oldFee] = await pool.execute(
-      'SELECT assessed_amount FROM Assessed_Fees WHERE assessed_fee_id = ?',
+      'SELECT assessed_amount FROM assessed_fees WHERE assessed_fee_id = ?',
       [feeId]
     );
 
@@ -703,7 +703,7 @@ router.put('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Approver'), asy
     const oldAmount = oldFee[0].assessed_amount;
 
     await pool.execute(
-      'UPDATE Assessed_Fees SET assessed_amount = ?, assessed_by_user_id = ? WHERE assessed_fee_id = ?',
+      'UPDATE assessed_fees SET assessed_amount = ?, assessed_by_user_id = ? WHERE assessed_fee_id = ?',
       [parseFloat(assessed_amount), req.user.user_id, feeId]
     );
 
@@ -739,7 +739,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
         e.email,
         e.phone
        FROM applications a
-       INNER JOIN Entities e ON a.entity_id = e.entity_id
+       INNER JOIN entities e ON a.entity_id = e.entity_id
        WHERE a.application_id = ?`,
       [applicationId]
     );
@@ -1380,8 +1380,8 @@ router.get('/:id/payment', async (req, res) => {
       `SELECT 
         p.*,
         u.full_name as recorded_by_name
-       FROM Payments p
-       LEFT JOIN Users u ON p.recorded_by_user_id = u.user_id
+       FROM payments p
+       LEFT JOIN users u ON p.recorded_by_user_id = u.user_id
        WHERE p.application_id = ?
        ORDER BY p.created_at DESC`,
       [applicationId]
