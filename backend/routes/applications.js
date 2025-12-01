@@ -311,7 +311,7 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Application Creator'), a
 
     // Get application details
     const [applications] = await connection.execute(
-      'SELECT application_id, application_number, status FROM applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -529,7 +529,7 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
 
     // Check application status
     const [apps] = await pool.execute(
-      'SELECT status FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -574,7 +574,7 @@ router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (re
 
     // Get application number for logging
     const [appInfo] = await pool.execute(
-      'SELECT application_number FROM applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
     const appNumber = appInfo.length > 0 ? appInfo[0].application_number : applicationId;
@@ -614,7 +614,7 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
 
     // Check application status
     const [apps] = await pool.execute(
-      'SELECT status FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -650,7 +650,7 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
 
     // Get application number for logging
     const [removeAppInfo] = await pool.execute(
-      'SELECT application_number FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
     const removeAppNumber = removeAppInfo.length > 0 ? removeAppInfo[0].application_number : applicationId;
@@ -738,7 +738,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
         e.contact_person,
         e.email,
         e.phone
-       FROM Applications a
+       FROM applications a
        INNER JOIN Entities e ON a.entity_id = e.entity_id
        WHERE a.application_id = ?`,
       [applicationId]
@@ -950,7 +950,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     // Update application status
     await connection.execute(
-      'UPDATE Applications SET status = ?, assessor_id = ? WHERE application_id = ?',
+      'UPDATE applications SET status = ?, assessor_id = ? WHERE application_id = ?',
       ['Pending Approval', req.user.user_id, applicationId]
     );
 
@@ -963,7 +963,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     // Get application number for logging
     const [assessAppInfo] = await pool.execute(
-      'SELECT application_number FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
     const assessAppNumber = assessAppInfo.length > 0 ? assessAppInfo[0].application_number : applicationId;
@@ -1008,7 +1008,7 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
 
     // Check application status
     const [apps] = await pool.execute(
-      'SELECT status, creator_id FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -1022,7 +1022,7 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
 
     // Update application
     await pool.execute(
-      'UPDATE Applications SET status = ?, approver_id = ? WHERE application_id = ?',
+      'UPDATE applications SET status = ?, approver_id = ? WHERE application_id = ?',
       ['Approved', req.user.user_id, applicationId]
     );
 
@@ -1039,7 +1039,7 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
 
     // Get application number for logging
     const [approveAppInfo] = await pool.execute(
-      'SELECT application_number FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
     const approveAppNumber = approveAppInfo.length > 0 ? approveAppInfo[0].application_number : applicationId;
@@ -1083,7 +1083,7 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
 
     // Get original application
     const [apps] = await pool.execute(
-      'SELECT * FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -1111,7 +1111,7 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
       const new_application_id = generateId(ID_PREFIXES.APPLICATION);
 
       const [result] = await connection.execute(
-        'INSERT INTO Applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)' ,
         [new_application_id, applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, originalApp.permit_type_id, 'Pending']
       );
 
@@ -1139,7 +1139,7 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
 
       // Get old and new application numbers for logging
       const [oldAppInfo] = await pool.execute(
-        'SELECT application_number FROM Applications WHERE application_id = ?',
+        'SELECT * FROM applications WHERE application_id = ?',
         [applicationId]
       );
       const oldAppNumber = oldAppInfo.length > 0 ? oldAppInfo[0].application_number : applicationId;
@@ -1149,7 +1149,7 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
       console.log('  - oldAppNumber:', oldAppNumber);
 
       const [newAppInfo] = await pool.execute(
-        'SELECT application_number FROM Applications WHERE application_id = ?',
+        'SELECT * FROM applications WHERE application_id = ?',
         [new_application_id]
       );
       const newAppNumber = newAppInfo.length > 0 ? newAppInfo[0].application_number : new_application_id;
@@ -1201,7 +1201,7 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
 
     // Check application status
     const [apps] = await pool.execute(
-      'SELECT status, creator_id FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -1215,7 +1215,7 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
 
     // Update application
     await pool.execute(
-      'UPDATE Applications SET status = ?, approver_id = ? WHERE application_id = ?',
+      'UPDATE applications SET status = ?, approver_id = ? WHERE application_id = ?',
       ['Rejected', req.user.user_id, applicationId]
     );
 
@@ -1227,7 +1227,7 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
 
     // Get application number for logging
     const [rejectAppInfo] = await pool.execute(
-      'SELECT application_number FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
     const rejectAppNumber = rejectAppInfo.length > 0 ? rejectAppInfo[0].application_number : applicationId;
@@ -1283,7 +1283,7 @@ router.post('/:id/payment', async (req, res) => {
 
     // Check if application exists
     const [apps] = await pool.execute(
-      'SELECT * FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -1335,7 +1335,7 @@ router.post('/:id/payment', async (req, res) => {
       if (totalPaid >= totalAmountDue && totalAmountDue > 0) {
         console.log(`[Payment] Application ${applicationId} is fully paid. Updating status to "Paid"`);
         await pool.execute(
-          'UPDATE Applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+          'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
           ['Paid', applicationId]
         );
       }
@@ -1405,7 +1405,7 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       `SELECT a.status, a.application_number, a.permit_type_id, a.permit_type,
               pt.validity_date as permit_type_validity_date,
               pt.validity_type as permit_type_validity_type
-       FROM Applications a
+       FROM applications a
        LEFT JOIN Permit_Types pt ON a.permit_type_id = pt.permit_type_id
        WHERE a.application_id = ?`,
       [applicationId]
@@ -1451,7 +1451,7 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
     // Update status to Issued with validity_date
     // Note: For custom validity, we store the text as-is; for fixed, it's a date
     await pool.execute(
-      `UPDATE Applications 
+      `UPDATE applications 
        SET status = ?, 
            issued_by_user_id = ?, 
            issued_at = CURRENT_TIMESTAMP, 
@@ -1488,7 +1488,7 @@ router.put('/:id/release', authorize('SuperAdmin', 'Admin', 'Approver'), async (
 
     // Check current status
     const [apps] = await pool.execute(
-      'SELECT status, application_number FROM Applications WHERE application_id = ?',
+      'SELECT * FROM applications WHERE application_id = ?',
       [applicationId]
     );
 
@@ -1502,7 +1502,7 @@ router.put('/:id/release', authorize('SuperAdmin', 'Admin', 'Approver'), async (
 
     // Update status to Released
     await pool.execute(
-      'UPDATE Applications SET status = ?, released_by = ?, received_by = ?, released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+      'UPDATE applications SET status = ?, released_by = ?, received_by = ?, released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
       ['Released', released_by, received_by, applicationId]
     );
 
