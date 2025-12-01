@@ -766,7 +766,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
         af.quantity,
         fc.fee_name,
         fcat.category_name
-       FROM Assessed_Fees af
+       FROM assessef_fees af
        INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id
        INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
        WHERE af.application_id = ?
@@ -838,7 +838,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       assessmentId = existingRecords[0].assessment_id;
       // Update existing record
       await connection.execute(
-        `UPDATE Assessment_Records SET
+        `UPDATE assessment_records SET
           business_name = ?,
           owner_name = ?,
           address = ?,
@@ -879,7 +879,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       );
       // Delete existing fees
       await connection.execute(
-        'DELETE FROM Assessment_Record_Fees WHERE assessment_id = ?',
+        'DELETE FROM assessment_record_fees WHERE assessment_id = ?',
         [assessmentId]
       );
     } else {
@@ -887,7 +887,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       const assessment_id = generateId(ID_PREFIXES.ASSESSMENT_RECORD);
 
       const [result] = await connection.execute(
-        `INSERT INTO Assessment_Records (
+        `INSERT INTO assessment_records (
           assessment_id, application_id, business_name, owner_name, address, app_number, app_type, app_date,
           validity_date, total_balance_due, total_surcharge, total_interest, total_amount_due,
           q1_amount, q2_amount, q3_amount, q4_amount, prepared_by_user_id
@@ -929,7 +929,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       const record_fee_id = generateId(ID_PREFIXES.ASSESSMENT_RECORD_FEE);
 
       await connection.execute(
-        `INSERT INTO Assessment_Record_Fees (
+        `INSERT INTO assessment_record_fees (
           record_fee_id, assessment_id, fee_id, fee_name, amount, quantity, balance_due,
           surcharge, interest, total
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1028,7 +1028,7 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
 
     // Update assessment record with approver
     await pool.execute(
-      'UPDATE Assessment_Records SET approved_by_user_id = ? WHERE application_id = ?',
+      'UPDATE assessment_records SET approved_by_user_id = ? WHERE application_id = ?',
       [req.user.user_id, applicationId]
     );
 
@@ -1314,7 +1314,7 @@ router.post('/:id/payment', async (req, res) => {
 
     // Check total payments vs total amount due
     const [assessmentRecord] = await pool.execute(
-      'SELECT total_amount_due FROM Assessment_Records WHERE application_id = ?',
+      'SELECT total_amount_due FROM assessment_records WHERE application_id = ?',
       [applicationId]
     );
 
