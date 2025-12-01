@@ -237,14 +237,13 @@ export default function ApplicationDetailPage() {
                 </div>
                 
                 {/* Action Buttons - Horizontal scroll on mobile */}
-                <div className={`flex gap-2 pb-2 -mx-2 px-2 scrollbar-hide touch-scroll ${showReportsDropdown ? 'overflow-visible' : 'overflow-x-auto'}`}>
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide touch-scroll">
                   {/* Reports Dropdown - shows when there are reports available */}
                   {((canPrintPermit && application.status !== 'Paid') || ((application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0)) && (
-                    <div className="relative flex-shrink-0">
+                    <>
                       <button
                         onClick={() => setShowReportsDropdown(!showReportsDropdown)}
-                        onBlur={() => setTimeout(() => setShowReportsDropdown(false), 150)}
-                        className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-slate-600 to-gray-700 text-white rounded-xl shadow-lg shadow-gray-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-slate-600 to-gray-700 text-white rounded-xl shadow-lg shadow-gray-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm whitespace-nowrap flex-shrink-0"
                       >
                         <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -254,45 +253,60 @@ export default function ApplicationDetailPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </button>
+                      {/* Reports Dropdown Modal */}
                       {showReportsDropdown && (
-                        <div className="absolute left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50">
-                          {canPrintPermit && application.status !== 'Paid' && (
-                            <button
-                              onClick={() => {
-                                const token = localStorage.getItem('token') || '';
-                                const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
-                                const url = `/permit-report.html?id=${application.application_id}${encodedToken}`;
-                                window.open(url, '_blank');
-                                setShowReportsDropdown(false);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors"
-                            >
-                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                              </svg>
-                              Print Permit
-                            </button>
-                          )}
-                          {(application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0 && (
-                            <button
-                              onClick={() => {
-                                const token = localStorage.getItem('token') || '';
-                                const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
-                                const url = `/assessment-report.html?id=${application.application_id}${encodedToken}`;
-                                window.open(url, '_blank');
-                                setShowReportsDropdown(false);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                            >
-                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              Print Assessment
-                            </button>
-                          )}
-                        </div>
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowReportsDropdown(false)} />
+                          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50">
+                            <div className="px-4 py-2 border-b border-gray-100">
+                              <h3 className="font-semibold text-gray-900">Reports</h3>
+                            </div>
+                            {canPrintPermit && application.status !== 'Paid' && (
+                              <button
+                                onClick={() => {
+                                  const token = localStorage.getItem('token') || '';
+                                  const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+                                  const url = `/permit-report.html?id=${application.application_id}${encodedToken}`;
+                                  window.open(url, '_blank');
+                                  setShowReportsDropdown(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors"
+                              >
+                                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                </svg>
+                                Print Permit
+                              </button>
+                            )}
+                            {(application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  const token = localStorage.getItem('token') || '';
+                                  const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+                                  const url = `/assessment-report.html?id=${application.application_id}${encodedToken}`;
+                                  window.open(url, '_blank');
+                                  setShowReportsDropdown(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                              >
+                                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Print Assessment
+                              </button>
+                            )}
+                            <div className="px-4 py-2 border-t border-gray-100 mt-1">
+                              <button
+                                onClick={() => setShowReportsDropdown(false)}
+                                className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </>
                       )}
-                    </div>
+                    </>
                   )}
                   {application.status === 'Approved' && (
                     <button
