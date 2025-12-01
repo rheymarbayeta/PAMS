@@ -766,9 +766,9 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
         af.quantity,
         fc.fee_name,
         fcat.category_name
-       FROM assessef_fees af
-       INNER JOIN Fees_Charges fc ON af.fee_id = fc.fee_id
-       INNER JOIN Fees_Categories fcat ON fc.category_id = fcat.category_id
+       FROM assessed_fees af
+       INNER JOIN fees_charges fc ON af.fee_id = fc.fee_id
+       INNER JOIN fees_categories fcat ON fc.category_id = fcat.category_id
        WHERE af.application_id = ?
        ORDER BY fc.fee_name`,
       [applicationId]
@@ -781,7 +781,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     // Get address from parameters
     const [parameters] = await connection.execute(
-      'SELECT * FROM Application_Parameters WHERE application_id = ?',
+      'SELECT * FROM application_parameters WHERE application_id = ?',
       [applicationId]
     );
     const addressParam = parameters.find(p => 
@@ -1117,14 +1117,14 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
 
       // Copy parameters
       const [parameters] = await connection.execute(
-        'SELECT param_name, param_value FROM Application_Parameters WHERE application_id = ?',
+        'SELECT param_name, param_value FROM application_parameters WHERE application_id = ?',
         [applicationId]
       );
 
       for (const param of parameters) {
         const parameter_id = generateId(ID_PREFIXES.APPLICATION_PARAMETER);
         await connection.execute(
-          'INSERT INTO Application_Parameters (parameter_id, application_id, param_name, param_value) VALUES (?, ?, ?, ?)',
+          'INSERT INTO application_parameters (parameter_id, application_id, param_name, param_value) VALUES (?, ?, ?, ?)',
           [parameter_id, new_application_id, param.param_name, param.param_value]
         );
       }
@@ -1304,7 +1304,7 @@ router.post('/:id/payment', async (req, res) => {
     console.log('[Payment] Inserting payment record...');
     const payment_id = generateId(ID_PREFIXES.PAYMENT);
     const [result] = await pool.execute(
-      `INSERT INTO Payments 
+      `INSERT INTO payments 
        (payment_id, application_id, official_receipt_no, payment_date, address, amount, recorded_by_user_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [payment_id, applicationId, official_receipt_no, payment_date, address || null, amount, req.user.user_id]
@@ -1323,7 +1323,7 @@ router.post('/:id/payment', async (req, res) => {
       
       // Get total payments
       const [payments] = await pool.execute(
-        'SELECT SUM(amount) as total_paid FROM Payments WHERE application_id = ?',
+        'SELECT SUM(amount) as total_paid FROM payments WHERE application_id = ?',
         [applicationId]
       );
 
@@ -1406,7 +1406,7 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
               pt.validity_date as permit_type_validity_date,
               pt.validity_type as permit_type_validity_type
        FROM applications a
-       LEFT JOIN Permit_Types pt ON a.permit_type_id = pt.permit_type_id
+       LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id
        WHERE a.application_id = ?`,
       [applicationId]
     );
@@ -1424,7 +1424,10 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
     let validityMsg = 'No validity date set';
     
     if (apps[0].permit_type_validity_type === 'custom') {
-      // For custom validity, look for "Date" parameter in application_parameters
+      // For custom validity, do NOT store in validity_date column (it expects DATE format)
+      // Instead, keep it NULL - the custom date is stored in application_parameters with param_name='Date'
+      validityDate = null;
+      
       const [dateParams] = await pool.execute(
         `SELECT param_value FROM application_parameters 
          WHERE application_id = ? AND param_name = 'Date'
@@ -1433,9 +1436,7 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       );
       
       if (dateParams.length > 0 && dateParams[0].param_value) {
-        // Store the custom date string as-is (e.g., "December 3 to 8, 2025")
-        validityDate = dateParams[0].param_value;
-        validityMsg = `Custom validity: ${validityDate}`;
+        validityMsg = `Custom validity: ${dateParams[0].param_value}`;
       } else {
         validityMsg = 'Custom validity (no Date parameter found)';
       }

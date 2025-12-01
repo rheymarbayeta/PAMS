@@ -3,6 +3,7 @@
 import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import api from '@/services/api';
 
 interface ApplicationInfo {
   application_id: number;
@@ -54,12 +55,8 @@ export default function PaymentPage() {
 
   const fetchApplicationInfo = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/applications/${applicationId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) throw new Error('Failed to fetch application');
-      const data = await response.json();
+      const response = await api.get(`/api/applications/${applicationId}`);
+      const data = response.data;
       setApplicationInfo(data);
 
       // Check if application is approved
@@ -68,27 +65,24 @@ export default function PaymentPage() {
       } else {
         // Fetch assessment data to get the total amount due
         try {
-          const assessmentResponse = await fetch(`http://localhost:5000/api/applications/${applicationId}/assessment-record`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-
-          if (assessmentResponse.ok) {
-            const assessmentData = await assessmentResponse.json();
-            const totalAmountDue = assessmentData.total_amount_due || 0;
-            
-            // Set the amount field to the total amount due
-            setFormData(prev => ({
-              ...prev,
-              amount: totalAmountDue.toString()
-            }));
-          }
-        } catch (assessmentErr) {
+          const assessmentResponse = await api.get(`/api/applications/${applicationId}/assessment-record`);
+          const assessmentData = assessmentResponse.data;
+          const totalAmountDue = assessmentData.total_amount_due || 0;
+          
+          // Set the amount field to the total amount due
+          setFormData(prev => ({
+            ...prev,
+            amount: totalAmountDue.toString()
+          }));
+        } catch (assessmentErr: any) {
           console.error('Error fetching assessment data:', assessmentErr);
+          // Don't fail if assessment data fetch fails - user can enter amount manually
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching application:', err);
-      setError('Failed to load application information');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to load application information';
+      setError(`Request failed with status code ${err.response?.status || 'unknown'}: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -96,14 +90,9 @@ export default function PaymentPage() {
 
   const fetchPayments = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/applications/${applicationId}/payment`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPayments(data);
-      }
+      const response = await api.get(`/api/applications/${applicationId}/payment`);
+      const data = response.data;
+      setPayments(data);
     } catch (err) {
       console.error('Error fetching payments:', err);
     }
@@ -165,22 +154,7 @@ export default function PaymentPage() {
         return;
       }
 
-      const response = await fetch(`http://localhost:5000/api/applications/${applicationId}/payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setError(result.error || 'Failed to record payment');
-        setSubmitting(false);
-        return;
-      }
+      const response = await api.post(`/api/applications/${applicationId}/payment`, formData);
 
       setMessage('Payment recorded successfully! Redirecting...');
       
@@ -190,7 +164,12 @@ export default function PaymentPage() {
       }, 1000);
     } catch (err) {
       console.error('Error recording payment:', err);
-      setError('Failed to record payment. Please try again.');
+      if (err instanceof Error) {
+        const errorMessage = err.message;
+        setError(errorMessage || 'Failed to record payment. Please try again.');
+      } else {
+        setError('Failed to record payment. Please try again.');
+      }
       setSubmitting(false);
     }
   };
