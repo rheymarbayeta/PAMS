@@ -222,39 +222,39 @@ export default function NewApplicationPage() {
   return (
     <ProtectedRoute>
       <Layout>
-        <div className="px-4 py-6 sm:px-0">
+        <div className="px-2 py-4 sm:px-4 sm:py-6">
           {/* Page Header */}
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg shadow-green-500/30">
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
+            <div className="p-2.5 sm:p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl sm:rounded-2xl shadow-lg shadow-green-500/30">
+              <svg className="w-6 h-6 sm:w-8 sm:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                Create New Application
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                New Application
               </h1>
-              <p className="text-gray-500 mt-1">Fill in the details to submit a new permit application</p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">Fill in the details to submit a new permit application</p>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-8">
+          <form onSubmit={handleSubmit} className="bg-white shadow-lg shadow-gray-200/50 rounded-xl sm:rounded-2xl border border-gray-100 p-4 sm:p-6 lg:p-8">
             {/* Entity Search */}
-            <div className="mb-6 relative">
-              <label htmlFor="entity_search" className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="mb-5 sm:mb-6 relative">
+              <label htmlFor="entity_search" className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Entity (Applicant) *
               </label>
               <div className="relative">
-                <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </div>
                 <input
                   id="entity_search"
                   type="text"
-                  className="w-full bg-gray-50/50 border border-gray-200 rounded-xl pl-12 pr-10 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                  placeholder="Search for entity or applicant..."
+                  className="w-full bg-gray-50/50 border border-gray-200 rounded-xl pl-10 sm:pl-12 pr-10 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 text-base"
+                  placeholder="Search for entity..."
                   value={entitySearch}
                   onChange={(e) => handleEntitySearchChange(e.target.value)}
                   onFocus={() => setShowEntityDropdown(true)}
@@ -503,18 +503,18 @@ export default function NewApplicationPage() {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 sm:pt-6 border-t border-gray-100">
               <button
                 type="button"
                 onClick={() => router.back()}
-                className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all duration-200"
+                className="w-full sm:w-auto px-5 sm:px-6 py-3 sm:py-2.5 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all duration-200 font-medium"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl shadow-lg shadow-green-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl shadow-lg shadow-green-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100 font-medium"
               >
                 {loading ? (
                   <>

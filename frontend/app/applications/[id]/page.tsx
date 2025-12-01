@@ -205,29 +205,29 @@ export default function ApplicationDetailPage() {
   return (
     <ProtectedRoute>
       <Layout>
-        <div className="px-4 py-6 sm:px-0">
+        <div className="px-2 py-4 sm:px-4 sm:py-6">
           {/* Main Layout - Content on left, Transaction Logs on right */}
           <div className="flex flex-col xl:flex-row gap-4">
             {/* Left Content Area */}
             <div className="flex-1 min-w-0">
               {/* Page Header */}
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
+              <div className="flex flex-col gap-4 mb-4 sm:mb-6">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="relative flex-shrink-0">
                     <Image
                       src="/dalaguete-logo.png"
                       alt="Municipality of Dalaguete Official Seal"
-                      width={70}
-                      height={70}
-                      className="object-contain"
+                      width={50}
+                      height={50}
+                      className="object-contain sm:w-[70px] sm:h-[70px]"
                     />
                   </div>
-                  <div>
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                      Application {application.application_number || `#${application.application_id}`}
+                  <div className="min-w-0 flex-1">
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent truncate">
+                      {application.application_number || `Application #${application.application_id}`}
                     </h1>
                     <span
-                      className={`mt-2 inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ring-1 ${getStatusColor(
+                      className={`mt-1 sm:mt-2 inline-flex items-center px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold ring-1 ${getStatusColor(
                         application.status
                       )}`}
                     >
@@ -235,19 +235,21 @@ export default function ApplicationDetailPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                
+                {/* Action Buttons - Horizontal scroll on mobile */}
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide touch-scroll">
                   {/* Reports Dropdown - shows when there are reports available */}
                   {((canPrintPermit && application.status !== 'Paid') || ((application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0)) && (
-                    <div className="relative">
+                    <div className="relative flex-shrink-0">
                       <button
                         onClick={() => setShowReportsDropdown(!showReportsDropdown)}
                         onBlur={() => setTimeout(() => setShowReportsDropdown(false), 150)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-slate-600 to-gray-700 text-white rounded-xl shadow-lg shadow-gray-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                        className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-slate-600 to-gray-700 text-white rounded-xl shadow-lg shadow-gray-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm whitespace-nowrap"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        Reports
+                        <span className="hidden sm:inline">Reports</span>
                         <svg className={`w-3 h-3 transition-transform ${showReportsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
@@ -295,35 +297,35 @@ export default function ApplicationDetailPage() {
                   {application.status === 'Approved' && (
                     <button
                       onClick={() => router.push(`/applications/${application.application_id}/payment`)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl shadow-lg shadow-purple-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white rounded-xl shadow-lg shadow-purple-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
-                      Record Payment
+                      <span className="hidden xs:inline">Record</span> Payment
                     </button>
                   )}
                   {canIssue && (
                     <button
                       onClick={handleIssuePermit}
                       disabled={issuing}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-xl shadow-lg shadow-teal-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-xl shadow-lg shadow-teal-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 whitespace-nowrap"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      {issuing ? 'Issuing...' : 'Issue Permit'}
+                      {issuing ? 'Issuing...' : 'Issue'}
                     </button>
                   )}
                   {canRelease && (
                     <button
                       onClick={() => setShowReleaseModal(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                       </svg>
-                      Release Permit
+                      Release
                     </button>
                   )}
                   {canRenew && (
@@ -338,9 +340,9 @@ export default function ApplicationDetailPage() {
                           alert(error.response?.data?.error || 'Error renewing application');
                         }
                       }}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                       Renew
@@ -349,34 +351,34 @@ export default function ApplicationDetailPage() {
                   {canAssess && application.status === 'Pending' && (
                     <button
                       onClick={() => router.push(`/applications/${application.application_id}/assess`)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                       </svg>
-                      Assess Fees
+                      Assess
                     </button>
                   )}
                   {canApprove && application.status === 'Pending Approval' && (
                     <button
                       onClick={() => router.push(`/applications/${application.application_id}/approve`)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Review & Approve
+                      Approve
                     </button>
                   )}
                   {canDelete && (
                     <button
                       onClick={handleDelete}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl shadow-lg shadow-red-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-sm"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl shadow-lg shadow-red-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
-                      Delete
+                      <span className="hidden sm:inline">Delete</span>
                     </button>
                   )}
                 </div>
@@ -486,56 +488,86 @@ export default function ApplicationDetailPage() {
               </div>
 
               {/* Assessed Fees */}
-              <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Assessed Fees
                 </h2>
                 {application.assessed_fees.length === 0 ? (
-                  <div className="text-center py-8">
-                    <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="text-center py-6 sm:py-8">
+                    <svg className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-gray-300 mb-2 sm:mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <p className="text-sm text-gray-500">No fees assessed yet</p>
                   </div>
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Category</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fee Name</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Amount</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assessed By</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-100">
-                        {application.assessed_fees.map((fee) => (
-                          <tr key={fee.assessed_fee_id} className="hover:bg-gray-50/50 transition-colors duration-150">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              <span className="bg-gray-100 px-2 py-1 rounded-full">{fee.category_name}</span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_name}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600">
+                  <>
+                    {/* Mobile view - cards */}
+                    <div className="sm:hidden space-y-3">
+                      {application.assessed_fees.map((fee) => (
+                        <div key={fee.assessed_fee_id} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">{fee.category_name}</span>
+                              <p className="font-medium text-gray-900 mt-1">{fee.fee_name}</p>
+                            </div>
+                            <p className="font-bold text-emerald-600">
                               ₱ {parseFloat(fee.assessed_amount.toString()).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.assessed_by_name}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-gradient-to-r from-indigo-50 to-purple-50">
-                        <tr>
-                          <td colSpan={2} className="px-6 py-4 text-sm font-semibold text-gray-900">Total</td>
-                          <td className="px-6 py-4 text-lg font-bold text-indigo-600">
+                            </p>
+                          </div>
+                          <p className="text-xs text-gray-400">Assessed by {fee.assessed_by_name}</p>
+                        </div>
+                      ))}
+                      {/* Total on mobile */}
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-gray-900">Total</span>
+                          <span className="text-xl font-bold text-indigo-600">
                             ₱ {totalFees.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                          </td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Desktop view - table */}
+                    <div className="hidden sm:block overflow-hidden rounded-xl border border-gray-200">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Category</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fee Name</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Amount</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Assessed By</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-100">
+                          {application.assessed_fees.map((fee) => (
+                            <tr key={fee.assessed_fee_id} className="hover:bg-gray-50/50 transition-colors duration-150">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <span className="bg-gray-100 px-2 py-1 rounded-full">{fee.category_name}</span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_name}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600">
+                                ₱ {parseFloat(fee.assessed_amount.toString()).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.assessed_by_name}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-gradient-to-r from-indigo-50 to-purple-50">
+                          <tr>
+                            <td colSpan={2} className="px-6 py-4 text-sm font-semibold text-gray-900">Total</td>
+                            <td className="px-6 py-4 text-lg font-bold text-indigo-600">
+                              ₱ {totalFees.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            </td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
