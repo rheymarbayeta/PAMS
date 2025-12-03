@@ -562,7 +562,7 @@ function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentF
     }
     
     return `
-      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating the following at <strong>${barangay}, ${municipality}, ${province}</strong>:</p>
+      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${permitActivities}</strong> at <strong>${barangay}, ${municipality}, ${province}</strong>:</p>
       <table class="permit-activities-table" style="margin: 15px auto; width: 80%;">
         <thead>
           <tr>
@@ -585,7 +585,7 @@ function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentF
     `).join('');
     
     return `
-      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating the following at <strong>${barangay}, ${municipality}, ${province}</strong>:</p>
+      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${permitActivities}</strong> at <strong>${barangay}, ${municipality}, ${province}</strong>:</p>
       <table class="permit-activities-table" style="margin: 15px auto; width: 60%;">
         <thead>
           <tr>
@@ -633,55 +633,70 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - applicationData:', applicationData);
   console.log('  - permitTypeData:', permitTypeData);
   
-  // Get permit type name from application data
-  const permitTypeName = applicationData.permit_type || data.app_type || 'PERMIT';
+  // Get permit type name from permit_types table (permit_type_name column)
+  const permitTypeName = permitTypeData.permit_type_name || applicationData.permit_type || data.app_type || 'PERMIT';
   
   console.log('Step 2 - Permit Type Name:');
+  console.log('  - permitTypeData.permit_type_name:', permitTypeData.permit_type_name);
   console.log('  - applicationData.permit_type:', applicationData.permit_type);
   console.log('  - data.app_type:', data.app_type);
   console.log('  - permitTypeName (final):', permitTypeName);
   
-  // Extract address components from application parameters
+  // Extract address components, permit activities, and dates from application parameters
   const addressParameters = applicationData.parameters || [];
   let barangay = 'Poblacion';
   let municipality = 'Dalaguete';
   let province = 'Cebu';
+  let permitActivities = 'Permit to conduct business activities as specified by the local government unit.';
+  let permitStartDate = null;
   
   console.log('Step 3 - Address Parameters:');
   console.log('  - addressParameters:', addressParameters);
   
-  // Try to get address components from parameters
+  // Try to get address components, permit activities, and dates from parameters
   addressParameters.forEach(param => {
     const paramName = (param.param_name || '').toLowerCase();
+    const paramValue = param.param_value || '';
+    
     if (paramName.includes('barangay')) {
-      barangay = param.param_value || barangay;
+      barangay = paramValue;
       console.log('  - Found barangay:', barangay);
     }
     if (paramName.includes('municipality')) {
-      municipality = param.param_value || municipality;
+      municipality = paramValue;
       console.log('  - Found municipality:', municipality);
     }
     if (paramName.includes('province')) {
-      province = param.param_value || province;
+      province = paramValue;
       console.log('  - Found province:', province);
+    }
+    if (paramName.includes('conduct') || paramName.includes('engage')) {
+      permitActivities = paramValue;
+      console.log('  - Found permit activities (Conduct/engage in):', permitActivities);
+    }
+    if (paramName.includes('date') && !paramName.includes('birth')) {
+      permitStartDate = paramValue;
+      console.log('  - Found permit date:', permitStartDate);
     }
   });
   
-  console.log('Step 4 - Final Address Components:');
+  console.log('Step 4 - Final Address and Permit Components:');
   console.log('  - barangay:', barangay);
   console.log('  - municipality:', municipality);
   console.log('  - province:', province);
+  console.log('  - permitActivities:', permitActivities);
+  console.log('  - permitStartDate:', permitStartDate);
   
-  // Get permit activities from permit_types description column
-  // This comes directly from: Permit_Types table.description
-  const permitActivities = permitTypeData.description || 
-    'Permit to conduct business activities as specified by the local government unit.';
+  // Calculate permit end date (December 31 of current year) if start date is provided
+  let permitEndDateStr = yearEndDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  if (permitStartDate) {
+    console.log('  - permitEndDate:', permitEndDateStr);
+  }
   
-  console.log('Step 5 - Permit Activities (MAIN VARIABLE):');
-  console.log('  - Source: Permit_Types table -> description column');
+  console.log('Step 5 - Permit Activities Source:');
+  console.log('  - Source: Application Parameters (Conduct/engage in field)');
   console.log('  - permitTypeData.permit_type_id:', permitTypeData.permit_type_id);
   console.log('  - permitTypeData.permit_type_name:', permitTypeData.permit_type_name);
-  console.log('  - permitTypeData.description (from Permit_Types.description):', permitTypeData.description);
   console.log('  - permitActivities (final value):', permitActivities);
   
   // Check if we should display activities in tabular format
@@ -742,6 +757,8 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   }
 
   // Generate permit activities content based on display mode
+  // Use permitStartDate if available, otherwise use current date
+  const reportStartDate = permitStartDate ? new Date(permitStartDate) : now;
   const permitActivitiesContent = generatePermitActivitiesHTML(
     displayInfo, 
     permitActivities, 
@@ -749,7 +766,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
     barangay, 
     municipality, 
     province, 
-    now, 
+    reportStartDate, 
     yearEndDate
   );
 
