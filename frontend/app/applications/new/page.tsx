@@ -107,6 +107,10 @@ export default function NewApplicationPage() {
         municipality: settings.default_municipality?.value || '',
         province: settings.default_province?.value || '',
         country: settings.default_country?.value || '',
+        parameters: [
+          { param_name: 'Date', param_value: '' },
+          { param_name: 'Conduct/engage in', param_value: '' },
+        ],
       }));
     } catch (error) {
       console.error('Error fetching default settings:', error);
@@ -116,6 +120,10 @@ export default function NewApplicationPage() {
         municipality: 'Dalaguete',
         province: 'Cebu',
         country: 'Philippines',
+        parameters: [
+          { param_name: 'Date', param_value: '' },
+          { param_name: 'Conduct/engage in', param_value: '' },
+        ],
       }));
     }
   };
