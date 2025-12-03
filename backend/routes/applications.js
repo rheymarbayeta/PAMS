@@ -681,31 +681,76 @@ router.delete('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Assessor'), 
 
 // Update assessed fee (for re-assessment by approver)
 router.put('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Approver'), async (req, res) => {
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+
   try {
     const { assessed_amount } = req.body;
     const applicationId = req.params.id;
     const feeId = req.params.feeId;
 
     if (assessed_amount === undefined) {
+      await connection.rollback();
       return res.status(400).json({ error: 'Assessed amount is required' });
     }
 
     // Get old amount for audit
-    const [oldFee] = await pool.execute(
+    const [oldFee] = await connection.execute(
       'SELECT assessed_amount FROM assessed_fees WHERE assessed_fee_id = ?',
       [feeId]
     );
 
     if (oldFee.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Assessed fee not found' });
     }
 
     const oldAmount = oldFee[0].assessed_amount;
 
-    await pool.execute(
+    // Update the assessed fee
+    await connection.execute(
       'UPDATE assessed_fees SET assessed_amount = ?, assessed_by_user_id = ? WHERE assessed_fee_id = ?',
       [parseFloat(assessed_amount), req.user.user_id, feeId]
     );
+
+    // Recalculate all fees for this application
+    const [allFees] = await connection.execute(
+      `SELECT assessed_amount FROM assessed_fees WHERE application_id = ?`,
+      [applicationId]
+    );
+
+    let totalAmountDue = 0;
+    allFees.forEach(fee => {
+      totalAmountDue += parseFloat(fee.assessed_amount) || 0;
+    });
+
+    // Update assessment record with new total
+    const [assessmentRecords] = await connection.execute(
+      'SELECT assessment_id FROM assessment_records WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (assessmentRecords.length > 0) {
+      // Calculate quarterly amounts based on new total
+      const q1Amount = 0;
+      const q2Amount = totalAmountDue * 0.38;
+      const q3Amount = totalAmountDue * 0.36;
+      const q4Amount = totalAmountDue * 0.26;
+
+      await connection.execute(
+        `UPDATE assessment_records SET 
+          total_balance_due = ?, 
+          total_amount_due = ?,
+          q1_amount = ?,
+          q2_amount = ?,
+          q3_amount = ?,
+          q4_amount = ?
+         WHERE application_id = ?`,
+        [totalAmountDue, totalAmountDue, q1Amount, q2Amount, q3Amount, q4Amount, applicationId]
+      );
+    }
+
+    await connection.commit();
 
     await logAction(
       req.user.user_id,
@@ -716,8 +761,11 @@ router.put('/:id/fees/:feeId', authorize('SuperAdmin', 'Admin', 'Approver'), asy
 
     res.json({ message: 'Fee updated successfully' });
   } catch (error) {
+    await connection.rollback();
     console.error('Update fee error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    connection.release();
   }
 });
 

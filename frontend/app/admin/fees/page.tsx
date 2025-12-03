@@ -35,6 +35,8 @@ export default function FeesPage() {
     fee_name: '',
     default_amount: '',
   });
+  const [categorySearch, setCategorySearch] = useState('');
+  const [feeSearch, setFeeSearch] = useState('');
 
   const formatCurrency = (value: string | number): string => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -205,7 +207,21 @@ export default function FeesPage() {
 
           {activeTab === 'categories' && (
             <div>
-              <div className="mb-6">
+              <div className="mb-6 flex gap-4 flex-wrap">
+                <div className="flex-1 min-w-64">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search categories..."
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 pl-10 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                    />
+                    <svg className="absolute left-3 top-3 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
                 <button
                   onClick={() => {
                     setEditingCategory(null);
@@ -222,7 +238,9 @@ export default function FeesPage() {
               </div>
               <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-hidden">
                 <ul className="divide-y divide-gray-100">
-                  {categories.map((category) => (
+                  {categories
+                    .filter((cat) => cat.category_name.toLowerCase().includes(categorySearch.toLowerCase()))
+                    .map((category) => (
                     <li key={category.category_id} className="hover:bg-gray-50/50 transition-colors duration-150">
                       <div className="px-6 py-4 flex justify-between items-center">
                         <div className="flex items-center gap-3">
@@ -277,7 +295,21 @@ export default function FeesPage() {
 
           {activeTab === 'fees' && (
             <div>
-              <div className="mb-6">
+              <div className="mb-6 flex gap-4 flex-wrap">
+                <div className="flex-1 min-w-64">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search fees..."
+                      value={feeSearch}
+                      onChange={(e) => setFeeSearch(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 pl-10 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                    />
+                    <svg className="absolute left-3 top-3 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
                 <button
                   onClick={() => {
                     setEditingFee(null);
@@ -294,7 +326,12 @@ export default function FeesPage() {
               </div>
               <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-hidden">
                 <ul className="divide-y divide-gray-100">
-                  {fees.map((fee) => (
+                  {fees
+                    .filter((fee) => 
+                      fee.fee_name.toLowerCase().includes(feeSearch.toLowerCase()) ||
+                      (fee.category_name?.toLowerCase().includes(feeSearch.toLowerCase()) ?? false)
+                    )
+                    .map((fee) => (
                     <li key={fee.fee_id} className="hover:bg-gray-50/50 transition-colors duration-150">
                       <div className="px-6 py-4 flex justify-between items-center">
                         <div className="flex items-center gap-4">

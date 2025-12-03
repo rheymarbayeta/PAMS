@@ -25,6 +25,7 @@ export default function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   useEffect(() => {
     fetchApplications();
@@ -83,9 +84,14 @@ export default function ApplicationsPage() {
     }
   };
 
-  const filteredApplications = filter === 'all' 
+  const filteredApplications = (filter === 'all' 
     ? applications 
-    : applications.filter(app => app.status === filter);
+    : applications.filter(app => app.status === filter))
+    .filter(app => 
+      (app.application_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+      app.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.permit_type.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
   if (loading) {
     return (
@@ -124,7 +130,20 @@ export default function ApplicationsPage() {
                 <p className="text-xs sm:text-sm text-slate-500">{filteredApplications.length} {filteredApplications.length === 1 ? 'application' : 'applications'}</p>
               </div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 sm:flex-none sm:min-w-64">
+                <input
+                  type="text"
+                  placeholder="Search applications..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 pl-10 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none"
+                  aria-label="Search applications"
+                />
+                <svg className="absolute left-3 top-3 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
               <label htmlFor="status-filter" className="sr-only">
                 Filter by status
               </label>

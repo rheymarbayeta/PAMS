@@ -535,10 +535,53 @@ function getPermitActivitiesDisplayMode(settings, permitTypeData) {
 /**
  * Generate HTML for permit activities based on display mode
  */
-function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentFees, barangay, municipality, province, now, yearEndDate) {
+function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentFees, barangay, municipality, province, startDateParam, endDateParam, isCustomDate = false) {
   const dateOptions = { year: 'numeric', month: 'long', day: 'numeric' };
-  const startDate = now.toLocaleDateString('en-US', dateOptions);
-  const endDate = yearEndDate.toLocaleDateString('en-US', dateOptions);
+  
+  let formattedDateRange = '';
+  
+  // If this is a custom/N/A validity type with text date parameter, use it directly
+  if (isCustomDate && typeof startDateParam === 'string') {
+    formattedDateRange = startDateParam;
+    console.log('generatePermitActivitiesHTML - Using custom date text:');
+    console.log('  - formattedDateRange (text):', formattedDateRange);
+  } else {
+    // Parse dates - handle both Date objects and strings
+    let startDateObj = startDateParam;
+    let endDateObj = endDateParam;
+    
+    // Convert to Date if string
+    if (typeof startDateParam === 'string' && startDateParam !== 'Invalid Date') {
+      startDateObj = new Date(startDateParam);
+    }
+    if (typeof endDateParam === 'string' && endDateParam !== 'Invalid Date') {
+      endDateObj = new Date(endDateParam);
+    }
+    
+    // Format dates
+    const startDate = (startDateObj instanceof Date && !isNaN(startDateObj)) 
+      ? startDateObj.toLocaleDateString('en-US', dateOptions) 
+      : (typeof startDateParam === 'string' ? startDateParam : 'N/A');
+    
+    const endDate = (endDateObj instanceof Date && !isNaN(endDateObj)) 
+      ? endDateObj.toLocaleDateString('en-US', dateOptions) 
+      : (typeof endDateParam === 'string' ? endDateParam : 'N/A');
+    
+    // Format date range - if start and end dates are different, show them appropriately
+    formattedDateRange = `${startDate} up to ${endDate}`;
+    
+    // Check if dates are the same (single date permit)
+    if (startDate === endDate) {
+      formattedDateRange = startDate;
+    }
+    
+    console.log('generatePermitActivitiesHTML - Date formatting:');
+    console.log('  - startDateParam:', startDateParam, 'type:', typeof startDateParam);
+    console.log('  - endDateParam:', endDateParam, 'type:', typeof endDateParam);
+    console.log('  - startDate (formatted):', startDate);
+    console.log('  - endDate (formatted):', endDate);
+    console.log('  - formattedDateRange:', formattedDateRange);
+  }
   
   if (displayInfo.mode === 'table_with_quantity' && assessmentFees.length > 0) {
     // Generate table with fee names and quantities
@@ -574,7 +617,7 @@ function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentF
           ${tableRows}
         </tbody>
       </table>
-      <p style="margin: 10px 0 0 0; text-indent: 40px;">Valid from <strong>${startDate}</strong> up to <strong>${endDate}</strong> only.</p>
+      <p style="margin: 10px 0 0 0; text-indent: 40px;">Valid from <strong>${formattedDateRange}</strong> only.</p>
     `;
   } else if (displayInfo.mode === 'table_simple' && assessmentFees.length > 0) {
     // Generate simple table with just fee names
@@ -596,12 +639,12 @@ function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentF
           ${tableRows}
         </tbody>
       </table>
-      <p style="margin: 10px 0 0 0; text-indent: 40px;">Valid from <strong>${startDate}</strong> up to <strong>${endDate}</strong> only.</p>
+      <p style="margin: 10px 0 0 0; text-indent: 40px;">Valid from <strong>${formattedDateRange}</strong> only.</p>
     `;
   } else {
     // Default paragraph mode
     return `
-      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${permitActivities}</strong> at <strong>${barangay}, ${municipality}, ${province}</strong> on <strong>${startDate}</strong> up to <strong>${endDate}</strong> only.</p>
+      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${permitActivities}</strong> at <strong>${barangay}, ${municipality}, ${province}</strong> on <strong>${formattedDateRange}</strong> only.</p>
     `;
   }
 }
@@ -623,7 +666,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
     else if (day % 10 === 2 && day !== 12) ordinal = 'nd';
     else if (day % 10 === 3 && day !== 13) ordinal = 'rd';
     
-    return `${day}${ordinal} day of ${month} ${year}`;
+    return `${day}<sup>${ordinal}</sup> day of ${month} ${year}`;
   };
   
   console.log('\n========== GENERATE REPORT HTML ==========');
@@ -757,8 +800,27 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   }
 
   // Generate permit activities content based on display mode
-  // Use permitStartDate if available, otherwise use current date
-  const reportStartDate = permitStartDate ? new Date(permitStartDate) : now;
+  // For N/A or custom validity types, use the permit date parameter text directly
+  // For fixed validity types, parse and format the dates
+  let reportStartDate = now;
+  let reportEndDate = yearEndDate;
+  let isCustomDateValidity = false;
+  let permitDateTextForDisplay = permitStartDate; // Store original text for custom dates
+  
+  // Check if this is a custom/N/A validity type
+  if (permitTypeData.validity_type === 'N/A' || permitTypeData.validity_type === 'custom' || !permitTypeData.validity_type) {
+    console.log('Permit validity type is:', permitTypeData.validity_type, '- using parameter-based dates as text');
+    isCustomDateValidity = true;
+    // Keep the original text as-is, don't parse it
+  } else {
+    // For fixed validity types, parse the date if it exists
+    console.log('Permit validity type is fixed - using year end date');
+    if (permitStartDate) {
+      reportStartDate = new Date(permitStartDate);
+    }
+    reportEndDate = yearEndDate;
+  }
+  
   const permitActivitiesContent = generatePermitActivitiesHTML(
     displayInfo, 
     permitActivities, 
@@ -766,8 +828,9 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
     barangay, 
     municipality, 
     province, 
-    reportStartDate, 
-    yearEndDate
+    permitDateTextForDisplay,  // Pass the original text for custom dates
+    reportEndDate,
+    isCustomDateValidity  // Pass flag to indicate if this is custom date text
   );
 
   // Store metadata for pagination
@@ -789,7 +852,8 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
             <div style="font-size: 11px; font-weight: bold;">REPUBLIC OF THE PHILIPPINES</div>
             <div style="font-size: 11px; font-weight: bold;">MUNICIPALITY OF DALAGUETE</div>
             <div style="font-size: 11px; font-weight: bold;">PROVINCE OF CEBU</div>
-            <div style="font-size: 12px; font-weight: bold; margin-top: 2px;">MUNICIPAL TREASURER'S OFFICE</div>
+            <div style="font-size: 16px; font-weight: bold; margin-top: 2px;">OFFICE OF TEH MUNICIPAL MAYOR</div>
+            <div style="font-size: 11px; font-weight: bold; margin-top: 2px;">Tel. # 520 4141 loc. 315</div>
           </div>
         </div>
 
@@ -816,19 +880,26 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
         <!-- Permit Body -->
         <div style="text-align: justify; margin-bottom: 30px; margin-top: 40px; font-size: 18px; line-height: 1.6; margin-left: 40px; margin-right: 40px;">
           ${permitActivitiesContent}
-          <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">This PERMIT is valid on the dates specified above and is subject to all existing laws, rules and ordinance of the municipal government.</p>
+          <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">This <strong>PERMIT</strong> is valid on the dates specified above and is subject to all existing laws, rules and ordinance of the municipal government.</p>
           <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">Further, this office reserves the right to revoke this permit anytime should public safety and interest so warrant.</p>
           <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">Given this <strong>${formatDateWithOrdinal(now)}</strong> at <strong>Municipal Hall, Dalaguete, Cebu, Philippines.</strong></p>
         </div>
         
         <!-- Approval Section -->
         <div class="avoid-break" style="margin-top: 60px; margin-left: 40px; margin-right: 40px; font-size: 14px; line-height: 1.8;">
-          <div style="margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
+          ${settings.permit_by_signatory_enabled?.value !== 'false' ? `
+          <div style="margin-bottom: 20px;"><strong>BY:</strong></div>
+          <div style="margin-bottom: 5px;">
+            <div style="font-weight: bold; text-transform: uppercase;">${settings.permit_by_signatory_name?.value || 'NAME'}</div>
+            <div style="text-transform: uppercase;">${settings.permit_by_signatory_title?.value || 'POSITION'}</div>
+          </div>
+          ` : ''}
+          <div style="margin-top: 30px; margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
           <div style="margin-bottom: 5px;">
             <div style="font-weight: bold;">${settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA'}</div>
             <div style="font-weight: normal;">${settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR'}</div>
           </div>
-          <div style="margin-top: 20px;">
+          <div style="margin-top: 20px; font-size: 10px; line-height: 1.2;">
             <div>PAID: ₱ ${paymentData.amount ? parseFloat(paymentData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '18,700.00'}</div>
             <div>O.R. NO: ${paymentData.official_receipt_no || '1238282'}</div>
             <div>DATE: ${paymentData.payment_date ? new Date(paymentData.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>

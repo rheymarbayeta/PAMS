@@ -19,6 +19,9 @@ interface Settings {
   municipal_treasurer_position?: Setting;
   permit_signatory_name?: Setting;
   permit_signatory_position?: Setting;
+  permit_by_signatory_name?: Setting;
+  permit_by_signatory_title?: Setting;
+  permit_by_signatory_enabled?: Setting;
 }
 
 export default function SettingsPage() {
@@ -33,6 +36,9 @@ export default function SettingsPage() {
     municipal_treasurer_position: '',
     permit_signatory_name: '',
     permit_signatory_position: '',
+    permit_by_signatory_name: '',
+    permit_by_signatory_title: '',
+    permit_by_signatory_enabled: 'true',
   });
 
   useEffect(() => {
@@ -52,6 +58,9 @@ export default function SettingsPage() {
         municipal_treasurer_position: settingsData.municipal_treasurer_position?.value || '',
         permit_signatory_name: settingsData.permit_signatory_name?.value || '',
         permit_signatory_position: settingsData.permit_signatory_position?.value || '',
+        permit_by_signatory_name: settingsData.permit_by_signatory_name?.value || '',
+        permit_by_signatory_title: settingsData.permit_by_signatory_title?.value || '',
+        permit_by_signatory_enabled: settingsData.permit_by_signatory_enabled?.value || 'true',
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -71,6 +80,9 @@ export default function SettingsPage() {
         api.put(`/api/settings/municipal_treasurer_position`, { value: formData.municipal_treasurer_position }),
         api.put(`/api/settings/permit_signatory_name`, { value: formData.permit_signatory_name }),
         api.put(`/api/settings/permit_signatory_position`, { value: formData.permit_signatory_position }),
+        api.put(`/api/settings/permit_by_signatory_name`, { value: formData.permit_by_signatory_name }),
+        api.put(`/api/settings/permit_by_signatory_title`, { value: formData.permit_by_signatory_title }),
+        api.put(`/api/settings/permit_by_signatory_enabled`, { value: formData.permit_by_signatory_enabled }),
       ]);
       alert('Settings saved successfully');
       fetchSettings();
@@ -302,6 +314,63 @@ export default function SettingsPage() {
                     placeholder="e.g., Business Permit Officer"
                     value={formData.permit_signatory_position}
                     onChange={(e) => setFormData({ ...formData, permit_signatory_position: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Permit BY Signatory */}
+            <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center">
+                    <svg className="h-4 w-4 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-semibold text-gray-900">Permit BY Signatory</h2>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-sm font-medium text-gray-700">Enable</span>
+                  <input
+                    type="checkbox"
+                    checked={formData.permit_by_signatory_enabled === 'true'}
+                    onChange={(e) => setFormData({ ...formData, permit_by_signatory_enabled: e.target.checked ? 'true' : 'false' })}
+                    className="w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-2 focus:ring-orange-500"
+                  />
+                </label>
+              </div>
+              <p className="text-sm text-gray-500 mb-6">
+                Configure the "BY" signatory's information (displayed above the "APPROVED BY" section on permit documents). Toggle to enable or disable this section.
+              </p>
+
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${formData.permit_by_signatory_enabled === 'false' ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div>
+                  <label htmlFor="permit_by_signatory_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    BY Signatory Name *
+                  </label>
+                  <input
+                    id="permit_by_signatory_name"
+                    type="text"
+                    required
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 outline-none"
+                    placeholder="e.g., MARIA SANTOS"
+                    value={formData.permit_by_signatory_name}
+                    onChange={(e) => setFormData({ ...formData, permit_by_signatory_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="permit_by_signatory_title" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    BY Signatory Position *
+                  </label>
+                  <input
+                    id="permit_by_signatory_title"
+                    type="text"
+                    required
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 outline-none"
+                    placeholder="e.g., CITY BUSINESS PERMIT OFFICER"
+                    value={formData.permit_by_signatory_title}
+                    onChange={(e) => setFormData({ ...formData, permit_by_signatory_title: e.target.value })}
                   />
                 </div>
               </div>

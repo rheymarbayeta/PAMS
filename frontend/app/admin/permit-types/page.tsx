@@ -34,6 +34,15 @@ interface Fee {
   default_amount: number;
 }
 
+interface Application {
+  application_id: string;
+  entity_id: string;
+  entity_name: string;
+  application_number: string;
+  status: string;
+  created_at: string;
+}
+
 export default function PermitTypesPage() {
   const { hasRole } = useAuth();
   const [permitTypes, setPermitTypes] = useState<PermitType[]>([]);
@@ -41,6 +50,10 @@ export default function PermitTypesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showFeesModal, setShowFeesModal] = useState(false);
+  const [showApplicationsModal, setShowApplicationsModal] = useState(false);
+  const [selectedPermitTypeName, setSelectedPermitTypeName] = useState<string>('');
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(false);
   const [editingPermitType, setEditingPermitType] = useState<PermitType | null>(null);
   const [formData, setFormData] = useState({
     permit_type_name: '',
@@ -95,6 +108,25 @@ export default function PermitTypesPage() {
       console.error('Error fetching permit type with fees:', error);
       return null;
     }
+  };
+
+  const fetchApplicationsByPermitType = async (permitTypeName: string) => {
+    try {
+      setApplicationsLoading(true);
+      const response = await api.get(`/api/applications?permitType=${encodeURIComponent(permitTypeName)}`);
+      setApplications(response.data);
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+      setApplications([]);
+    } finally {
+      setApplicationsLoading(false);
+    }
+  };
+
+  const handleViewApplications = async (permitType: PermitType) => {
+    setSelectedPermitTypeName(permitType.permit_type_name);
+    setShowApplicationsModal(true);
+    await fetchApplicationsByPermitType(permitType.permit_type_name);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -339,6 +371,15 @@ export default function PermitTypesPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
+                        <button
+                          title="View applications"
+                          onClick={() => handleViewApplications(permitType)}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-150"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </button>
                         <button
                           title="Edit permit type"
                           onClick={() => handleEdit(permitType)}
@@ -693,6 +734,75 @@ export default function PermitTypesPage() {
                     className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200"
                   >
                     Save Fees
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Applications Modal */}
+          {showApplicationsModal && (
+            <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-start justify-center pt-10">
+              <div className="relative w-full max-w-4xl mx-4 bg-white shadow-2xl rounded-2xl border border-gray-100 overflow-hidden max-h-[90vh] flex flex-col">
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex-shrink-0">
+                  <h3 className="text-lg font-semibold text-white">
+                    Applications for {selectedPermitTypeName}
+                  </h3>
+                </div>
+                <div className="p-6 overflow-y-auto flex-1">
+                  {applicationsLoading ? (
+                    <div className="flex items-center justify-center py-20">
+                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
+                    </div>
+                  ) : applications.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-100">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Application No.</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Entity</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Created Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {applications.map((app) => (
+                            <tr key={app.application_id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900">{app.application_number}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600">{app.entity_name}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-xs px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                  {app.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {new Date(app.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-20">
+                      <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-gray-500 font-medium">No applications found for this permit type</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end gap-3 p-6 border-t border-gray-100 bg-gray-50/30 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowApplicationsModal(false);
+                      setApplications([]);
+                      setSelectedPermitTypeName('');
+                    }}
+                    className="px-5 py-2.5 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all duration-200"
+                  >
+                    Close
                   </button>
                 </div>
               </div>

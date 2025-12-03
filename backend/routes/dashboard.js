@@ -11,10 +11,11 @@ router.use(authenticate);
 router.get('/permit-categories', async (req, res) => {
   try {
     const [categories] = await pool.execute(
-      `SELECT DISTINCT permit_type_name 
-       FROM permit_types 
-       WHERE is_active = 1 
-       ORDER BY permit_type_name`
+      `SELECT DISTINCT pt.permit_type_name 
+       FROM permit_types pt
+       INNER JOIN applications a ON a.permit_type_id = pt.permit_type_id
+       WHERE pt.is_active = 1
+       ORDER BY pt.permit_type_name`
     );
     res.json(categories.map(c => c.permit_type_name));
   } catch (error) {
@@ -28,24 +29,24 @@ router.get('/stats', async (req, res) => {
   try {
     const userId = req.user.user_id;
     const roleName = req.user.role_name;
-    const permitCategory = req.query.permitCategory; // Optional filter by permit type name
+    const permitCategory = req.query.permitCategory; // Optional filter by permit_type_name
 
-    let pendingQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status = ?';
+    let pendingQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id WHERE a.status = ?';
     let pendingParams = ['Pending'];
 
-    let pendingApprovalQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status = ?';
+    let pendingApprovalQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id WHERE a.status = ?';
     let pendingApprovalParams = ['Pending Approval'];
 
-    let approvedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status IN (?, ?)';
+    let approvedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id WHERE a.status IN (?, ?)';
     let approvedParams = ['Approved', 'Paid'];
 
-    let issuedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status IN (?, ?)';
+    let issuedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id WHERE a.status IN (?, ?)';
     let issuedParams = ['Issued', 'Released'];
 
-    let releasedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name WHERE a.status = ?';
+    let releasedQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id WHERE a.status = ?';
     let releasedParams = ['Released'];
 
-    let totalQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type = pt.permit_type_name';
+    let totalQuery = 'SELECT COUNT(*) as count FROM applications a LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id';
     let totalParams = [];
     let hasWhere = false;
 

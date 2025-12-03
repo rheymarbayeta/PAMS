@@ -157,7 +157,10 @@ export default function ApplicationDetailPage() {
 
   const handleDelete = async () => {
     if (!application) return;
-    if (!confirm('Are you sure you want to delete this pending application? This action cannot be undone.')) return;
+    const message = hasRole('SuperAdmin') 
+      ? 'Are you sure you want to delete this application? This action cannot be undone.'
+      : 'Are you sure you want to delete this pending application? This action cannot be undone.';
+    if (!confirm(message)) return;
     try {
       await api.delete(`/api/applications/${application.application_id}`);
       alert('Application deleted successfully');

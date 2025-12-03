@@ -22,6 +22,7 @@ export default function EntitiesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [formData, setFormData] = useState({
     entity_name: '',
     contact_person: '',
@@ -123,30 +124,50 @@ export default function EntitiesPage() {
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
                   Entities
                 </h1>
-                <p className="text-xs sm:text-sm text-gray-500">{entities.length} registered</p>
+                <p className="text-xs sm:text-sm text-gray-500">{entities.filter(e => e.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) || e.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) || e.email?.toLowerCase().includes(searchTerm.toLowerCase())).length} {entities.filter(e => e.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) || e.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) || e.email?.toLowerCase().includes(searchTerm.toLowerCase())).length === 1 ? 'result' : 'results'}</p>
               </div>
             </div>
-            {canEdit && (
-              <button
-                onClick={() => {
-                  setEditingEntity(null);
-                  setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
-                  setShowModal(true);
-                }}
-                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 focus:ring-4 focus:ring-emerald-200 transition-all duration-200 shadow-lg shadow-emerald-200 w-full sm:w-auto"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 sm:flex-none sm:min-w-64">
+                <input
+                  type="text"
+                  placeholder="Search entities..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2.5 pl-10 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all duration-200 outline-none"
+                  aria-label="Search entities"
+                />
+                <svg className="absolute left-3 top-3 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                Add Entity
-              </button>
-            )}
+              </div>
+              {canEdit && (
+                <button
+                  onClick={() => {
+                    setEditingEntity(null);
+                    setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
+                    setShowModal(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 focus:ring-4 focus:ring-emerald-200 transition-all duration-200 shadow-lg shadow-emerald-200 w-full sm:w-auto"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add Entity
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Entities List */}
           <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-hidden">
             <ul className="divide-y divide-gray-100">
-              {entities.map((entity, index) => (
+              {entities.filter(e => 
+                e.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (e.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+                (e.email?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+                (e.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
+              ).map((entity, index) => (
                 <li key={entity.entity_id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
                   <div className="px-4 sm:px-6 py-4 sm:py-5">
                     {/* Mobile Layout */}
@@ -280,6 +301,21 @@ export default function EntitiesPage() {
                   </div>
                 </li>
               ))}
+              {entities.filter(e => 
+                e.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (e.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+                (e.email?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+                (e.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
+              ).length === 0 && (
+                <li className="px-4 sm:px-6 py-12 text-center">
+                  <svg className="w-12 h-12 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  <p className="text-gray-500 font-medium">
+                    {searchTerm ? 'No entities found matching your search.' : 'No entities registered yet.'}
+                  </p>
+                </li>
+              )}
             </ul>
           </div>
 

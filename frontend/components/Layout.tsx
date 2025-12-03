@@ -83,6 +83,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: '/admin/fees', label: 'Fees' },
     { href: '/admin/settings', label: 'Settings' },
     { href: '/admin/permit-types', label: 'Permit Types' },
+    { href: '/admin/attributes', label: 'Attributes' },
     { href: '/admin/rules', label: 'Rules' },
   ];
 
