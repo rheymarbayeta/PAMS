@@ -97,6 +97,7 @@ router.get('/', async (req, res) => {
         a.assessor_id,
         a.approver_id,
         a.permit_type,
+        COALESCE(pt.permit_type_name, a.permit_type) as permit_type_name,
         a.status,
         a.created_at,
         a.updated_at,
@@ -109,6 +110,7 @@ router.get('/', async (req, res) => {
       INNER JOIN users u1 ON a.creator_id = u1.user_id
       LEFT JOIN users u2 ON a.assessor_id = u2.user_id
       LEFT JOIN users u3 ON a.approver_id = u3.user_id
+      LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id
     `;
 
     const conditions = [];
@@ -1566,6 +1568,46 @@ router.put('/:id/release', authorize('SuperAdmin', 'Admin', 'Approver'), async (
     res.json({ message: 'Permit released successfully' });
   } catch (error) {
     console.error('Release permit error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Re-assess application - changes status from Approved back to Assessed
+router.put('/:id/reassess', authorize('SuperAdmin', 'Admin', 'Approver'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+
+    // Check current status
+    const [apps] = await pool.execute(
+      'SELECT * FROM applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (apps[0].status !== 'Approved') {
+      return res.status(400).json({ error: 'Application can only be re-assessed if it is in Approved status' });
+    }
+
+    // Update status back to Assessed
+    await pool.execute(
+      'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+      ['Assessed', applicationId]
+    );
+
+    // Log action
+    await logAction(
+      req.user.user_id,
+      'REASSESS_APPLICATION',
+      `Re-assessed application ${apps[0].application_number || applicationId}. Status changed from Approved to Assessed.`,
+      applicationId
+    );
+
+    res.json({ message: 'Application re-assessed successfully. Status changed to Assessed.' });
+  } catch (error) {
+    console.error('Re-assess application error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });

@@ -12,6 +12,7 @@ interface Application {
   application_number: string | null;
   entity_name: string;
   permit_type: string;
+  permit_type_name: string;
   status: string;
   creator_name: string;
   assessor_name: string | null;
@@ -24,14 +25,24 @@ export default function ApplicationsPage() {
   const { user, hasRole } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [permitTypeFilter, setPermitTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [permitTypes, setPermitTypes] = useState<string[]>([]);
 
   useEffect(() => {
     fetchApplications();
-    const urlFilter = new URLSearchParams(window.location.search).get('filter');
+    fetchPermitTypes();
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlFilter = urlParams.get('filter');
+    const urlPermitCategory = urlParams.get('permitCategory');
+    
     if (urlFilter) {
-      setFilter(urlFilter);
+      setStatusFilter(urlFilter);
+    }
+    if (urlPermitCategory) {
+      setPermitTypeFilter(urlPermitCategory);
     }
   }, []);
 
@@ -43,6 +54,21 @@ export default function ApplicationsPage() {
       console.error('Error fetching applications:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPermitTypes = async () => {
+    try {
+      const response = await api.get('/api/permit-types');
+      console.log('Permit types response:', response.data);
+      // Extract permit type names from the response
+      const typeNames = response.data.map((pt: any) => pt.permit_type_name).sort() as string[];
+      console.log('Extracted permit type names:', typeNames);
+      setPermitTypes(typeNames);
+    } catch (error) {
+      console.error('Error fetching permit types:', error);
+      // Fallback to empty array if fetch fails
+      setPermitTypes([]);
     }
   };
 
@@ -84,13 +110,14 @@ export default function ApplicationsPage() {
     }
   };
 
-  const filteredApplications = (filter === 'all' 
+  const filteredApplications = (statusFilter === 'all' 
     ? applications 
-    : applications.filter(app => app.status === filter))
+    : applications.filter(app => app.status === statusFilter))
+    .filter(app => permitTypeFilter === 'all' || app.permit_type_name === permitTypeFilter)
     .filter(app => 
       (app.application_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
       app.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.permit_type.toLowerCase().includes(searchTerm.toLowerCase())
+      app.permit_type_name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
   if (loading) {
@@ -149,8 +176,8 @@ export default function ApplicationsPage() {
               </label>
               <select
                 id="status-filter"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full sm:w-auto border border-slate-200 rounded-lg px-3 sm:px-4 py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none cursor-pointer"
                 aria-label="Filter applications by status"
               >
@@ -163,6 +190,23 @@ export default function ApplicationsPage() {
                 <option value="Issued">Issued</option>
                 <option value="Released">Released</option>
                 <option value="Rejected">Rejected</option>
+              </select>
+              <label htmlFor="permit-type-filter" className="sr-only">
+                Filter by permit type
+              </label>
+              <select
+                id="permit-type-filter"
+                value={permitTypeFilter}
+                onChange={(e) => setPermitTypeFilter(e.target.value)}
+                className="w-full sm:w-auto border border-slate-200 rounded-lg px-3 sm:px-4 py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none cursor-pointer"
+                aria-label="Filter applications by permit type"
+              >
+                <option value="all">All Permit Types</option>
+                {permitTypes.map((permitType) => (
+                  <option key={permitType} value={permitType}>
+                    {permitType}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -204,7 +248,7 @@ export default function ApplicationsPage() {
                         <div className="mt-1.5 sm:mt-2 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 text-sm text-slate-600">
                           <span className="font-medium text-slate-700 truncate">{app.entity_name}</span>
                           <span className="hidden sm:inline text-slate-300">•</span>
-                          <span className="text-slate-500 text-xs sm:text-sm">{app.permit_type}</span>
+                          <span className="text-slate-500 text-xs sm:text-sm">{app.permit_type_name}</span>
                         </div>
                         <div className="mt-1 sm:mt-1.5 flex items-center gap-2 text-[10px] sm:text-xs text-slate-400">
                           <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -134,7 +134,12 @@ export default function DashboardPage() {
             {/* Pending Applications */}
             <div
               className="group bg-white rounded-xl border border-slate-200 p-3 sm:p-5 cursor-pointer hover:border-amber-300 hover:shadow-soft transition-all duration-200 active:scale-[0.98]"
-              onClick={() => router.push('/applications?filter=Pending')}
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set('filter', 'Pending');
+                if (selectedCategory) params.set('permitCategory', selectedCategory);
+                router.push(`/applications?${params.toString()}`);
+              }}
             >
               <div className="flex items-start sm:items-center justify-between">
                 <div className="min-w-0">
@@ -158,7 +163,12 @@ export default function DashboardPage() {
             {/* Pending Approval */}
             <div
               className="group bg-white rounded-xl border border-slate-200 p-3 sm:p-5 cursor-pointer hover:border-orange-300 hover:shadow-soft transition-all duration-200 active:scale-[0.98]"
-              onClick={() => router.push('/applications?filter=Pending Approval')}
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set('filter', 'Pending Approval');
+                if (selectedCategory) params.set('permitCategory', selectedCategory);
+                router.push(`/applications?${params.toString()}`);
+              }}
             >
               <div className="flex items-start sm:items-center justify-between">
                 <div className="min-w-0">
@@ -182,7 +192,12 @@ export default function DashboardPage() {
             {/* Approved */}
             <div
               className="group bg-white rounded-xl border border-slate-200 p-3 sm:p-5 cursor-pointer hover:border-teal-300 hover:shadow-soft transition-all duration-200 active:scale-[0.98]"
-              onClick={() => router.push('/applications?filter=Approved')}
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set('filter', 'Approved');
+                if (selectedCategory) params.set('permitCategory', selectedCategory);
+                router.push(`/applications?${params.toString()}`);
+              }}
             >
               <div className="flex items-start sm:items-center justify-between">
                 <div className="min-w-0">
@@ -206,7 +221,12 @@ export default function DashboardPage() {
             {/* Issued */}
             <div
               className="group bg-white rounded-xl border border-slate-200 p-3 sm:p-5 cursor-pointer hover:border-sky-300 hover:shadow-soft transition-all duration-200 active:scale-[0.98]"
-              onClick={() => router.push('/applications?filter=Issued')}
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set('filter', 'Issued');
+                if (selectedCategory) params.set('permitCategory', selectedCategory);
+                router.push(`/applications?${params.toString()}`);
+              }}
             >
               <div className="flex items-start sm:items-center justify-between">
                 <div className="min-w-0">
@@ -230,7 +250,12 @@ export default function DashboardPage() {
             {/* Released */}
             <div
               className="group bg-white rounded-xl border border-slate-200 p-3 sm:p-5 cursor-pointer hover:border-emerald-300 hover:shadow-soft transition-all duration-200 active:scale-[0.98]"
-              onClick={() => router.push('/applications?filter=Released')}
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set('filter', 'Released');
+                if (selectedCategory) params.set('permitCategory', selectedCategory);
+                router.push(`/applications?${params.toString()}`);
+              }}
             >
               <div className="flex items-start sm:items-center justify-between">
                 <div className="min-w-0">

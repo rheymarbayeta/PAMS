@@ -108,6 +108,7 @@ export default function ApplicationDetailPage() {
   const canApprove = user && hasRole(['SuperAdmin', 'Admin', 'Approver']);
   const canIssue = user && hasRole(['SuperAdmin', 'Admin', 'Approver']) && application?.status === 'Paid';
   const canRelease = user && hasRole(['SuperAdmin', 'Admin', 'Approver']) && application?.status === 'Issued';
+  const canReassess = user && hasRole(['SuperAdmin', 'Admin', 'Approver']) && application?.status === 'Approved';
   const canPrintPermit = application?.status === 'Paid' || application?.status === 'Issued' || application?.status === 'Released';
   const canRenew = user && hasRole(['SuperAdmin', 'Admin', 'Application Creator']) && 
     (application?.status === 'Issued' || application?.status === 'Released');
@@ -133,6 +134,18 @@ export default function ApplicationDetailPage() {
       alert(error.response?.data?.error || 'Error issuing permit');
     } finally {
       setIssuing(false);
+    }
+  };
+
+  const handleReassessPermit = async () => {
+    if (!application) return;
+    if (!confirm('Re-assess this application? This will change the status back to Assessed.')) return;
+    try {
+      await api.put(`/api/applications/${application.application_id}/reassess`);
+      alert('Application re-assessed successfully!');
+      fetchApplication();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Error re-assessing application');
     }
   };
 
@@ -347,6 +360,17 @@ export default function ApplicationDetailPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                       </svg>
                       Release
+                    </button>
+                  )}
+                  {canReassess && (
+                    <button
+                      onClick={handleReassessPermit}
+                      className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 text-white rounded-xl shadow-lg shadow-amber-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                    >
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Re-assess
                     </button>
                   )}
                   {canRenew && (
