@@ -1,30 +1,6 @@
 version: '3.8'
 
 services:
-  # MySQL Database
-  mysql:
-    image: mysql:8.0
-    container_name: pams-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${DB_NAME:-pams_db}
-      MYSQL_USER: ${DB_USER:-pams_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-pams_password}
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./database/schema_empty.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-    networks:
-      - pams-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   # Backend API
   backend:
     build:
@@ -33,10 +9,10 @@ services:
     container_name: pams-backend
     restart: unless-stopped
     environment:
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_USER: ${DB_USER:-pams_user}
-      DB_PASSWORD: ${DB_PASSWORD:-pams_password}
+      DB_HOST: 192.168.11.26
+      DB_PORT: 3310
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-dalaguete1000}
       DB_NAME: ${DB_NAME:-pams_db}
       JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
@@ -48,9 +24,6 @@ services:
     volumes:
       - backend_uploads:/app/uploads
       - ./backend/assets:/app/assets:ro
-    depends_on:
-      mysql:
-        condition: service_healthy
     networks:
       - pams-network
     healthcheck:
@@ -84,7 +57,5 @@ networks:
     driver: bridge
 
 volumes:
-  mysql_data:
-    driver: local
   backend_uploads:
     driver: local
