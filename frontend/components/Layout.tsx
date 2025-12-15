@@ -79,6 +79,7 @@ export default function Layout({ children }: LayoutProps) {
   ];
 
   const adminLinks = [
+    { href: '/reports', label: 'Reports' },
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/fees', label: 'Fees' },
     { href: '/admin/settings', label: 'Settings' },

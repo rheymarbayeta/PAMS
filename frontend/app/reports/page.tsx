@@ -94,23 +94,39 @@ export default function ReportsPage() {
   const [approvers, setApprovers] = useState<string[]>([]);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [permitCategories, setPermitCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+
+  useEffect(() => {
+    fetchPermitCategories();
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [selectedCategory]);
+
+  const fetchPermitCategories = async () => {
+    try {
+      const response = await api.get('/api/dashboard/permit-categories');
+      setPermitCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching permit categories:', error);
+    }
+  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/applications');
+      const params = selectedCategory ? `?permitCategory=${encodeURIComponent(selectedCategory)}` : '';
+      const response = await api.get(`/api/applications${params}`);
       const apps = response.data;
       setApplications(apps);
 
       // Extract unique values for filters
-      const permitTypeSet = new Set(apps.map((app: Application) => app.permit_type_name));
-      const creatorSet = new Set(apps.map((app: Application) => app.creator_name));
-      const assessorSet = new Set(apps.map((app: Application) => app.assessor_name).filter(Boolean));
-      const approverSet = new Set(apps.map((app: Application) => app.approver_name).filter(Boolean));
+      const permitTypeSet = new Set<string>(apps.map((app: Application) => app.permit_type_name));
+      const creatorSet = new Set<string>(apps.map((app: Application) => app.creator_name));
+      const assessorSet = new Set<string>(apps.map((app: Application) => app.assessor_name).filter(Boolean) as string[]);
+      const approverSet = new Set<string>(apps.map((app: Application) => app.approver_name).filter(Boolean) as string[]);
 
       setPermitTypes(Array.from(permitTypeSet).sort());
       setCreators(Array.from(creatorSet).sort());
@@ -344,39 +360,6 @@ export default function ReportsPage() {
                 </h1>
                 <p className="text-xs sm:text-sm text-slate-500">Comprehensive application analytics and reporting</p>
               </div>
-            </div>
-          </div>
-
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-5 sm:grid-cols-3 xl:grid-cols-5 mb-6 sm:mb-8">
-            {/* Total Applications */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-5">
-              <p className="text-xs sm:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1">Total</p>
-              <p className="text-xl sm:text-2xl font-bold text-slate-800">{stats.total}</p>
-            </div>
-
-            {/* Pending */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-5">
-              <p className="text-xs sm:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1">Pending</p>
-              <p className="text-xl sm:text-2xl font-bold text-amber-700">{stats.pending}</p>
-            </div>
-
-            {/* Assessed */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-5">
-              <p className="text-xs sm:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1">Assessed</p>
-              <p className="text-xl sm:text-2xl font-bold text-sky-700">{stats.assessed}</p>
-            </div>
-
-            {/* Approved */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-5">
-              <p className="text-xs sm:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1">Approved</p>
-              <p className="text-xl sm:text-2xl font-bold text-green-700">{stats.approved}</p>
-            </div>
-
-            {/* Paid */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-5">
-              <p className="text-xs sm:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1">Paid</p>
-              <p className="text-xl sm:text-2xl font-bold text-teal-700">{stats.paid}</p>
             </div>
           </div>
 
@@ -650,7 +633,8 @@ export default function ReportsPage() {
                               </span>
                             );
                           } else if (col.key === 'created_at' || col.key === 'assessed_at' || col.key === 'approved_at') {
-                            cellContent = app[col.key] ? new Date(app[col.key]).toLocaleDateString() : '-';
+                            const dateValue = app[col.key];
+                            cellContent = dateValue ? new Date(dateValue as string).toLocaleDateString() : '-';
                           } else if (col.key === 'assessor_name' || col.key === 'approver_name') {
                             cellContent = app[col.key] || '-';
                           } else {

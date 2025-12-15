@@ -497,13 +497,10 @@ export default function NewApplicationPage() {
                     <input
                       type="text"
                       placeholder="Parameter name"
-                      className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                      className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-4 py-2.5 text-gray-700 cursor-not-allowed disabled:opacity-70"
                       value={param.param_name}
-                      onChange={(e) => {
-                        const newParameters = [...formData.parameters];
-                        newParameters[index].param_name = e.target.value;
-                        setFormData({ ...formData, parameters: newParameters });
-                      }}
+                      disabled
+                      readOnly
                     />
                     <input
                       type="text"
