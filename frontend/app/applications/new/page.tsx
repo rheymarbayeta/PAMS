@@ -47,6 +47,7 @@ export default function NewApplicationPage() {
     province: '',
     country: '',
     barangay: '',
+    street: '',
     parameters: [] as { param_name: string; param_value: string }[],
   });
 
@@ -110,6 +111,7 @@ export default function NewApplicationPage() {
         parameters: [
           { param_name: 'Date', param_value: '' },
           { param_name: 'Conduct/engage in', param_value: '' },
+          { param_name: 'Attachment', param_value: '' },
         ],
       }));
     } catch (error) {
@@ -123,6 +125,7 @@ export default function NewApplicationPage() {
         parameters: [
           { param_name: 'Date', param_value: '' },
           { param_name: 'Conduct/engage in', param_value: '' },
+          { param_name: 'Attachment', param_value: '' },
         ],
       }));
     }
@@ -193,6 +196,7 @@ export default function NewApplicationPage() {
         { param_name: 'Province', param_value: formData.province },
         { param_name: 'Country', param_value: formData.country },
         { param_name: 'Barangay', param_value: formData.barangay },
+        { param_name: 'Street/Sitio', param_value: formData.street },
         ...formData.parameters.filter((p) => p.param_name && p.param_value),
       ];
 
@@ -467,6 +471,21 @@ export default function NewApplicationPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label htmlFor="street" className="block text-sm font-medium text-gray-700 mb-2">
+                    Street / Sitio *
+                  </label>
+                  <input
+                    id="street"
+                    type="text"
+                    required
+                    className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                    placeholder="Street or Sitio"
+                    value={formData.street}
+                    onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                    aria-label="Street or Sitio"
+                  />
                 </div>
               </div>
             </div>

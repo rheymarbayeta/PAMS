@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<!-- Include html2pdf.js for PDF generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    font-family: 'Arial', sans-serif;
+  }
+  #report-container {
+    max-width: 8.5in;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .loading {
+    padding: 40px;
+    text-align: center;
+    font-size: 18px;
+    color: #666;
+  }
+  .error {
+    padding: 20px;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    color: #856404;
+    margin: 20px;
+  }
+  .controls {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    text-align: right;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .btn {
+    padding: 8px 16px;
+    margin-left: 5px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .btn:hover {
+    background-color: #0056b3;
+  }
+  .btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+  }
+  .btn-print {
+    background-color: #28a745;
+  }
+  .btn-print:hover {
+    background-color: #1e7e34;
+  }
+  .btn-pdf {
+    background-color: #dc3545;
+  }
+  .btn-pdf:hover {
+    background-color: #c82333;
+  }
+  
+  /* Page container for proper sizing */
+  .page {
+    width: 8.5in;
+    min-height: 13in;
+    padding: 0.5in;
+    margin: 0 auto 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .page:last-child {
+    page-break-after: avoid;
+  }
+  
+  .page-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .page-footer {
+    flex-shrink: 0;
+    padding-top: 15px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    font-size: 8px;
+    color: #666;
+    margin-top: auto;
+  }
+  
+  .hidden {
+    display: none;
+  }
+  
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+  
+  @page {
+    size: 8.5in 13in;
+    margin: 0;
+  }
+  
+  @media print {
+    body {
+      background: white;
+      margin: 0;
+      padding: 0;
+    }
+    #report-container {
+      box-shadow: none;
+      margin: 0;
+      max-width: 100%;
+    }
+    .controls {
+      display: none !important;
+    }
+    .page {
+      box-shadow: none;
+      margin: 0;
+      width: 8.5in;
+      min-height: 13in;
+      page-break-after: always;
+    }
+    .page:last-child {
+      page-break-after: avoid;
+    }
+  }
+</style>
+<title>Generated Endorsement Letter</title>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn btn-print" onclick="printReport()">🖨️ Print Letter</button>
+    <button class="btn btn-pdf" onclick="downloadPDF()" id="pdf-btn">📄 Download PDF</button>
+  </div>
+  
+  <div id="loading" class="loading">
+    <p>Loading endorsement letter...</p>
+  </div>
+  
+  <div id="error" class="error hidden"></div>
+  
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script>
+// Get application ID from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const applicationId = urlParams.get('id') || urlParams.get('applicationId');
+const authToken = urlParams.get('token') || localStorage.getItem('token') || '';
+
+// Determine API base URL
+let apiBaseUrl = '';
+if (typeof window !== 'undefined') {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    apiBaseUrl = 'http://localhost:5000';
+  } else {
+    const origin = window.location.origin;
+    if (origin.includes(':6070')) {
+      apiBaseUrl = origin.replace(':6070', ':5040');
+    } else if (origin.includes(':3000')) {
+      apiBaseUrl = origin.replace(':3000', ':5000');
+    } else {
+      apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+    }
+  }
+}
+
+console.log('App ID:', applicationId);
+console.log('API Base URL:', apiBaseUrl);
+console.log('Auth Token:', authToken ? 'Present' : 'Missing');
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (!applicationId) {
+    showError('No application ID provided. Please pass ?id=<applicationId> in the URL.');
+    return;
+  }
+  
+  fetchEndorsementLetter();
+});
+
+async function fetchEndorsementLetter() {
+  try {
+    const applicationUrl = `${apiBaseUrl}/api/applications/${applicationId}`;
+    const settingsUrl = `${apiBaseUrl}/api/settings`;
+    
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    console.log('Fetching application from:', applicationUrl);
+    const applicationResponse = await fetch(applicationUrl, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'include'
+    });
+    
+    if (!applicationResponse.ok) {
+      if (applicationResponse.status === 401) {
+        throw new Error('Unauthorized. Please login again.');
+      }
+      if (applicationResponse.status === 404) {
+        throw new Error('Application not found.');
+      }
+      throw new Error(`HTTP Error: ${applicationResponse.status} ${applicationResponse.statusText}`);
+    }
+    
+    const applicationData = await applicationResponse.json();
+    console.log('✅ Application data loaded successfully');
+    
+    // Fetch settings
+    let settings = {};
+    try {
+      const settingsResponse = await fetch(settingsUrl, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include'
+      });
+      if (settingsResponse.ok) {
+        settings = await settingsResponse.json();
+        console.log('✅ Settings loaded:', settings);
+      }
+    } catch (settingsError) {
+      console.warn('Could not fetch settings, using defaults:', settingsError);
+    }
+    
+    // Generate endorsement letter HTML
+    const letterContent = generateEndorsementLetter(applicationData, settings);
+    
+    // Display the letter
+    const reportContent = document.getElementById('report-content');
+    reportContent.innerHTML = letterContent;
+    reportContent.classList.remove('hidden');
+    
+    // Hide loading
+    document.getElementById('loading').classList.add('hidden');
+    
+  } catch (error) {
+    console.error('Error fetching endorsement letter:', error);
+    showError(error.message || 'Failed to load endorsement letter');
+  }
+}
+
+function generateEndorsementLetter(applicationData, settings) {
+  // Use application created date instead of current date
+  const applicationDate = applicationData.created_at ? new Date(applicationData.created_at) : new Date();
+  const entityName = applicationData.entity_name || 'Applicant';
+  const permitType = applicationData.permit_type || 'Permit';
+  
+  // Get parameters
+  const getParam = (name) => {
+    const param = applicationData.parameters?.find(p => p.param_name === name);
+    return param?.param_value || '';
+  };
+  
+  const municipality = getParam('Municipality') || 'Dalaguete';
+  const barangay = getParam('Barangay') || 'Barangay';
+  const sitio = getParam('Street/Sitio') || 'Sitio';
+  const province = getParam('Province') || 'Cebu';
+  const conductEngage = getParam('Conduct/engage in') || permitType;
+  
+  // Get signatory details from settings
+  const signatoryName = settings.permit_signatory_name?.value || 'NELIN B. TAMBIS, CPA, MPA';
+  const signatoryPosition = settings.permit_signatory_position?.value || 'Municipal Mayor';
+  const signatoryAddress = `${settings.default_municipality?.value || 'Dalaguete'}, ${settings.default_province?.value || 'Cebu'}`;
+  
+  // Get additional signatory from settings (BPLO Head or similar)
+  const bploHeadName = settings.bplo_head_name?.value || 'ATTY. DANICA NIÑA B. OSORIO-DUBLUIS, CPA';
+  const bploHeadTitle = settings.bplo_head_title?.value || 'BPLO - HEAD';
+  
+  // Format application date
+  const dateOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+  const formattedDate = applicationDate.toLocaleDateString('en-US', dateOptions);
+  
+  const dayOfMonth = applicationDate.getDate();
+  const dayWithOrdinal = getDayWithOrdinal(dayOfMonth);
+  const monthYear = applicationDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  
+  return `
+    <div class="page" id="page-1">
+      <div class="page-content">
+        <!-- Header -->
+        <div class="avoid-break" style="text-align: center; margin-bottom: 20px;">
+          <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 8px;">
+            <img src="/dalaguete-logo.png" alt="Logo" style="height: 50px; width: auto;">
+          </div>
+          <div style="text-align: center; line-height: 1.2;">
+            <div style="font-size: 11px; font-weight: bold;">REPUBLIC OF THE PHILIPPINES</div>
+            <div style="font-size: 11px; font-weight: bold;">MUNICIPALITY OF DALAGUETE</div>
+            <div style="font-size: 11px; font-weight: bold;">PROVINCE OF CEBU</div>
+            <div style="font-size: 16px; font-weight: bold; margin-top: 2px;">OFFICE OF THE MUNICIPAL MAYOR</div>
+            <div style="font-size: 11px; font-weight: bold; margin-top: 2px;">Tel. # 520 4141 loc. 315</div>
+          </div>
+        </div>
+
+        <!-- Date -->
+        <div style="text-align: left; margin-bottom: 30px; font-size: 12px;">
+          ${formattedDate}
+        </div>
+
+        <!-- Recipient -->
+        <div class="avoid-break" style="margin-bottom: 20px; font-size: 12px; line-height: 1.6;">
+          <div><strong>HON. ${signatoryName}</strong></div>
+          <div>${signatoryPosition}</div>
+          <div>${signatoryAddress}</div>
+        </div>
+
+        <!-- Salutation -->
+        <div class="avoid-break" style="margin-bottom: 20px; font-size: 12px;">
+          <div>Ma'am,</div>
+        </div>
+
+        <!-- Body -->
+        <div style="text-align: justify; margin-bottom: 30px; font-size: 12px; line-height: 1.6;">
+          <p class="avoid-break" style="margin: 0 0 12px 0;">
+            This has reference with the application of <strong>${entityName}</strong> of <strong>${sitio}, ${barangay}, ${municipality}, ${province}</strong> to secure <strong>${permitType}</strong> for the following purpose/s:
+          </p>
+          
+          <p class="avoid-break" style="margin: 12px 0; text-indent: 40px; font-weight: bold;">
+            ${conductEngage}
+          </p>
+          
+          <p class="avoid-break" style="margin: 12px 0;">
+            <strong>Attachment: Barangay Certificate</strong>
+          </p>
+          
+          <p class="avoid-break" style="margin: 12px 0;">
+            Done this <strong>${dayWithOrdinal}</strong> day of <strong>${monthYear}</strong> at the Municipal Hall, Poblacion, Dalaguete, Cebu, Philippines.
+          </p>
+        </div>
+
+        <!-- Signature Section -->
+        <div class="avoid-break" style="margin-top: 60px;">
+          <div style="margin-top: 40px; text-align: center;">
+            <div style="margin-bottom: 40px;"></div>
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">${settings.bplo_head_name?.value || 'ATTY. DANICA NIÑA B. OSORIO-DUBLUIS, CPA'}</div>
+            <div style="font-size: 12px;">${settings.bplo_head_title?.value || 'BPLO - HEAD'}</div>
+          </div>
+
+          <div style="margin-top: 60px; text-align: right; margin-right: 40px;">
+            <div style="margin-bottom: 40px;"></div>
+            <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">${settings.permit_signatory_name?.value || 'ATTY. RONNEL A. DESPARES'}</div>
+            <div style="font-size: 12px;">${settings.permit_signatory_title?.value || 'MUNICIPAL ADMINISTRATOR'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="page-footer">
+        <div>Generated by PAMS | Permit and Assessment Management System | Issued: ${applicationDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} | Page <span class="page-number">1</span> of <span class="total-pages">1</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function getDayWithOrdinal(day) {
+  if (day > 3 && day < 21) return day + 'th';
+  switch (day % 10) {
+    case 1: return day + 'st';
+    case 2: return day + 'nd';
+    case 3: return day + 'rd';
+    default: return day + 'th';
+  }
+}
+
+function showError(message) {
+  const errorDiv = document.getElementById('error');
+  errorDiv.textContent = message;
+  errorDiv.classList.remove('hidden');
+  document.getElementById('loading').classList.add('hidden');
+}
+
+function printReport() {
+  window.print();
+}
+
+function downloadPDF() {
+  const element = document.getElementById('report-content');
+  const filename = `endorsement-letter-${new Date().toISOString().split('T')[0]}.pdf`;
+  
+  const options = {
+    margin: 0,
+    filename: filename,
+    image: { type: 'png', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { format: 'letter', orientation: 'portrait', unit: 'in' }
+  };
+  
+  html2pdf().set(options).from(element).save();
+}
+</script>
+</body>
+</html>

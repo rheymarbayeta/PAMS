@@ -201,7 +201,7 @@ router.get('/:id', async (req, res) => {
     console.log('\n========== GET APPLICATION DETAIL ==========');
     console.log('[Applications] Fetching application:', applicationId);
 
-    // Get application
+    // Get application with assessment rule and attribute details
     const [applications] = await pool.execute(
       `SELECT 
         a.*,
@@ -212,12 +212,17 @@ router.get('/:id', async (req, res) => {
         e.phone,
         u1.full_name as creator_name,
         u2.full_name as assessor_name,
-        u3.full_name as approver_name
+        u3.full_name as approver_name,
+        ar.rule_id,
+        ar.attribute_id,
+        att.attribute_name
        FROM applications a
        INNER JOIN entities e ON a.entity_id = e.entity_id
        INNER JOIN users u1 ON a.creator_id = u1.user_id
        LEFT JOIN users u2 ON a.assessor_id = u2.user_id
        LEFT JOIN users u3 ON a.approver_id = u3.user_id
+       LEFT JOIN assessment_rules ar ON a.rule_id = ar.rule_id
+       LEFT JOIN attributes att ON ar.attribute_id = att.attribute_id
        WHERE a.application_id = ?`,
       [applicationId]
     );
@@ -234,6 +239,9 @@ router.get('/:id', async (req, res) => {
     console.log('  - application_number:', application.application_number);
     console.log('  - permit_type:', application.permit_type);
     console.log('  - permit_type_id:', application.permit_type_id);
+    console.log('  - rule_id:', application.rule_id);
+    console.log('  - attribute_id:', application.attribute_id);
+    console.log('  - attribute_name:', application.attribute_name);
     console.log('  - entity_id:', application.entity_id);
     console.log('  - status:', application.status);
 
@@ -282,6 +290,8 @@ router.get('/:id', async (req, res) => {
     console.log('  - application_id:', application.application_id);
     console.log('  - permit_type:', application.permit_type);
     console.log('  - permit_type_id:', application.permit_type_id);
+    console.log('  - rule_id:', application.rule_id);
+    console.log('  - attribute_name:', application.attribute_name);
     console.log('  - parameters count:', parameters.length);
     console.log('  - assessed_fees count:', assessedFees.length);
     console.log('  - audit_trail count:', auditTrail.length);
@@ -300,7 +310,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Delete application
-// - SuperAdmin: Can delete any application
+// - SuperAdmin: Can delete applications with any status
 // - Admin, Application Creator: Can only delete applications with status 'Pending'
 // - Viewer: Cannot delete
 router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
@@ -309,7 +319,8 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Application Creator'), a
     await connection.beginTransaction();
     
     const applicationId = req.params.id;
-    const userRole = req.user.role_name;
+    const userRoles = req.user.roles || [];
+    const isSuperAdmin = userRoles.includes('SuperAdmin');
 
     // Get application details
     const [applications] = await connection.execute(
@@ -324,10 +335,11 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Application Creator'), a
 
     const application = applications[0];
 
+    // SuperAdmin can delete any application regardless of status
     // Non-SuperAdmin users can only delete Pending applications
-    if (userRole !== 'SuperAdmin' && application.status !== 'Pending') {
+    if (!isSuperAdmin && application.status !== 'Pending') {
       await connection.rollback();
-      return res.status(403).json({ error: 'You can only delete applications that are not yet assessed (Pending status)' });
+      return res.status(403).json({ error: 'You can only delete applications with Pending status. SuperAdmin can delete applications in any status.' });
     }
 
     // Delete related records in order (child tables first)
