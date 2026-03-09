@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
@@ -468,8 +469,15 @@ export default function ApplicationDetailPage() {
                       <dd className="text-xs text-gray-900 font-medium">{application.permit_type}</dd>
                     </div>
                     <div className="flex items-start">
-                      <dt className="w-28 text-xs font-medium text-gray-500 flex-shrink-0">Entity</dt>
-                      <dd className="text-xs text-gray-900">{application.entity_name}</dd>
+                      <dt className="w-28 text-xs font-medium text-gray-500 flex-shrink-0">Name</dt>
+                      <dd className="text-xs text-gray-900">
+                        <Link 
+                          href={`/admin/entities/${application.entity_id}`}
+                          className="text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                        >
+                          {application.entity_name}
+                        </Link>
+                      </dd>
                     </div>
                     {application.contact_person && (
                       <div className="flex items-start">

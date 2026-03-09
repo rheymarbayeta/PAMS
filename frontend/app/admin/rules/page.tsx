@@ -351,26 +351,26 @@ export default function RulesPage() {
           </div>
 
           {/* Table */}
-          <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-100">
+          <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-x-auto">
+            <table className="w-full divide-y divide-gray-100 table-fixed">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-1/6">
                     Permit Type
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-1/6">
                     Attribute
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-1/4">
                     Rule Name
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-auto whitespace-nowrap">
                     Fees Count
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-3 sm:px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-auto whitespace-nowrap">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-3 sm:px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider sticky right-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-20 w-auto whitespace-nowrap">
                     Actions
                   </th>
                 </tr>
@@ -378,56 +378,58 @@ export default function RulesPage() {
               <tbody className="bg-white divide-y divide-gray-100">
                 {rules.map((rule) => (
                   <tr key={rule.rule_id} className="hover:bg-gray-50/50 transition-colors duration-150">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-gradient-to-br from-amber-100 to-orange-100 rounded-lg">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap w-1/6">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-gradient-to-br from-amber-100 to-orange-100 rounded-lg hidden sm:flex flex-shrink-0">
                           <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </div>
-                        <span className="text-sm font-medium text-gray-900">{rule.permit_type_name}</span>
+                        <span className="text-sm font-medium text-gray-900 truncate">{rule.permit_type_name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap w-1/6">
                       {rule.attribute_name ? (
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
+                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full font-medium block truncate">
                           {rule.attribute_name}
                         </span>
                       ) : (
                         <span className="text-sm text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{rule.rule_name}</div>
+                    <td className="px-4 sm:px-6 py-4 w-1/4">
+                      <div className="text-sm font-medium text-gray-900 truncate">{rule.rule_name}</div>
                       {rule.description && (
-                        <div className="text-xs text-gray-500 mt-0.5 max-w-xs truncate">{rule.description}</div>
+                        <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{rule.description}</div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 text-sm text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <td className="px-3 sm:px-4 py-4 whitespace-nowrap w-auto">
+                      <span className="inline-flex items-center gap-1 text-sm text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full text-nowrap">
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        {rule.fees?.length || 0} fee(s)
+                        {rule.fees?.length || 0}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          rule.is_active
-                            ? 'bg-green-100 text-green-700 ring-1 ring-green-600/20'
-                            : 'bg-red-100 text-red-700 ring-1 ring-red-600/20'
-                        }`}
-                      >
-                        {rule.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                    <td className="px-3 sm:px-4 py-4 whitespace-nowrap w-auto">
+                      <div className="flex items-center justify-center">
+                        <span
+                          className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full whitespace-nowrap ${
+                            rule.is_active
+                              ? 'bg-green-100 text-green-700 ring-1 ring-green-600/20'
+                              : 'bg-red-100 text-red-700 ring-1 ring-red-600/20'
+                          }`}
+                        >
+                          {rule.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
+                    <td className="px-3 sm:px-4 py-4 whitespace-nowrap text-sm font-medium sticky right-0 bg-white z-10 w-auto">
+                      <div className="flex items-center gap-1 justify-center flex-shrink-0">
                         <button
                           title="Edit rule"
                           onClick={() => handleEdit(rule)}
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors duration-150"
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors duration-150 flex-shrink-0"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -437,7 +439,7 @@ export default function RulesPage() {
                           <button
                             title="Delete rule"
                             onClick={() => handleDelete(rule.rule_id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150"
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150 flex-shrink-0"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

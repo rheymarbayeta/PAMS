@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
       params.push(searchPattern, searchPattern);
     }
 
-    query += ' ORDER BY entity_name LIMIT 50';
+    query += ' ORDER BY entity_name';
 
     const [entities] = await pool.execute(query, params);
     res.json(entities);
