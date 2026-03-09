@@ -29,15 +29,21 @@ export default function ApplicationsPage() {
   const [permitTypeFilter, setPermitTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [permitTypes, setPermitTypes] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, permitTypeFilter, searchTerm]);
 
   useEffect(() => {
     fetchApplications();
     fetchPermitTypes();
-    
+
     const urlParams = new URLSearchParams(window.location.search);
     const urlFilter = urlParams.get('filter');
     const urlPermitCategory = urlParams.get('permitCategory');
-    
+
     if (urlFilter) {
       setStatusFilter(urlFilter);
     }
@@ -88,6 +94,27 @@ export default function ApplicationsPage() {
     }
   };
 
+  const filteredApplications = (statusFilter === 'all'
+    ? applications
+    : applications.filter(app => app.status === statusFilter))
+    .filter(app => permitTypeFilter === 'all' || app.permit_type_name === permitTypeFilter)
+    .filter(app =>
+      (app.application_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+      app.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.permit_type_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredApplications.length / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const endIndex = startIndex + recordsPerPage;
+  const paginatedApplications = filteredApplications.slice(startIndex, endIndex);
+
+  // Ensure current page doesn't exceed total pages
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1);
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Pending':
@@ -109,16 +136,6 @@ export default function ApplicationsPage() {
         return 'bg-slate-50 text-slate-700 border-slate-200';
     }
   };
-
-  const filteredApplications = (statusFilter === 'all' 
-    ? applications 
-    : applications.filter(app => app.status === statusFilter))
-    .filter(app => permitTypeFilter === 'all' || app.permit_type_name === permitTypeFilter)
-    .filter(app => 
-      (app.application_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-      app.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.permit_type_name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
   if (loading) {
     return (
@@ -154,7 +171,10 @@ export default function ApplicationsPage() {
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800">
                   Applications
                 </h1>
-                <p className="text-xs sm:text-sm text-slate-500">{filteredApplications.length} {filteredApplications.length === 1 ? 'application' : 'applications'}</p>
+                <p className="text-xs sm:text-sm text-slate-500">
+                  {filteredApplications.length} {filteredApplications.length === 1 ? 'application' : 'applications'}
+                  {filteredApplications.length > recordsPerPage && ` - Page ${currentPage} of ${totalPages}`}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -208,6 +228,24 @@ export default function ApplicationsPage() {
                   </option>
                 ))}
               </select>
+              <label htmlFor="records-per-page" className="sr-only">
+                Records per page
+              </label>
+              <select
+                id="records-per-page"
+                value={recordsPerPage}
+                onChange={(e) => {
+                  setRecordsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="w-full sm:w-auto border border-slate-200 rounded-lg px-3 sm:px-4 py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none cursor-pointer"
+                aria-label="Select number of records per page"
+              >
+                <option value={10}>10 per page</option>
+                <option value={25}>25 per page</option>
+                <option value={50}>50 per page</option>
+                <option value={100}>100 per page</option>
+              </select>
             </div>
           </div>
 
@@ -225,7 +263,7 @@ export default function ApplicationsPage() {
               </div>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {filteredApplications.map((app, index) => (
+                {paginatedApplications.map((app, index) => (
                   <li
                     key={app.application_id}
                     className="group hover:bg-slate-50/80 transition-colors duration-150"
@@ -300,6 +338,48 @@ export default function ApplicationsPage() {
                   </li>
                 ))}
               </ul>
+            )}
+            {filteredApplications.length > 0 && (
+              <div className="px-4 sm:px-6 py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-sm text-slate-600">
+                  Showing {startIndex + 1} to {Math.min(endIndex, filteredApplications.length)} of {filteredApplications.length} results
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    aria-label="Previous page"
+                  >
+                    Previous
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                          currentPage === pageNum
+                            ? 'bg-teal-600 text-white'
+                            : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                        }`}
+                        aria-label={`Go to page ${pageNum}`}
+                        aria-current={currentPage === pageNum ? 'page' : undefined}
+                      >
+                        {pageNum}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    aria-label="Next page"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
