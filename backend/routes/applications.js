@@ -101,13 +101,13 @@ router.get('/', async (req, res) => {
         a.status,
         a.created_at,
         a.updated_at,
-        e.entity_name,
-        u1.full_name as creator_name,
+        COALESCE(e.entity_name, 'Unknown Entity') as entity_name,
+        COALESCE(u1.full_name, 'Unknown User') as creator_name,
         u2.full_name as assessor_name,
         u3.full_name as approver_name
       FROM applications a
-      INNER JOIN entities e ON a.entity_id = e.entity_id
-      INNER JOIN users u1 ON a.creator_id = u1.user_id
+      LEFT JOIN entities e ON a.entity_id = e.entity_id
+      LEFT JOIN users u1 ON a.creator_id = u1.user_id
       LEFT JOIN users u2 ON a.assessor_id = u2.user_id
       LEFT JOIN users u3 ON a.approver_id = u3.user_id
       LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id
