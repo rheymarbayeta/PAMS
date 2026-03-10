@@ -494,8 +494,15 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
       console.log('  - rule_id:', rule_id);
       console.log('  - creator_id:', req.user.user_id);
 
+      // Get entity name for logging
+      const [entityInfo] = await connection.execute(
+        'SELECT entity_name FROM entities WHERE entity_id = ?',
+        [entity_id]
+      );
+      const entityName = entityInfo.length > 0 ? entityInfo[0].entity_name : 'Unknown';
+
       // Log and notify
-      const createLogMessage = `Created application #${applicationNumber} for permit type: ${permit_type}`;
+      const createLogMessage = `Created application #${applicationNumber} (${entityName}) for permit type: ${permit_type}`;
       
       console.log('[CreateApp] Step 2 - Final Log Message:');
       console.log('  - message:', createLogMessage);
@@ -510,7 +517,7 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
 
       await notifyRole(
         'Assessor',
-        `New application ${applicationNumber} requires assessment`,
+        `New application #${applicationNumber} (${entityName}) requires assessment`,
         `/applications/${application_id}`
       );
 
@@ -1023,18 +1030,23 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
     console.log('  - applicationId:', applicationId);
     console.log('  - user_id:', req.user.user_id);
 
-    // Get application number for logging
+    // Get application number and entity name for logging
     const [assessAppInfo] = await pool.execute(
-      'SELECT * FROM applications WHERE application_id = ?',
+      `SELECT a.application_number, e.entity_name 
+       FROM applications a 
+       LEFT JOIN entities e ON a.entity_id = e.entity_id 
+       WHERE a.application_id = ?`,
       [applicationId]
     );
     const assessAppNumber = assessAppInfo.length > 0 ? assessAppInfo[0].application_number : applicationId;
+    const assessEntityName = assessAppInfo.length > 0 ? assessAppInfo[0].entity_name : 'Unknown';
 
     console.log('[SubmitAssessment] Step 2 - Application Query Result:');
     console.log('  - assessAppInfo query result:', assessAppInfo);
     console.log('  - assessAppNumber:', assessAppNumber);
+    console.log('  - assessEntityName:', assessEntityName);
 
-    const assessLogMessage = `Submitted assessment for application #${assessAppNumber}`;
+    const assessLogMessage = `Submitted assessment for application #${assessAppNumber} (${assessEntityName})`;
     
     console.log('[SubmitAssessment] Step 3 - Final Log Message:');
     console.log('  - message:', assessLogMessage);
@@ -1049,7 +1061,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     await notifyRole(
       'Approver',
-      `Application #${applicationId} is pending approval`,
+      `Application #${assessAppNumber} (${assessEntityName}) is pending approval`,
       `/applications/${applicationId}`
     );
 
@@ -1099,18 +1111,33 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
     console.log('  - applicationId:', applicationId);
     console.log('  - user_id:', req.user.user_id);
 
-    // Get application number for logging
+    // Get application number and entity name for logging
     const [approveAppInfo] = await pool.execute(
-      'SELECT * FROM applications WHERE application_id = ?',
+      `SELECT a.application_number, e.entity_name 
+       FROM applications a 
+       LEFT JOIN entities e ON a.entity_id = e.entity_id 
+       WHERE a.application_id = ?`,
       [applicationId]
     );
-    const approveAppNumber = approveAppInfo.length > 0 ? approveAppInfo[0].application_number : applicationId;
-
+    
     console.log('[ApproveApp] Step 2 - Application Query Result:');
-    console.log('  - approveAppInfo query result:', approveAppInfo);
-    console.log('  - approveAppNumber:', approveAppNumber);
+    console.log('  - approveAppInfo query result:', JSON.stringify(approveAppInfo));
+    console.log('  - approveAppInfo.length:', approveAppInfo.length);
+    if (approveAppInfo.length > 0) {
+      console.log('  - approveAppInfo[0]:', JSON.stringify(approveAppInfo[0]));
+      console.log('  - application_number value:', approveAppInfo[0].application_number);
+      console.log('  - application_number type:', typeof approveAppInfo[0].application_number);
+    }
+    
+    const approveAppNumber = approveAppInfo.length > 0 && approveAppInfo[0].application_number 
+      ? approveAppInfo[0].application_number 
+      : applicationId;
+    const approveEntityName = approveAppInfo.length > 0 ? approveAppInfo[0].entity_name : 'Unknown';
 
-    const approveLogMessage = `Approved application #${approveAppNumber}`;
+    console.log('  - approveAppNumber (final):', approveAppNumber);
+    console.log('  - approveEntityName:', approveEntityName);
+
+    const approveLogMessage = `Approved application #${approveAppNumber} (${approveEntityName})`;
     
     console.log('[ApproveApp] Step 3 - Final Log Message:');
     console.log('  - message:', approveLogMessage);
@@ -1126,7 +1153,7 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
     // Notify creator
     await createNotification(
       apps[0].creator_id,
-      `Application #${applicationId} has been approved`,
+      `Application #${approveAppNumber} (${approveEntityName}) has been approved`,
       `/applications/${applicationId}`
     );
 
@@ -1233,9 +1260,20 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
         new_application_id
       );
 
+      // Get application number and entity name for renewal notification
+      const [renewAppInfo] = await pool.execute(
+        `SELECT a.application_number, e.entity_name 
+         FROM applications a 
+         LEFT JOIN entities e ON a.entity_id = e.entity_id 
+         WHERE a.application_id = ?`,
+        [new_application_id]
+      );
+      const renewAppNumber = renewAppInfo.length > 0 ? renewAppInfo[0].application_number : new_application_id;
+      const renewEntityName = renewAppInfo.length > 0 ? renewAppInfo[0].entity_name : 'Unknown';
+
       await notifyRole(
         'Assessor',
-        `New application #${new_application_id} requires assessment (renewal)`,
+        `New application #${renewAppNumber} (${renewEntityName}) requires assessment (renewal)`,
         `/applications/${new_application_id}`
       );
 
@@ -1287,18 +1325,33 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
     console.log('  - reason:', reason);
     console.log('  - user_id:', req.user.user_id);
 
-    // Get application number for logging
+    // Get application number and entity name for logging
     const [rejectAppInfo] = await pool.execute(
-      'SELECT * FROM applications WHERE application_id = ?',
+      `SELECT a.application_number, e.entity_name 
+       FROM applications a 
+       LEFT JOIN entities e ON a.entity_id = e.entity_id 
+       WHERE a.application_id = ?`,
       [applicationId]
     );
-    const rejectAppNumber = rejectAppInfo.length > 0 ? rejectAppInfo[0].application_number : applicationId;
-
+    
     console.log('[RejectApp] Step 2 - Application Query Result:');
-    console.log('  - rejectAppInfo query result:', rejectAppInfo);
-    console.log('  - rejectAppNumber:', rejectAppNumber);
+    console.log('  - rejectAppInfo query result:', JSON.stringify(rejectAppInfo));
+    console.log('  - rejectAppInfo.length:', rejectAppInfo.length);
+    if (rejectAppInfo.length > 0) {
+      console.log('  - rejectAppInfo[0]:', JSON.stringify(rejectAppInfo[0]));
+      console.log('  - application_number value:', rejectAppInfo[0].application_number);
+      console.log('  - application_number type:', typeof rejectAppInfo[0].application_number);
+    }
+    
+    const rejectAppNumber = rejectAppInfo.length > 0 && rejectAppInfo[0].application_number 
+      ? rejectAppInfo[0].application_number 
+      : applicationId;
+    const rejectEntityName = rejectAppInfo.length > 0 ? rejectAppInfo[0].entity_name : 'Unknown';
 
-    const rejectLogMessage = `Rejected application #${rejectAppNumber}${reason ? ': ' + reason : ''}`;
+    console.log('  - rejectAppNumber (final):', rejectAppNumber);
+    console.log('  - rejectEntityName:', rejectEntityName);
+
+    const rejectLogMessage = `Rejected application #${rejectAppNumber} (${rejectEntityName})${reason ? ': ' + reason : ''}`;
     
     console.log('[RejectApp] Step 3 - Final Log Message:');
     console.log('  - message:', rejectLogMessage);
@@ -1314,7 +1367,7 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
     // Notify creator
     await createNotification(
       apps[0].creator_id,
-      `Application #${applicationId} has been rejected${reason ? ': ' + reason : ''}`,
+      `Application #${rejectAppNumber} (${rejectEntityName}) has been rejected${reason ? ': ' + reason : ''}`,
       `/applications/${applicationId}`
     );
 
@@ -1326,7 +1379,8 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
 });
 
 // Record payment for an application
-router.post('/:id/payment', async (req, res) => {
+// Restricted to SuperAdmin and Admin roles
+router.post('/:id/payment', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   try {
     console.log('[Payment] Recording payment for application:', req.params.id);
     console.log('[Payment] User:', req.user);
@@ -1343,6 +1397,15 @@ router.post('/:id/payment', async (req, res) => {
       });
     }
 
+    // Validate amount is a positive number
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      console.log('[Payment] Invalid amount:', amount);
+      return res.status(400).json({ 
+        error: 'Amount must be a positive number' 
+      });
+    }
+
     // Check if application exists
     const [apps] = await pool.execute(
       'SELECT * FROM applications WHERE application_id = ?',
@@ -1354,22 +1417,27 @@ router.post('/:id/payment', async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if application is approved
-    if (apps[0].status !== 'Approved') {
+    // Check if application is approved or paid
+    if (apps[0].status !== 'Approved' && apps[0].status !== 'Paid') {
       console.log('[Payment] Application not approved:', apps[0].status);
       return res.status(400).json({ 
-        error: 'Payment can only be recorded for approved applications' 
+        error: 'Payment can only be recorded for approved or paid applications' 
       });
     }
+
+    // Convert amount to decimal for database
+    const decimalAmount = parseFloat(amount).toFixed(2);
 
     // Insert payment record
     console.log('[Payment] Inserting payment record...');
     const payment_id = generateId(ID_PREFIXES.PAYMENT);
+    console.log('[Payment] Generated payment_id:', payment_id);
+    
     const [result] = await pool.execute(
       `INSERT INTO payments 
        (payment_id, application_id, official_receipt_no, payment_date, address, amount, recorded_by_user_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [payment_id, applicationId, official_receipt_no, payment_date, address || null, amount, req.user.user_id]
+      [payment_id, applicationId, official_receipt_no, payment_date, address || null, decimalAmount, req.user.user_id]
     );
 
     console.log('[Payment] Payment recorded successfully with ID:', payment_id);
@@ -1405,10 +1473,21 @@ router.post('/:id/payment', async (req, res) => {
 
     // Log action with error handling
     try {
+      // Get application number and entity name for payment logging
+      const [paymentAppInfo] = await pool.execute(
+        `SELECT a.application_number, e.entity_name 
+         FROM applications a 
+         LEFT JOIN entities e ON a.entity_id = e.entity_id 
+         WHERE a.application_id = ?`,
+        [applicationId]
+      );
+      const paymentAppNumber = paymentAppInfo.length > 0 ? paymentAppInfo[0].application_number : applicationId;
+      const paymentEntityName = paymentAppInfo.length > 0 ? paymentAppInfo[0].entity_name : 'Unknown';
+
       await logAction(
         req.user.user_id,
         'RECORD_PAYMENT',
-        `Recorded payment for application #${applicationId}: Receipt #${official_receipt_no}, Amount: ₱${amount}`,
+        `Recorded payment for application #${paymentAppNumber} (${paymentEntityName}): Receipt #${official_receipt_no}, Amount: ₱${decimalAmount}`,
         applicationId
       );
     } catch (logError) {
@@ -1416,18 +1495,31 @@ router.post('/:id/payment', async (req, res) => {
       // Don't fail the payment if logging fails
     }
 
+    // Return the actual generated payment_id instead of result.insertId
+    // because VARCHAR(64) PRIMARY KEY doesn't use AUTO_INCREMENT
     res.json({ 
       message: 'Payment recorded successfully',
-      payment_id: result.insertId 
+      payment_id: payment_id
     });
   } catch (error) {
     console.error('[Payment] Record payment error:', error);
+    console.error('[Payment] Error code:', error.code);
+    console.error('[Payment] Error message:', error.message);
+    
     if (error.code === 'ER_DUP_ENTRY') {
       console.log('[Payment] Duplicate entry error for receipt number');
       return res.status(400).json({ 
         error: 'This official receipt number has already been recorded for this application' 
       });
     }
+    
+    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
+      console.log('[Payment] Foreign key constraint error - application or user not found');
+      return res.status(400).json({ 
+        error: 'Foreign key constraint error. Please verify the application and user IDs.' 
+      });
+    }
+    
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
