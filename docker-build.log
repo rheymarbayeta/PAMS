@@ -1,0 +1,149 @@
+time="2026-03-10T08:58:37Z" level=warning msg="/home/itsm/PAMS/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+#1 [internal] load local bake definitions
+#1 reading from stdin 997B done
+#1 DONE 0.0s
+
+#2 [frontend internal] load build definition from Dockerfile
+#2 transferring dockerfile:
+#2 transferring dockerfile: 1.21kB done
+#2 DONE 0.1s
+
+#3 [backend internal] load build definition from Dockerfile
+#3 transferring dockerfile: 539B done
+#3 DONE 0.1s
+
+#4 [frontend internal] load metadata for docker.io/library/node:18-alpine
+#4 DONE 0.8s
+
+#5 [frontend internal] load .dockerignore
+#5 transferring context: 400B done
+#5 DONE 0.1s
+
+#6 [backend internal] load .dockerignore
+#6 transferring context: 376B done
+#6 DONE 0.1s
+
+#7 [backend internal] load build context
+#7 DONE 0.0s
+
+#8 [backend 1/6] FROM docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e
+#8 DONE 0.0s
+
+#9 [frontend internal] load build context
+#9 DONE 0.0s
+
+#7 [backend internal] load build context
+#7 transferring context: 1.75kB done
+#7 DONE 0.2s
+
+#9 [frontend internal] load build context
+#9 transferring context: 23.03kB done
+#9 DONE 0.2s
+
+#10 [backend 2/6] WORKDIR /app
+#10 CACHED
+
+#11 [backend 3/6] COPY package*.json ./
+#11 CACHED
+
+#12 [backend 4/6] RUN npm ci --only=production
+#12 CACHED
+
+#13 [backend 5/6] COPY . .
+#13 CACHED
+
+#14 [backend 6/6] RUN mkdir -p uploads/templates
+#14 CACHED
+
+#10 [frontend 2/6] WORKDIR /app
+#10 CACHED
+
+#15 [frontend deps 2/3] COPY package*.json ./
+#15 CACHED
+
+#16 [frontend deps 3/3] RUN npm install
+#16 CACHED
+
+#17 [frontend builder 2/4] COPY --from=deps /app/node_modules ./node_modules
+#17 CACHED
+
+#18 [backend] exporting to image
+#18 exporting layers done
+#18 ...
+
+#19 [frontend builder 3/4] COPY . .
+#19 DONE 0.7s
+
+#18 [backend] exporting to image
+#18 writing image sha256:c68fbb1b6620a6d677c2ee39175a0324b7daaa28b8aa2b513dd66e6445210966 done
+#18 naming to docker.io/library/pams-backend done
+#18 DONE 0.7s
+
+#20 [backend] resolving provenance for metadata file
+#20 DONE 0.0s
+
+#21 [frontend builder 4/4] RUN npm run build
+#21 0.358 
+#21 0.358 > pams-frontend@1.0.0 build
+#21 0.358 > next build
+#21 0.358 
+#21 0.765 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#21 0.765 This information is used to shape Next.js' roadmap and prioritize features.
+#21 0.765 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#21 0.766 https://nextjs.org/telemetry
+#21 0.766 
+#21 0.828    ▲ Next.js 14.0.4
+#21 0.828 
+#21 0.829    Creating an optimized production build ...
+#21 2.549 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+#21 8.767  ✓ Compiled successfully
+#21 8.767    Linting and checking validity of types ...
+#21 13.19 Failed to compile.
+#21 13.19 
+#21 13.19 ./app/admin/report-templates/page.tsx:235:132
+#21 13.19 Type error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+#21 13.19 
+#21 13.19 [0m [90m 233 |[39m               [33m<[39m[33m/[39m[33mh1[39m[33m>[39m[0m
+#21 13.19 [0m [90m 234 |[39m               [33m<[39m[33mp[39m className[33m=[39m[32m"text-slate-600"[39m[33m>[39m[0m
+#21 13.19 [0m[31m[1m>[22m[39m[90m 235 |[39m                 [33mCustomize[39m [33mHTML[39m templates [36mfor[39m assessment[33m,[39m permit[33m,[39m and endorsement reports[33m.[39m [33mUse[39m {[32m'{'[39m}${[32m'{'[39m}variable_name{[32m'}'[39m}{[32m'}{'[39m} [32m'}[39m[0m
+#21 13.19 [0m [90m     |[39m                                                                                                                                    [31m[1m^[22m[39m[0m
+#21 13.19 [0m [90m 236 |[39m                 syntax [36mfor[39m dynamic content[33m.[39m[0m
+#21 13.19 [0m [90m 237 |[39m               [33m<[39m[33m/[39m[33mp[39m[33m>[39m[0m
+#21 13.19 [0m [90m 238 |[39m             [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m[0m
+#21 13.27 npm notice
+#21 13.27 npm notice New major version of npm available! 10.8.2 -> 11.11.0
+#21 13.27 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.11.0
+#21 13.27 npm notice To update run: npm install -g npm@11.11.0
+#21 13.27 npm notice
+#21 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+ > [frontend builder 4/4] RUN npm run build:
+13.19 [0m[31m[1m>[22m[39m[90m 235 |[39m                 [33mCustomize[39m [33mHTML[39m templates [36mfor[39m assessment[33m,[39m permit[33m,[39m and endorsement reports[33m.[39m [33mUse[39m {[32m'{'[39m}${[32m'{'[39m}variable_name{[32m'}'[39m}{[32m'}{'[39m} [32m'}[39m[0m
+13.19 [0m [90m     |[39m                                                                                                                                    [31m[1m^[22m[39m[0m
+13.19 [0m [90m 236 |[39m                 syntax [36mfor[39m dynamic content[33m.[39m[0m
+13.19 [0m [90m 237 |[39m               [33m<[39m[33m/[39m[33mp[39m[33m>[39m[0m
+13.19 [0m [90m 238 |[39m             [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m[0m
+13.27 npm notice
+13.27 npm notice New major version of npm available! 10.8.2 -> 11.11.0
+13.27 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.11.0
+13.27 npm notice To update run: npm install -g npm@11.11.0
+13.27 npm notice
+------
+Dockerfile:23
+
+--------------------
+
+  21 |     
+
+  22 |     # Build the application
+
+  23 | >>> RUN npm run build
+
+  24 |     
+
+  25 |     # Production image, copy all the files and run next
+
+--------------------
+
+target frontend: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+

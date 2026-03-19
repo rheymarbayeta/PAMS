@@ -27,7 +27,9 @@ const ID_PREFIXES = {
   RULE_FEE: 'rfee',
   ASSESSMENT: 'assess',
   ASSESSMENT_FEE: 'asfee',
-  SETTING: 'setting'
+  SETTING: 'setting',
+  CUSTOMIZATION: 'custom',
+  TEMPLATE: 'tmpl'
 };
 
 /**

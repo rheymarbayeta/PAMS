@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 <style>
   * {
     margin: 0;
@@ -18,7 +19,7 @@
   }
   #report-container {
     max-width: 210mm;
-    height: 297mm;
+    height: auto;
     margin: 20px auto;
     background: white;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -62,23 +63,90 @@
   .btn-print:hover {
     background-color: #1e7e34;
   }
+  .btn-edit {
+    background-color: #fd7e14;
+  }
+  .btn-edit:hover {
+    background-color: #e56a00;
+  }
+  .btn-save {
+    background-color: #28a745;
+  }
+  .btn-save:hover {
+    background-color: #1e7e34;
+  }
+  .btn-cancel {
+    background-color: #6c757d;
+  }
+  .btn-cancel:hover {
+    background-color: #5a6268;
+  }
+  .btn-revert {
+    background-color: #dc3545;
+  }
+  .btn-revert:hover {
+    background-color: #c82333;
+  }
+  .btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
   #page-container {
     padding: 6mm 12mm;
     width: 210mm;
-    height: 297mm;
     margin: 0;
-    overflow: hidden;
   }
-  
   .hidden {
     display: none;
   }
-  
+  .editable-field {
+    position: relative;
+  }
+  .editable-field.edit-mode {
+    border: 1px dashed #007bff;
+    padding: 5px;
+    border-radius: 3px;
+  }
+  .edit-mode-indicator {
+    display: none;
+    background-color: #fff3cd;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    border-left: 4px solid #ffc107;
+  }
+  .edit-mode-indicator.active {
+    display: block;
+  }
+  .edit-toolbar {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #666;
+  }
+  .ql-toolbar {
+    border: 1px solid #ddd;
+    border-top: none;
+  }
+  .ql-container {
+    border: 1px solid #ddd;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+  }
+  input.text-edit-input {
+    width: 100%;
+    padding: 5px;
+    border: 1px solid #007bff;
+    border-radius: 3px;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+  }
+
   @page {
     size: A4;
     margin: 6mm 12mm;
   }
-  
+
   @media print {
     body {
       background: white;
@@ -95,6 +163,22 @@
     .controls {
       display: none;
     }
+    .edit-mode-indicator {
+      display: none;
+    }
+    .ql-toolbar {
+      display: none;
+    }
+    .text-edit-input {
+      display: none;
+    }
+    .edit-toolbar {
+      display: none;
+    }
+    .editable-field.edit-mode {
+      border: none;
+      padding: 0;
+    }
     #page-container {
       padding: 6mm 12mm;
       margin: 0;
@@ -109,24 +193,43 @@
 <body>
 <div id="report-container">
   <div class="controls">
-    <button class="btn btn-print" onclick="printReport()">Print Report</button>
-    <button class="btn" onclick="downloadPDF()">Download PDF</button>
+    <button class="btn btn-print" id="printBtn" onclick="printReport()">Print Report</button>
+    <button class="btn" id="downloadBtn" onclick="downloadPDF()">Download PDF</button>
+    <button class="btn btn-edit" id="editBtn" onclick="toggleEditMode()" style="display:none;">Edit Report</button>
+    <button class="btn btn-save" id="saveBtn" onclick="saveCustomization()" style="display:none;">Save Changes</button>
+    <button class="btn btn-cancel" id="cancelBtn" onclick="toggleEditMode()" style="display:none;">Cancel</button>
+    <button class="btn btn-revert" id="revertBtn" onclick="revertToOriginal()" style="display:none;" title="Revert to original generated content">Revert</button>
   </div>
-  
+
+  <div id="editModeIndicator" class="edit-mode-indicator">
+    <strong>Edit Mode Active:</strong> You can now edit the report content. Click <strong>Save Changes</strong> to persist or <strong>Cancel</strong> to discard.
+  </div>
+
   <div id="loading" class="loading">
     <p>Loading assessment report...</p>
   </div>
-  
+
   <div id="error" class="error hidden"></div>
-  
+
   <div id="report-content" class="hidden"></div>
 </div>
 
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
 <script>
 // Get application ID from URL parameters
 const urlParams = new URLSearchParams(window.location.search);
 const applicationId = urlParams.get('id') || urlParams.get('applicationId');
 const authToken = urlParams.get('token') || localStorage.getItem('token') || '';
+
+// State management
+let editMode = false;
+let userCanEdit = false;
+let currentReportType = 'assessment';
+let customizationData = null;
+let quillEditors = {};
+let originalContent = {};
+let currentContent = {};
+let userRole = null;
 
 // Determine API base URL
 let apiBaseUrl = '';
@@ -156,33 +259,147 @@ document.addEventListener('DOMContentLoaded', function() {
     showError('No application ID provided. Please pass ?id=<applicationId> in the URL.');
     return;
   }
-  
+
+  // Extract user info from token
+  extractUserFromToken();
+
   fetchAssessmentReport();
+  loadCustomization();
 });
+
+function extractUserFromToken() {
+  try {
+    if (!authToken) {
+      console.warn('No auth token provided');
+      return;
+    }
+    const parts = authToken.split('.');
+    if (parts.length !== 3) {
+      console.warn('Invalid token format (expected 3 parts, got ' + parts.length + ')');
+      return;
+    }
+    const decoded = JSON.parse(atob(parts[1]));
+
+    console.log('🔍 All fields in decoded token:', Object.keys(decoded));
+    console.log('Full decoded token:', decoded);
+
+    // Try different role field names
+    userRole = decoded.role_name || decoded.role || decoded.roleId || decoded.role_id || 'Unknown';
+
+    console.log('✅ Token decoded successfully, extracted value:', userRole);
+
+    // Since token has roleId instead of role_name, fetch user data from backend
+    if (decoded.userId && !decoded.role_name) {
+      console.log('Token has userId but no role_name, fetching user data from backend...');
+      fetchUserDataFromBackend(decoded.userId);
+    } else {
+      checkEditPermissions();
+    }
+  } catch (error) {
+    console.error('❌ Error extracting user from token:', error);
+    console.error('Token sample (first 50 chars):', authToken?.substring(0, 50));
+  }
+}
+
+async function fetchUserDataFromBackend(userId) {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/users/${userId}`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`
+      }
+    });
+
+    if (response.ok) {
+      const userData = await response.json();
+      console.log('✅ User data fetched:', userData);
+      userRole = userData.role_name || userData.role || 'Unknown';
+      console.log('✅ Role from backend:', userRole);
+      checkEditPermissions();
+    } else {
+      console.warn('Failed to fetch user data, allowing edit attempt');
+      // If fetch fails, allow the user to try editing - backend will enforce permissions
+      userRole = 'Authenticated';
+      checkEditPermissions();
+    }
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    // If fetch fails, allow the user to try editing - backend will enforce permissions
+    userRole = 'Authenticated';
+    checkEditPermissions();
+  }
+}
+
+function checkEditPermissions() {
+  const allowedRoles = ['Admin', 'SuperAdmin', 'Approver', 'Assessor'];
+  userCanEdit = allowedRoles.includes(userRole) || userRole === 'Authenticated';
+
+  console.log('=== EDIT PERMISSIONS DEBUG ===');
+  console.log('User Role:', userRole);
+  console.log('Allowed Roles:', allowedRoles);
+  console.log('User Can Edit:', userCanEdit);
+  console.log('Auth Token Present:', authToken ? 'Yes' : 'No');
+  console.log('=============================');
+
+  const editBtn = document.getElementById('editBtn');
+  if (editBtn) {
+    if (userCanEdit) {
+      editBtn.style.display = 'inline-block';
+      console.log('✅ Edit button shown');
+    } else {
+      console.log('❌ Edit button hidden - role "' + userRole + '" not in allowed list');
+    }
+  } else {
+    console.log('❌ Edit button element not found in DOM');
+  }
+}
+
+async function loadCustomization() {
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/applications/${applicationId}/report-customization/${currentReportType}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        credentials: 'include'
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.customization) {
+        customizationData = data.customization;
+        console.log('Loaded customization:', customizationData);
+      }
+    }
+  } catch (error) {
+    console.warn('Could not load report customization:', error);
+  }
+}
 
 async function fetchAssessmentReport() {
   try {
-    // Fetch both application and assessment data
     const applicationUrl = `${apiBaseUrl}/api/applications/${applicationId}`;
     const assessmentUrl = `${apiBaseUrl}/api/applications/${applicationId}/assessment-record`;
     const settingsUrl = `${apiBaseUrl}/api/settings`;
-    
+
     const headers = {
       'Content-Type': 'application/json'
     };
-    
+
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
-    
-    // First fetch application data (always available)
+
     console.log('Fetching application from:', applicationUrl);
     const applicationResponse = await fetch(applicationUrl, {
       method: 'GET',
       headers: headers,
       credentials: 'include'
     });
-    
+
     if (!applicationResponse.ok) {
       if (applicationResponse.status === 401) {
         throw new Error('Unauthorized. Please login again.');
@@ -192,25 +409,23 @@ async function fetchAssessmentReport() {
       }
       throw new Error(`HTTP Error: ${applicationResponse.status} ${applicationResponse.statusText}`);
     }
-    
+
     const applicationData = await applicationResponse.json();
     console.log('Application data loaded:', applicationData);
-    
-    // Now try to fetch assessment record
+
     let assessmentData = null;
     console.log('Fetching assessment from:', assessmentUrl);
-    
+
     const assessmentResponse = await fetch(assessmentUrl, {
       method: 'GET',
       headers: headers,
       credentials: 'include'
     });
-    
+
     if (assessmentResponse.ok) {
       assessmentData = await assessmentResponse.json();
       console.log('Assessment data loaded:', assessmentData);
     } else if (assessmentResponse.status === 404) {
-      // No assessment record - build from application data
       console.warn('Assessment record not found, building from application data');
       assessmentData = {
         business_name: applicationData.entity_name || 'N/A',
@@ -241,8 +456,7 @@ async function fetchAssessmentReport() {
     } else {
       throw new Error(`HTTP Error: ${assessmentResponse.status} ${assessmentResponse.statusText}`);
     }
-    
-    // Fetch settings
+
     let settings = {};
     try {
       const settingsResponse = await fetch(settingsUrl, {
@@ -256,7 +470,7 @@ async function fetchAssessmentReport() {
     } catch (settingsError) {
       console.warn('Could not fetch settings, using defaults:', settingsError);
     }
-    
+
     renderReport(assessmentData, settings, applicationData);
   } catch (error) {
     console.error('Error fetching assessment data:', error);
@@ -266,47 +480,273 @@ async function fetchAssessmentReport() {
 
 function renderReport(appData, settings = {}, applicationData = {}) {
   const reportHTML = generateReportHTML(appData, settings, applicationData);
-  
+
   document.getElementById('report-content').innerHTML = reportHTML;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('report-content').classList.remove('hidden');
+
+  // Store original content for revert functionality
+  originalContent = appData;
+  currentContent = JSON.parse(JSON.stringify(appData));
+
+  // Apply customizations if they exist
+  if (customizationData && customizationData.customContent) {
+    applyCustomizations(customizationData.customContent);
+  }
+}
+
+function applyCustomizations(customContent) {
+  // Apply custom values to rendered report
+  if (customContent.business_name) {
+    const elem = document.querySelectorAll('[data-edit-field="business_name"]')[0];
+    if (elem) elem.textContent = customContent.business_name;
+  }
+  if (customContent.owner_name) {
+    const elem = document.querySelectorAll('[data-edit-field="owner_name"]')[0];
+    if (elem) elem.textContent = customContent.owner_name;
+  }
+  if (customContent.address) {
+    const elem = document.querySelectorAll('[data-edit-field="address"]')[0];
+    if (elem) elem.textContent = customContent.address;
+  }
+}
+
+function toggleEditMode() {
+  if (!userCanEdit) {
+    showError('You do not have permission to edit this report');
+    return;
+  }
+
+  editMode = !editMode;
+
+  document.getElementById('editBtn').style.display = editMode ? 'none' : 'inline-block';
+  document.getElementById('printBtn').disabled = editMode;
+  document.getElementById('downloadBtn').disabled = editMode;
+  document.getElementById('saveBtn').style.display = editMode ? 'inline-block' : 'none';
+  document.getElementById('cancelBtn').style.display = editMode ? 'inline-block' : 'none';
+  document.getElementById('revertBtn').style.display = editMode ? 'inline-block' : 'none';
+  document.getElementById('editModeIndicator').classList.toggle('active');
+
+  if (editMode) {
+    initializeEditFields();
+  } else {
+    // Cancel edit mode - revert UI
+    document.querySelectorAll('[data-edit-field]').forEach(elem => {
+      elem.classList.remove('edit-mode');
+    });
+    destroyQuillEditors();
+  }
+}
+
+function initializeEditFields() {
+  const editableElements = document.querySelectorAll('[data-edit-field]');
+
+  editableElements.forEach(elem => {
+    const fieldName = elem.dataset.editField;
+    const fieldType = elem.dataset.editType || 'text';
+
+    // Store original value
+    if (!elem.dataset.originalValue) {
+      elem.dataset.originalValue = elem.textContent;
+    }
+
+    // Get current value (from customization or original)
+    const currentValue = customizationData?.customContent?.[fieldName] || currentContent[fieldName] || elem.textContent;
+
+    if (fieldType === 'richtext') {
+      createRichTextEditor(elem, fieldName, currentValue);
+    } else {
+      createTextInput(elem, fieldName, currentValue);
+    }
+
+    elem.classList.add('edit-mode');
+  });
+}
+
+function createTextInput(elem, fieldName, value) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'text-edit-input';
+  input.value = value || '';
+  input.dataset.fieldName = fieldName;
+
+  elem.textContent = '';
+  elem.appendChild(input);
+}
+
+function createRichTextEditor(elem, fieldName, value) {
+  const editorId = `editor-${fieldName}`;
+  const container = document.createElement('div');
+  container.id = editorId;
+  container.innerHTML = value || '';
+
+  elem.textContent = '';
+  elem.appendChild(container);
+
+  const quill = new Quill(`#${editorId}`, {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        ['bold', 'italic', 'underline'],
+        ['list'],
+        ['link']
+      ]
+    }
+  });
+
+  quillEditors[fieldName] = quill;
+}
+
+function destroyQuillEditors() {
+  Object.values(quillEditors).forEach(editor => {
+    // Quill doesn't have a destroy method, but we can clear the reference
+  });
+  quillEditors = {};
+}
+
+async function saveCustomization() {
+  try {
+    // Collect edited content
+    const customContent = {};
+
+    // Collect text inputs
+    document.querySelectorAll('input.text-edit-input').forEach(input => {
+      const fieldName = input.dataset.fieldName;
+      customContent[fieldName] = input.value;
+    });
+
+    // Collect Quill editors
+    Object.keys(quillEditors).forEach(fieldName => {
+      customContent[fieldName] = quillEditors[fieldName].root.innerHTML;
+    });
+
+    console.log('Saving customization:', customContent);
+
+    const response = await fetch(
+      `${apiBaseUrl}/api/applications/${applicationId}/report-customization/${currentReportType}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          customContent,
+          isSaved: true
+        }),
+        credentials: 'include'
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to save customization');
+    }
+
+    const result = await response.json();
+    alert('Report changes saved successfully!');
+
+    // Exit edit mode
+    editMode = true;
+    toggleEditMode();
+
+    // Reload customizations
+    await loadCustomization();
+
+    // Re-render with updated data
+    fetchAssessmentReport();
+  } catch (error) {
+    console.error('Save customization error:', error);
+    alert('Error saving changes: ' + error.message);
+  }
+}
+
+async function revertToOriginal() {
+  if (!confirm('Are you sure you want to discard all edits and restore the original report?')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/applications/${applicationId}/report-customization/${currentReportType}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        credentials: 'include'
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to revert');
+    }
+
+    alert('Report reverted to original content');
+
+    // Clear customization data
+    customizationData = null;
+
+    // Exit edit mode
+    editMode = true;
+    toggleEditMode();
+
+    // Re-render with original data
+    fetchAssessmentReport();
+  } catch (error) {
+    console.error('Revert error:', error);
+    alert('Error reverting changes: ' + error.message);
+  }
+}
+
+function showError(message) {
+  document.getElementById('error').textContent = message;
+  document.getElementById('error').classList.remove('hidden');
+  document.getElementById('loading').classList.add('hidden');
+}
+
+function printReport() {
+  window.print();
+}
+
+function downloadPDF() {
+  alert('To save as PDF, use the Print dialog and select "Save as PDF" as the destination.');
+  window.print();
 }
 
 function generateReportHTML(data, settings = {}, applicationData = {}) {
   const now = new Date();
-  
+
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
   };
 
-  // Get the last weekday (Mon-Fri) of the current month based on a date
   const getLastWeekdayOfMonth = (baseDate) => {
     const date = new Date(baseDate);
     const year = date.getFullYear();
     const month = date.getMonth();
-    // Get last day of the month
     const lastDay = new Date(year, month + 1, 0);
-    // If it's Saturday (6), go back 1 day; if Sunday (0), go back 2 days
     const dayOfWeek = lastDay.getDay();
     if (dayOfWeek === 6) {
-      lastDay.setDate(lastDay.getDate() - 1); // Saturday -> Friday
+      lastDay.setDate(lastDay.getDate() - 1);
     } else if (dayOfWeek === 0) {
-      lastDay.setDate(lastDay.getDate() - 2); // Sunday -> Friday
+      lastDay.setDate(lastDay.getDate() - 2);
     }
     return lastDay;
   };
 
-  // Calculate validity date as last weekday of application month
   const appDate = data.app_date ? new Date(data.app_date) : new Date();
   const validityDate = getLastWeekdayOfMonth(appDate);
   const validityDateFormatted = formatDate(validityDate);
-  
+
   const formatCurrency = (value) => {
     const num = parseFloat(value) || 0;
     return '₱ ' + num.toLocaleString('en-PH', {
@@ -322,11 +762,10 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
       maximumFractionDigits: 2
     });
   };
-  
-  // Group fees by category
+
   const feesByCategory = {};
   let categoryOrder = [];
-  
+
   if (data.fees && Array.isArray(data.fees)) {
     data.fees.forEach(fee => {
       const category = fee.category_name || 'Other Charges';
@@ -337,8 +776,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
       feesByCategory[category].push(fee);
     });
   }
-  
-  // Sort categories: Regulatory first, then others
+
   categoryOrder.sort((a, b) => {
     const aIsReg = a.toLowerCase().includes('regulatory') || a.toLowerCase().includes('reg');
     const bIsReg = b.toLowerCase().includes('regulatory') || b.toLowerCase().includes('reg');
@@ -346,19 +784,18 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
     if (!aIsReg && bIsReg) return 1;
     return a.localeCompare(b);
   });
-  
-  // Build category rows
+
   let feesHtml = '';
   let totalAmount = 0;
   let totalDiscount = 0;
   let totalSurcharge = 0;
   let totalInterest = 0;
   let totalFees = 0;
-  
+
   categoryOrder.forEach((category, categoryIndex) => {
     const categoryFees = feesByCategory[category];
     const isLastCategory = categoryIndex === categoryOrder.length - 1;
-    
+
     feesHtml += `
       <tr style="background-color: transparent; font-weight: bold;">
         <td style="border: none; padding: 4px;">${category}</td>
@@ -369,21 +806,21 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
         <td style="border: none; padding: 4px; text-align: right;"></td>
       </tr>
     `;
-    
+
     categoryFees.forEach((fee, feeIndex) => {
       const isLastFee = isLastCategory && feeIndex === categoryFees.length - 1;
       const borderStyle = isLastFee ? 'border-bottom: 2px solid #333;' : '';
-      
+
       const feeAmount = parseFloat(fee.amount || 0);
       const feeSurcharge = parseFloat(fee.surcharge || 0);
       const feeInterest = parseFloat(fee.interest || 0);
       const feeTotal = parseFloat(fee.total || fee.amount || 0);
-      
+
       totalAmount += feeAmount;
       totalSurcharge += feeSurcharge;
       totalInterest += feeInterest;
       totalFees += feeTotal;
-      
+
       feesHtml += `
         <tr style="${borderStyle}">
           <td style="border: none; padding: 3px; padding-left: 20px;">${fee.fee_name}</td>
@@ -396,8 +833,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
       `;
     });
   });
-  
-  // Add totals row
+
   feesHtml += `
     <tr style="font-weight: bold; background-color: transparent;">
       <td style="border: none; padding: 4px;">TOTAL</td>
@@ -408,13 +844,11 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
       <td style="border: none; padding: 4px; text-align: right;">${formatTableAmount(totalFees)}</td>
     </tr>
   `;
-  
+
   return `
   <div id="page-container">
     <div style="padding: 40px; font-family: Arial, sans-serif; line-height: 1; display: flex; flex-direction: column; height: 100%;">
-      <!-- Content wrapper -->
       <div style="flex: 1; display: flex; flex-direction: column;">
-        <!-- Logo and Header -->
         <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 0px; page-break-after: avoid; line-height: 1;">
           <div style="flex-shrink: 0; margin-right: 20px;">
             <img src="/dalaguete-logo.png" alt="Logo" style="height: 60px; width: auto;">
@@ -426,19 +860,18 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
             <div style="font-size: 14px; font-weight: bold; margin-top: 3px;">MUNICIPAL TREASURER'S OFFICE</div>
           </div>
         </div>
-        
+
         <div style="text-align: center; margin-bottom: 25px; font-size: 16px; font-weight: bold; page-break-after: avoid;">
           ASSESSMENT RECORD
         </div>
-        
-        <!-- Application Info -->
+
         <div style="margin-bottom: 20px; font-size: 12px; page-break-after: avoid;">
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="width: 50%; vertical-align: top;">
-                <div style="margin-bottom: 2px;"><strong style="display: inline-block; width: 80px;">Trade Name:</strong> ${data.business_name || 'N/A'}</div>
-                <div style="margin-bottom: 2px;"><strong style="display: inline-block; width: 80px;">Address:</strong> ${data.address || 'N/A'}</div>
-                <div style="margin-bottom: 2px;"><strong style="display: inline-block; width: 80px;">Proprietor:</strong> ${data.owner_name || 'N/A'}</div>
+                <div style="margin-bottom: 2px;"><strong style="display: inline-block; width: 80px;">Trade Name:</strong> <span class="editable-field" data-edit-field="business_name" data-edit-type="text">${data.business_name || 'N/A'}</span></div>
+                <div style="margin-bottom: 2px;"><strong style="display: inline-block; width: 80px;">Address:</strong> <span class="editable-field" data-edit-field="address" data-edit-type="text">${data.address || 'N/A'}</span></div>
+                <div style="margin-bottom: 2px;"><strong style="display: inline-block; width: 80px;">Proprietor:</strong> <span class="editable-field" data-edit-field="owner_name" data-edit-type="text">${data.owner_name || 'N/A'}</span></div>
               </td>
               <td style="width: 50%; vertical-align: top; padding-left: 20px;">
                 <div style="margin-bottom: 2px;"><strong style="display: inline-block; width: 120px;">Application No:</strong> ${data.app_number || 'N/A'}</div>
@@ -448,8 +881,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
             </tr>
           </table>
         </div>
-        
-        <!-- Assessment Table -->
+
         <table style="width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 11px; page-break-inside: avoid;">
           <thead>
             <tr style="background-color: transparent; font-weight: bold; border-bottom: 2px solid #333;">
@@ -465,12 +897,10 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
             ${feesHtml}
           </tbody>
         </table>
-        
-        <!-- Totals Section - Two Column Layout -->
+
         <div style="margin: 15px 0; font-size: 12px; page-break-after: avoid;">
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
-              <!-- Left Column -->
               <td style="width: 50%; vertical-align: top; padding: 0;">
                 <table style="width: 100%; border-collapse: collapse;">
                   <tr>
@@ -489,7 +919,6 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
                   </tr>
                 </table>
               </td>
-              <!-- Right Column -->
               <td style="width: 50%; vertical-align: top; padding: 0; padding-left: 10px;">
                 <table style="width: 100%; border-collapse: collapse;">
                   <tr>
@@ -509,38 +938,36 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
             </tr>
           </table>
         </div>
-        
+
         <hr style="border: none; border-top: 1px solid #333; margin: 10px 0;">
-        
-        <!-- Certification and Signature Section -->
+
         <div style="margin-top: 15px; font-size: 11px; page-break-after: avoid; line-height: 1;">
           <div style="margin-bottom: 15px; line-height: 1;">
             <p style="margin: 0; text-align: justify;">This is to certify that the above information supplied by me is true and correct to the best of my knowledge and belief.</p>
           </div>
-          
+
           <div style="margin-bottom: 20px; text-align: center;">
             <div style="height: 25px;"></div>
             <div style="border-top: 1px solid #333; width: 200px; margin: 0 auto; font-size: 10px;">(Owner/Proprietor/Administrator)</div>
           </div>
-          
+
           <div style="margin-bottom: 15px; font-size: 10px; line-height: 1;">
             <p style="margin: 0;">SUBSCRIBED AND SWORN TO before me this _____ day of ______________, 2025, affiant exhibited his/her Residence Certificate No. ______ issued on ______ at DALAGUETE, Philippines.</p>
           </div>
-          
+
           <div style="margin-top: 25px; text-align: center;">
             <div style="height: 35px;"></div>
             <div style="font-weight: bold; margin-bottom: 5px;">${settings.municipal_treasurer_name?.value || 'HAIDEE D. OGOC'}</div>
             <div style="border-top: 1px solid #333; width: 200px; margin: 0 auto;font-weight: bold; margin-bottom: 25px;">${settings.municipal_treasurer_position?.value || 'ACTING MUNICIPAL TREASURER'}</div>
           </div>
-          
+
           <div style="margin-top: 20px; font-size: 9px; font-style: italic; line-height: 1;">
             <p style="margin: 0;">* Subject however to existing rules, relative regulations,</p>
             <p style="margin: 0;">local ordinances of the foregoing</p>
           </div>
         </div>
       </div>
-      
-      <!-- Footer at the very bottom -->
+
       <div style="font-size: 9px; border-top: 1px solid #ddd; padding-top: 8px; margin-top: auto;">
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
@@ -556,23 +983,6 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
     </div>
   </div>
   `;
-}
-
-function showError(message) {
-  document.getElementById('error').textContent = message;
-  document.getElementById('error').classList.remove('hidden');
-  document.getElementById('loading').classList.add('hidden');
-}
-
-function printReport() {
-  window.print();
-}
-
-function downloadPDF() {
-  // Use browser's print dialog to save as PDF
-  // This ensures the PDF looks exactly like the HTML version
-  alert('To save as PDF, use the Print dialog and select "Save as PDF" as the destination.');
-  window.print();
 }
 </script>
 </body>

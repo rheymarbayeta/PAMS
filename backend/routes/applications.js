@@ -1716,5 +1716,222 @@ router.put('/:id/reassess', authorize('SuperAdmin', 'Admin', 'Approver'), async 
   }
 });
 
+// Helper function to check if user can edit reports
+async function canEditReport(user, applicationId) {
+  const allowedRoles = ['Admin', 'SuperAdmin', 'Approver', 'Assessor'];
+
+  if (!allowedRoles.includes(user.role_name)) {
+    return false;
+  }
+
+  // For non-admin roles, check if user is involved in the application
+  if (!['Admin', 'SuperAdmin'].includes(user.role_name)) {
+    const [apps] = await pool.execute(
+      'SELECT creator_id, assessor_id, approver_id FROM applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      return false;
+    }
+
+    const app = apps[0];
+    const userId = user.user_id;
+
+    if (user.role_name === 'Assessor' && app.assessor_id !== userId) {
+      return false;
+    }
+    if (user.role_name === 'Approver' && app.approver_id !== userId) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Get report customization - retrieve saved customizations or original content
+router.get('/:id/report-customization/:reportType', authenticate, async (req, res) => {
+  try {
+    const { id: applicationId, reportType } = req.params;
+
+    // Validate reportType
+    const validTypes = ['assessment', 'permit', 'endorsement'];
+    if (!validTypes.includes(reportType)) {
+      return res.status(400).json({ error: 'Invalid report type' });
+    }
+
+    // Check edit permission
+    const canEdit = await canEditReport(req.user, applicationId);
+    if (!canEdit) {
+      return res.status(403).json({ error: 'You do not have permission to edit this report' });
+    }
+
+    // Try to fetch existing customization
+    const [customizations] = await pool.execute(
+      'SELECT * FROM report_customizations WHERE application_id = ? AND report_type = ?',
+      [applicationId, reportType]
+    );
+
+    if (customizations.length > 0) {
+      const customization = customizations[0];
+      return res.json({
+        success: true,
+        customization: {
+          customizationId: customization.customization_id,
+          customContent: JSON.parse(customization.custom_content),
+          originalContent: JSON.parse(customization.original_content),
+          editedAt: customization.edited_at,
+          editedBy: customization.edited_by_user_id,
+          isSaved: customization.is_saved
+        },
+        isEdited: true
+      });
+    }
+
+    // No customization exists, return empty state
+    res.json({
+      success: true,
+      customization: null,
+      isEdited: false
+    });
+  } catch (error) {
+    console.error('Get report customization error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Save/update report customization
+router.put('/:id/report-customization/:reportType', authenticate, async (req, res) => {
+  try {
+    const { id: applicationId, reportType } = req.params;
+    const { customContent, originalContent, isSaved } = req.body;
+
+    // Validate reportType
+    const validTypes = ['assessment', 'permit', 'endorsement'];
+    if (!validTypes.includes(reportType)) {
+      return res.status(400).json({ error: 'Invalid report type' });
+    }
+
+    // Check edit permission
+    const canEdit = await canEditReport(req.user, applicationId);
+    if (!canEdit) {
+      return res.status(403).json({ error: 'You do not have permission to edit this report' });
+    }
+
+    // Validate required fields
+    if (!customContent) {
+      return res.status(400).json({ error: 'customContent is required' });
+    }
+
+    // Try to update existing customization
+    const [existing] = await pool.execute(
+      'SELECT customization_id FROM report_customizations WHERE application_id = ? AND report_type = ?',
+      [applicationId, reportType]
+    );
+
+    if (existing.length > 0) {
+      // Update existing record
+      await pool.execute(
+        `UPDATE report_customizations
+         SET custom_content = ?, original_content = ?, edited_by_user_id = ?, is_saved = ?, edited_at = CURRENT_TIMESTAMP
+         WHERE application_id = ? AND report_type = ?`,
+        [
+          JSON.stringify(customContent),
+          originalContent ? JSON.stringify(originalContent) : null,
+          req.user.user_id,
+          isSaved ? 1 : 0,
+          applicationId,
+          reportType
+        ]
+      );
+
+      return res.json({
+        success: true,
+        customizationId: existing[0].customization_id,
+        message: isSaved ? 'Report customization saved successfully' : 'Report customization updated (temporary)'
+      });
+    }
+
+    // Create new customization record
+    const customizationId = generateId(ID_PREFIXES.CUSTOMIZATION);
+    await pool.execute(
+      `INSERT INTO report_customizations
+       (customization_id, application_id, report_type, custom_content, original_content, edited_by_user_id, is_saved)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        customizationId,
+        applicationId,
+        reportType,
+        JSON.stringify(customContent),
+        originalContent ? JSON.stringify(originalContent) : JSON.stringify({}),
+        req.user.user_id,
+        isSaved ? 1 : 0
+      ]
+    );
+
+    // Log action
+    await logAction(
+      req.user.user_id,
+      'CUSTOMIZE_REPORT',
+      `Customized ${reportType} report for application ${applicationId}. ${isSaved ? 'Changes saved.' : 'Temporary edits.'}`,
+      applicationId
+    );
+
+    res.json({
+      success: true,
+      customizationId,
+      message: isSaved ? 'Report customization saved successfully' : 'Report customization updated (temporary)'
+    });
+  } catch (error) {
+    console.error('Save report customization error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Delete/revert report customization - remove edits and restore original
+router.delete('/:id/report-customization/:reportType', authenticate, async (req, res) => {
+  try {
+    const { id: applicationId, reportType } = req.params;
+
+    // Validate reportType
+    const validTypes = ['assessment', 'permit', 'endorsement'];
+    if (!validTypes.includes(reportType)) {
+      return res.status(400).json({ error: 'Invalid report type' });
+    }
+
+    // Check edit permission
+    const canEdit = await canEditReport(req.user, applicationId);
+    if (!canEdit) {
+      return res.status(403).json({ error: 'You do not have permission to edit this report' });
+    }
+
+    // Delete customization record
+    const [result] = await pool.execute(
+      'DELETE FROM report_customizations WHERE application_id = ? AND report_type = ?',
+      [applicationId, reportType]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'No customization found to delete' });
+    }
+
+    // Log action
+    await logAction(
+      req.user.user_id,
+      'REVERT_REPORT_CUSTOMIZATION',
+      `Reverted ${reportType} report customization for application ${applicationId}. Restored to original content.`,
+      applicationId
+    );
+
+    res.json({
+      success: true,
+      message: 'Report customization reverted to original content'
+    });
+  } catch (error) {
+    console.error('Delete report customization error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 module.exports = router;
 

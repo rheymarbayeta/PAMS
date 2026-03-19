@@ -23,6 +23,7 @@ const messageRoutes = require('./routes/messages');
 const settingsRoutes = require('./routes/settings');
 const addressRoutes = require('./routes/addresses');
 const reportRoutes = require('./routes/reports');
+const reportTemplateRoutes = require('./routes/reportTemplates');
 
 const app = express();
 const server = http.createServer(app);
@@ -73,6 +74,8 @@ app.use('/api/addresses', addressRoutes);
 console.log('  ✓ /api/addresses');
 app.use('/api/reports', reportRoutes);
 console.log('  ✓ /api/reports');
+app.use('/api/report-templates', reportTemplateRoutes);
+console.log('  ✓ /api/report-templates');
 console.log('✅ All routes registered');
 
 // Health check
