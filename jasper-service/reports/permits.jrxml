@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="PermitReport" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" uuid="87654321-4321-4321-4321-210987654321">
+	
+	<parameter name="generatedAt" class="java.lang.String"/>
+	<parameter name="generatedBy" class="java.lang.String"/>
+	<parameter name="totalRecords" class="java.lang.Integer"/>
+	<parameter name="totalAmount" class="java.lang.Double"/>
+	
+	<queryString language="json">
+		<![CDATA[records]]>
+	</queryString>
+	
+	<field name="application_number" class="java.lang.String"/>
+	<field name="business_name" class="java.lang.String"/>
+	<field name="owner_name" class="java.lang.String"/>
+	<field name="permit_type_name" class="java.lang.String"/>
+	<field name="attribute_name" class="java.lang.String"/>
+	<field name="address" class="java.lang.String"/>
+	<field name="total_amount_due" class="java.lang.Double"/>
+	<field name="total_balance_due" class="java.lang.Double"/>
+	<field name="status" class="java.lang.String"/>
+	<field name="created_at" class="java.util.Date"/>
+	
+	<!-- Title Band -->
+	<title>
+		<band height="120" splitType="Stretch">
+			<rectangle>
+				<reportElement x="0" y="0" width="555" height="100" backcolor="#1F4788" uuid="87654321-4321-4321-4321-210987654322"/>
+				<graphicElement>
+					<pen lineWidth="0"/>
+				</graphicElement>
+			</rectangle>
+			<textField>
+				<reportElement x="20" y="10" width="515" height="35" forecolor="#FFFFFF" uuid="87654321-4321-4321-4321-210987654323"/>
+				<textElement>
+					<font size="22" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA["Permit Issuance Report"]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="20" y="50" width="515" height="15" forecolor="#FFFFFF" uuid="87654321-4321-4321-4321-210987654324"/>
+				<textElement>
+					<font size="11"/>
+				</textElement>
+				<textFieldExpression><![CDATA["PAMS System - " + $P{generatedAt}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="20" y="65" width="380" forecolor="#FFFFFF" uuid="87654321-4321-4321-4321-210987654325"/>
+				<textElement>
+					<font size="10"/>
+				</textElement>
+				<textFieldExpression><![CDATA["Prepared by: " + $P{generatedBy}]]></textFieldExpression>
+			</textField>
+			<line>
+				<reportElement x="0" y="105" width="555" height="1" forecolor="#CCCCCC" uuid="87654321-4321-4321-4321-210987654326"/>
+			</line>
+		</band>
+	</title>
+	
+	<!-- Column Headers -->
+	<columnHeader>
+		<band height="35" splitType="Stretch">
+			<rectangle>
+				<reportElement x="0" y="0" width="555" height="35" backcolor="#E8E8E8" uuid="87654321-4321-4321-4321-210987654327"/>
+			</rectangle>
+			<staticText>
+				<reportElement x="10" y="8" width="70" uuid="87654321-4321-4321-4321-210987654328"/>
+				<textElement>
+					<font size="10" isBold="true"/>
+				</textElement>
+				<text>Permit #</text>
+			</staticText>
+			<staticText>
+				<reportElement x="85" y="8" width="100" uuid="87654321-4321-4321-4321-210987654329"/>
+				<textElement>
+					<font size="10" isBold="true"/>
+				</textElement>
+				<text>Business Name</text>
+			</staticText>
+			<staticText>
+				<reportElement x="190" y="8" width="85" uuid="87654321-4321-4321-4321-210987654330"/>
+				<textElement>
+					<font size="10" isBold="true"/>
+				</textElement>
+				<text>Permit Type</text>
+			</staticText>
+			<staticText>
+				<reportElement x="280" y="8" width="80" uuid="87654321-4321-4321-4321-210987654331"/>
+				<textElement>
+					<font size="10" isBold="true"/>
+				</textElement>
+				<text>Status</text>
+			</staticText>
+			<staticText>
+				<reportElement x="365" y="8" width="85" uuid="87654321-4321-4321-4321-210987654332"/>
+				<textElement textAlignment="Right">
+					<font size="10" isBold="true"/>
+				</textElement>
+				<text>Amount Due</text>
+			</staticText>
+			<staticText>
+				<reportElement x="455" y="8" width="90" uuid="87654321-4321-4321-4321-210987654333"/>
+				<textElement textAlignment="Right">
+					<font size="10" isBold="true"/>
+				</textElement>
+				<text>Balance Due</text>
+			</staticText>
+		</band>
+	</columnHeader>
+	
+	<!-- Detail -->
+	<detail>
+		<band height="25" splitType="Prevent">
+			<rectangle>
+				<reportElement x="0" y="0" width="555" height="25" backcolor="#FFFFFF" uuid="87654321-4321-4321-4321-210987654334">
+					<printWhenExpression><![CDATA[($V{REPORT_COUNT} % 2) == 0]]></printWhenExpression>
+				</reportElement>
+				<graphicElement>
+					<pen lineWidth="0"/>
+				</graphicElement>
+			</rectangle>
+			<rectangle>
+				<reportElement x="0" y="0" width="555" height="25" backcolor="#F5F5F5" uuid="87654321-4321-4321-4321-210987654335">
+					<printWhenExpression><![CDATA[($V{REPORT_COUNT} % 2) == 1]]></printWhenExpression>
+				</reportElement>
+				<graphicElement>
+					<pen lineWidth="0"/>
+				</graphicElement>
+			</rectangle>
+			<line>
+				<reportElement x="0" y="24" width="555" height="1" forecolor="#DDDDDD" uuid="87654321-4321-4321-4321-210987654336"/>
+			</line>
+			<textField>
+				<reportElement x="10" y="5" width="70" uuid="87654321-4321-4321-4321-210987654337"/>
+				<textElement>
+					<font size="9"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{application_number}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="85" y="5" width="100" uuid="87654321-4321-4321-4321-210987654338"/>
+				<textElement>
+					<font size="9"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{business_name}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="190" y="5" width="85" uuid="87654321-4321-4321-4321-210987654339"/>
+				<textElement>
+					<font size="9"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{permit_type_name}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="280" y="5" width="80" uuid="87654321-4321-4321-4321-210987654340"/>
+				<textElement>
+					<font size="9"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{status}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00;-#,##0.00">
+				<reportElement x="365" y="5" width="85" uuid="87654321-4321-4321-4321-210987654341"/>
+				<textElement textAlignment="Right">
+					<font size="9"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{total_amount_due}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00;-#,##0.00">
+				<reportElement x="455" y="5" width="90" uuid="87654321-4321-4321-4321-210987654342"/>
+				<textElement textAlignment="Right">
+					<font size="9"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{total_balance_due}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	
+	<!-- Summary -->
+	<summary>
+		<band height="60" splitType="Stretch">
+			<rectangle>
+				<reportElement x="0" y="0" width="555" height="60" backcolor="#E8E8E8" uuid="87654321-4321-4321-4321-210987654343"/>
+			</rectangle>
+			<staticText>
+				<reportElement x="200" y="10" width="150" uuid="87654321-4321-4321-4321-210987654344"/>
+				<textElement textAlignment="Right">
+					<font size="11" isBold="true"/>
+				</textElement>
+				<text>TOTAL RECORDS:</text>
+			</staticText>
+			<textField>
+				<reportElement x="360" y="10" width="80" uuid="87654321-4321-4321-4321-210987654345"/>
+				<textElement textAlignment="Left">
+					<font size="11" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{totalRecords}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement x="200" y="30" width="150" uuid="87654321-4321-4321-4321-210987654346"/>
+				<textElement textAlignment="Right">
+					<font size="11" isBold="true"/>
+				</textElement>
+				<text>TOTAL AMOUNT DUE:</text>
+			</staticText>
+			<textField pattern="#,##0.00;-#,##0.00">
+				<reportElement x="360" y="30" width="80" uuid="87654321-4321-4321-4321-210987654347"/>
+				<textElement textAlignment="Left">
+					<font size="11" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$P{totalAmount}]]></textFieldExpression>
+			</textField>
+		</band>
+	</summary>
+</jasperReport>

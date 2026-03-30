@@ -1,0 +1,7 @@
+vendor/
+output/*
+!output/.gitkeep
+.env
+.DS_Store
+composer.lock
+*.log

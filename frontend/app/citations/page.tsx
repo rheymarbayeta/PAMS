@@ -1,0 +1,1272 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
+import Layout from '@/components/Layout';
+import api from '@/services/api';
+import etracsService from '@/services/etracsService';
+import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrency } from '@/utils/formatters';
+
+interface Citation {
+  citation_id: string;
+  ticket_number: string;
+  driver_name: string;
+  plate_number: string;
+  violation_date: string;
+  fine_amount: number;
+  payment_status: string;
+  is_completed: boolean;
+  created_at: string;
+  issued_by_name: string;
+}
+
+interface FormData {
+  ticketNumber: string;
+  driverName: string;
+  driverAddress: string;
+  licenseNumber: string;
+  vehicleType: string;
+  vehicleColor: string;
+  plateNumber: string;
+  vehicleRegistration: string;
+  vehicleOwner: string;
+  ownerName: string;
+  ownerAddress: string;
+  violations: string[];
+  otherViolations: string;
+  remarks: string;
+  placeViolation: string;
+  violationTime: string;
+  violationDate: string;
+  fineAmount: number;
+  paymentStatus: string;
+  dateIssued: string;
+  enforcerId: string;
+  officer: string;
+}
+
+const VIOLATIONS = [
+  "No Driver's License",
+  'Over Pricing (Allowable Fare Rates)',
+  'Not in Proper Clothes/Personal Hygiene',
+  'Under the Influence of Liquor or Drugs',
+  'Smoking while Driving',
+  'Use of Cellular Phone or Other Gadgets',
+  'Failure to Convey Passenger',
+  'Disregarding Traffic Signs, Signals & Markings',
+  'Over Speeding',
+  'Drag Racing',
+  'Counter Flow',
+  'No Protective Helmet',
+  'Arrogant Driver',
+  'No Registration',
+  'Out of Route/Line',
+  'Entering National Highway',
+  'No Reflector, Side Mirror and Horn or Bell',
+  'Obstruction to Traffic',
+  'Overloading',
+  'Illegal Parking/Loading/Unloading',
+  'Cutting Trip/Not Following Route',
+  'Others',
+];
+
+export default function CitationsPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'form' | 'list' | 'report'>('form');
+  const [citations, setCitations] = useState<Citation[]>([]);
+  const [enforcers, setEnforcers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Report filters
+  const [reportFilters, setReportFilters] = useState({
+    paymentStatus: 'all',
+    dateFrom: '',
+    dateTo: '',
+    violations: '',
+  });
+
+  // eTracs integration state
+  const [etracsSearching, setEtracsSearching] = useState(false);
+  const [etracsResults, setEtracsResults] = useState<any[]>([]);
+  const [showEtracsModal, setShowEtracsModal] = useState(false);
+  const [etracsExactMatch, setEtracsExactMatch] = useState<any | null>(null);
+
+  const [formData, setFormData] = useState<FormData>({
+    ticketNumber: '',
+    driverName: '',
+    driverAddress: '',
+    licenseNumber: '',
+    vehicleType: '',
+    vehicleColor: '',
+    plateNumber: '',
+    vehicleRegistration: '',
+    vehicleOwner: '',
+    ownerName: '',
+    ownerAddress: '',
+    violations: [],
+    otherViolations: '',
+    remarks: '',
+    placeViolation: '',
+    violationTime: '',
+    violationDate: new Date().toISOString().split('T')[0],
+    fineAmount: 0,
+    paymentStatus: 'Pending',
+    dateIssued: new Date().toISOString().split('T')[0],
+    enforcerId: '',
+    officer: user?.full_name || '',
+  });
+
+  function generateTicketNumber() {
+    const prefix = 'DG-' + new Date().getFullYear();
+    const random = Math.floor(Math.random() * 100000)
+      .toString()
+      .padStart(5, '0');
+    return prefix + '-' + random;
+  }
+
+  useEffect(() => {
+    fetchEnforcers();
+    if (activeTab === 'list') {
+      fetchCitations();
+    }
+  }, [activeTab]);
+
+  const fetchEnforcers = async () => {
+    try {
+      const response = await api.get('/api/enforcers?limit=1000');
+      setEnforcers(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching enforcers:', error);
+    }
+  };
+
+  const fetchCitations = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/api/citations');
+      setCitations(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching citations:', error);
+      setErrorMessage('Failed to load citations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'fineAmount' ? parseFloat(value) || 0 : value.toUpperCase(),
+    }));
+  };
+
+  const handleViolationChange = (violation: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      violations: prev.violations.includes(violation)
+        ? prev.violations.filter((v) => v !== violation)
+        : [...prev.violations, violation],
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.driverName || !formData.driverAddress) {
+      setErrorMessage('Please fill in all required driver information');
+      return;
+    }
+
+    if (!formData.vehicleType || !formData.plateNumber) {
+      setErrorMessage('Please fill in all required vehicle information');
+      return;
+    }
+
+    if (formData.violations.length === 0) {
+      setErrorMessage('Please select at least one violation');
+      return;
+    }
+
+    if (formData.violations.includes('Others') && !formData.otherViolations) {
+      setErrorMessage('Please specify the other violation');
+      return;
+    }
+
+    if (!formData.placeViolation || !formData.violationTime) {
+      setErrorMessage('Please fill in violation details');
+      return;
+    }
+
+    if (formData.fineAmount <= 0) {
+      setErrorMessage('Please enter a valid fine amount');
+      return;
+    }
+
+    if (!formData.enforcerId) {
+      setErrorMessage('Please select an officer/enforcer');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setErrorMessage('');
+
+      await api.post('/api/citations', {
+        ticketNumber: formData.ticketNumber,
+        driverName: formData.driverName,
+        driverAddress: formData.driverAddress,
+        licenseNumber: formData.licenseNumber,
+        vehicleType: formData.vehicleType,
+        vehicleColor: formData.vehicleColor,
+        plateNumber: formData.plateNumber,
+        vehicleRegistration: formData.vehicleRegistration,
+        vehicleOwner: formData.vehicleOwner,
+        ownerName: formData.ownerName,
+        ownerAddress: formData.ownerAddress,
+        violations: formData.violations,
+        otherViolations: formData.otherViolations,
+        remarks: formData.remarks,
+        violationLocation: formData.placeViolation,
+        violationTime: formData.violationTime?.split('T')[1] || '',
+        violationDate: formData.violationDate,
+        fineAmount: formData.fineAmount,
+        paymentStatus: formData.paymentStatus,
+        enforcer_id: formData.enforcerId,
+      });
+
+      setSuccessMessage('Citation ticket saved successfully!');
+      setTimeout(() => {
+        setSuccessMessage('');
+        // Reset form
+        setFormData({
+          ticketNumber: '',
+          driverName: '',
+          driverAddress: '',
+          licenseNumber: '',
+          vehicleType: '',
+          vehicleColor: '',
+          plateNumber: '',
+          vehicleRegistration: '',
+          vehicleOwner: '',
+          ownerName: '',
+          ownerAddress: '',
+          violations: [],
+          otherViolations: '',
+          remarks: '',
+          placeViolation: '',
+          violationTime: '',
+          violationDate: new Date().toISOString().split('T')[0],
+          fineAmount: 0,
+          paymentStatus: 'Pending',
+          dateIssued: new Date().toISOString().split('T')[0],
+          enforcerId: '',
+          officer: user?.full_name || '',
+        });
+        // Switch to list tab to see the new citation
+        setActiveTab('list');
+      }, 2000);
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.error || 'Failed to save citation');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleClearForm = () => {
+    setFormData({
+      ticketNumber: '',
+      driverName: '',
+      driverAddress: '',
+      licenseNumber: '',
+      vehicleType: '',
+      vehicleColor: '',
+      plateNumber: '',
+      vehicleRegistration: '',
+      vehicleOwner: '',
+      ownerName: '',
+      ownerAddress: '',
+      violations: [],
+      otherViolations: '',
+      remarks: '',
+      placeViolation: '',
+      violationTime: '',
+      violationDate: new Date().toISOString().split('T')[0],
+      fineAmount: 0,
+      paymentStatus: 'Pending',
+      dateIssued: new Date().toISOString().split('T')[0],
+      enforcerId: '',
+      officer: user?.full_name || '',
+    });
+    setErrorMessage('');
+    setSuccessMessage('');
+  };
+
+  const getFilteredCitations = () => {
+    return citations.filter((citation) => {
+      // Filter by payment status
+      if (reportFilters.paymentStatus !== 'all' && citation.payment_status !== reportFilters.paymentStatus) {
+        return false;
+      }
+
+      // Filter by date range
+      if (reportFilters.dateFrom) {
+        const citationDate = new Date(citation.violation_date);
+        const filterFromDate = new Date(reportFilters.dateFrom);
+        if (citationDate < filterFromDate) {
+          return false;
+        }
+      }
+
+      if (reportFilters.dateTo) {
+        const citationDate = new Date(citation.violation_date);
+        const filterToDate = new Date(reportFilters.dateTo);
+        // Add 1 day to include the entire "to" date
+        filterToDate.setDate(filterToDate.getDate() + 1);
+        if (citationDate >= filterToDate) {
+          return false;
+        }
+      }
+
+      // Filter by violations - only applied if a violation is selected
+      // Note: This would require violations data from API response
+      // Currently violations are not included in the citations list response
+      if (reportFilters.violations !== '') {
+        // Placeholder for violations filtering when data becomes available
+        // This would check if the citation's violation matches selected violation
+      }
+
+      return true;
+    });
+  };
+
+  const handleResetFilters = () => {
+    setReportFilters({
+      paymentStatus: 'all',
+      dateFrom: '',
+      dateTo: '',
+      violations: '',
+    });
+  };
+
+  // Verify driver information with eTracs
+  const handleVerifyDriver = async () => {
+    if (!formData.driverName) {
+      setErrorMessage('Please enter driver name first');
+      return;
+    }
+
+    try {
+      setEtracsSearching(true);
+      setErrorMessage('');
+      
+      const nameParts = formData.driverName.trim().split(/\s+/);
+      const response = await etracsService.verifyDriverWithEtracs({
+        firstname: nameParts[0] || '',
+        lastname: nameParts[nameParts.length - 1] || '',
+        middlename: nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '',
+      });
+
+      setEtracsResults(response.all_results || []);
+      setEtracsExactMatch(response.exact_match);
+      setShowEtracsModal(true);
+    } catch (error: any) {
+      console.error('eTracs verification error:', error);
+      setErrorMessage('Failed to verify driver with eTracs: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setEtracsSearching(false);
+    }
+  };
+
+  return (
+    <ProtectedRoute>
+      <Layout>
+        <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          {/* Page Header */}
+          <div className="mb-6 sm:mb-8">
+            <div className="flex items-center gap-2 sm:gap-3 mb-2">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-slate-800 flex items-center justify-center">
+                <svg
+                  className="h-4 w-4 sm:h-5 sm:w-5 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800">
+                  Citation Tickets
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500">
+                  Manage traffic violation citation tickets
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-200">
+            <button
+              onClick={() => setActiveTab('form')}
+              className={`px-4 py-3 font-medium text-sm transition-all duration-200 ${
+                activeTab === 'form'
+                  ? 'text-slate-800 border-b-2 border-slate-800'
+                  : 'text-slate-600 hover:text-slate-800'
+              }`}
+            >
+              Create Citation
+            </button>
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-3 font-medium text-sm transition-all duration-200 ${
+                activeTab === 'list'
+                  ? 'text-slate-800 border-b-2 border-slate-800'
+                  : 'text-slate-600 hover:text-slate-800'
+              }`}
+            >
+              Citations List
+            </button>
+            <button
+              onClick={() => setActiveTab('report')}
+              className={`px-4 py-3 font-medium text-sm transition-all duration-200 ${
+                activeTab === 'report'
+                  ? 'text-slate-800 border-b-2 border-slate-800'
+                  : 'text-slate-600 hover:text-slate-800'
+              }`}
+            >
+              Report
+            </button>
+            <button
+              onClick={() => {
+                router.push('/citations/payments');
+              }}
+              className={`px-4 py-3 font-medium text-sm transition-all duration-200 text-slate-600 hover:text-slate-800`}
+            >
+              💳 Payments Portal
+            </button>
+          </div>
+
+          {/* Success and Error Messages */}
+          {successMessage && (
+            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+              ✓ {successMessage}
+            </div>
+          )}
+
+          {errorMessage && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+              ✗ {errorMessage}
+            </div>
+          )}
+
+          {/* Create Citation Form Tab */}
+          {activeTab === 'form' && (
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Ticket Number */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    TICKET NUMBER *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.ticketNumber}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        ticketNumber: e.target.value.toUpperCase(),
+                      }))
+                    }
+                    placeholder="Enter ticket number (e.g., DG-2026-12345)"
+                    required
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase"
+                  />
+                </div>
+
+                {/* Driver Information Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">
+                    DRIVER INFORMATION
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        NAME OF DRIVER *
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          name="driverName"
+                          value={formData.driverName}
+                          onChange={handleInputChange}
+                          required
+                          className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleVerifyDriver}
+                          disabled={!formData.driverName || etracsSearching}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-400 transition-colors font-medium text-sm whitespace-nowrap"
+                          title="Verify driver with eTracs"
+                        >
+                          {etracsSearching ? '🔍 Searching...' : '🔍 Verify'}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        ADDRESS *
+                      </label>
+                      <input
+                        type="text"
+                        name="driverAddress"
+                        value={formData.driverAddress}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      DRIVER'S LICENSE NO.
+                    </label>
+                    <input
+                      type="text"
+                      name="licenseNumber"
+                      value={formData.licenseNumber}
+                      onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                    />
+                  </div>
+                </div>
+
+                {/* Vehicle Information Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">
+                    VEHICLE INFORMATION
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        TYPE OF VEHICLE *
+                      </label>
+                      <select
+                        name="vehicleType"
+                        value={formData.vehicleType}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      >
+                        <option value="">-- SELECT VEHICLE TYPE --</option>
+                        <option value="TRICYCLE">TRICYCLE</option>
+                        <option value="TAXI">TAXI</option>
+                        <option value="BUS">BUS</option>
+                        <option value="MOTORCYCLE">MOTORCYCLE</option>
+                        <option value="PRIVATE CAR">PRIVATE CAR</option>
+                        <option value="JEEPNEY">JEEPNEY</option>
+                        <option value="OTHERS">OTHERS</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        VEHICLE PLATE NO. *
+                      </label>
+                      <input
+                        type="text"
+                        name="plateNumber"
+                        value={formData.plateNumber}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        VEHICLE COLOR
+                      </label>
+                      <input
+                        type="text"
+                        name="vehicleColor"
+                        value={formData.vehicleColor}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        VEHICLE REGISTRATION
+                      </label>
+                      <input
+                        type="text"
+                        name="vehicleRegistration"
+                        value={formData.vehicleRegistration}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Registered Owner Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">
+                    REGISTERED OWNER INFORMATION
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        REGISTERED OWNER *
+                      </label>
+                      <input
+                        type="text"
+                        name="ownerName"
+                        value={formData.ownerName}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        ADDRESS *
+                      </label>
+                      <input
+                        type="text"
+                        name="ownerAddress"
+                        value={formData.ownerAddress}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Violations Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">
+                    VIOLATIONS *
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {VIOLATIONS.map((violation) => (
+                      <div key={violation} className="flex items-start">
+                        <input
+                          type="checkbox"
+                          id={`violation-${violation}`}
+                          checked={formData.violations.includes(violation)}
+                          onChange={() => handleViolationChange(violation)}
+                          className="w-5 h-5 mt-1 border-slate-300 rounded text-slate-800 focus:ring-slate-800 cursor-pointer"
+                        />
+                        <label
+                          htmlFor={`violation-${violation}`}
+                          className="ml-3 text-sm text-slate-700 cursor-pointer"
+                        >
+                          {violation}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+
+                  {formData.violations.includes('Others') && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        PLEASE SPECIFY OTHER VIOLATION
+                      </label>
+                      <input
+                        type="text"
+                        name="otherViolations"
+                        value={formData.otherViolations}
+                        onChange={handleInputChange}
+                        placeholder="SPECIFY THE OTHER VIOLATION"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Violation Details Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">
+                    VIOLATION DETAILS
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        PLACE OF VIOLATION *
+                      </label>
+                      <input
+                        type="text"
+                        name="placeViolation"
+                        value={formData.placeViolation}
+                        onChange={handleInputChange}
+                        placeholder="E.G., MAIN STREET, MARKET AREA"
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        DATE & TIME OF VIOLATION *
+                      </label>
+                      <input
+                        type="datetime-local"
+                        name="violationTime"
+                        value={formData.violationTime}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fine and Payment Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">
+                    FINE & PAYMENT INFORMATION
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        FINE AMOUNT (₱) *
+                      </label>
+                      <input
+                        type="number"
+                        name="fineAmount"
+                        value={formData.fineAmount}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="0.01"
+                        required
+                        placeholder="0.00"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        PAYMENT STATUS *
+                      </label>
+                      <select
+                        name="paymentStatus"
+                        value={formData.paymentStatus}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent"
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Installment">Installment</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Remarks Section */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    ADDITIONAL REMARKS
+                  </label>
+                  <textarea
+                    name="remarks"
+                    value={formData.remarks}
+                    onChange={handleInputChange}
+                    placeholder="ENTER ANY ADDITIONAL DETAILS OR REMARKS..."
+                    rows={4}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent uppercase"
+                  />
+                </div>
+
+                {/* Issued By */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    ISSUED BY (Officer Name)
+                  </label>
+                  <select
+                    name="enforcerId"
+                    value={formData.enforcerId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const selectedEnforcer = enforcers.find(e => e.enforcer_id === selectedId);
+                      setFormData({
+                        ...formData,
+                        enforcerId: selectedId,
+                        officer: selectedEnforcer ? selectedEnforcer.full_name : ''
+                      });
+                    }}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent"
+                  >
+                    <option value="">-- Select Officer/Enforcer --</option>
+                    {enforcers.map((enforcer) => (
+                      <option key={enforcer.enforcer_id} value={enforcer.enforcer_id}>
+                        {enforcer.full_name} ({enforcer.badge_number})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex flex-wrap gap-3 pt-6 border-t border-slate-200">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors font-medium text-sm"
+                  >
+                    {submitting ? 'Saving...' : '✓ SAVE CITATION'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearForm}
+                    className="px-6 py-2 bg-slate-400 text-white rounded-lg hover:bg-slate-500 transition-colors font-medium text-sm"
+                  >
+                    ↻ CLEAR FORM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                  >
+                    🖨️ PRINT
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Citations List Tab */}
+          {activeTab === 'list' && (
+            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              {loading ? (
+                <div className="P-8 text-center">
+                  <div className="inline-flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-slate-600 animate-spin"></div>
+                  </div>
+                  <p className="mt-2 text-slate-600">Loading citations...</p>
+                </div>
+              ) : citations.length === 0 ? (
+                <div className="p-8 text-center text-slate-600">
+                  No citations found. Create a new citation to get started.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-800 text-white">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">
+                          Ticket #
+                        </th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">
+                          Driver Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">
+                          Plate Number
+                        </th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">
+                          Fine Amount
+                        </th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">
+                          Payment Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">
+                          Date
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {citations.map((citation) => (
+                        <tr
+                          key={citation.citation_id}
+                          onClick={() => router.push(`/citations/${citation.citation_id}`)}
+                          className="hover:bg-slate-100 cursor-pointer transition-colors"
+                        >
+                          <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                            {citation.ticket_number}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600">
+                            {citation.driver_name}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600">
+                            {citation.plate_number}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                            ₱{formatCurrency(Number(citation.fine_amount) || 0)}
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                citation.payment_status === 'Paid'
+                                  ? 'bg-green-100 text-green-800'
+                                  : citation.payment_status === 'Pending'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {citation.payment_status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600">
+                            {new Date(citation.violation_date).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Report Tab */}
+          {activeTab === 'report' && (
+            <div className="space-y-6">
+              {/* Filters Section */}
+              <div className="bg-white rounded-lg border border-slate-200 p-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-4">Filters</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Payment Status
+                    </label>
+                    <select
+                      value={reportFilters.paymentStatus}
+                      onChange={(e) =>
+                        setReportFilters((prev) => ({
+                          ...prev,
+                          paymentStatus: e.target.value,
+                        }))
+                      }
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All</option>
+                      <option value="Paid">Paid</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Partial">Partial</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Violation Type
+                    </label>
+                    <select
+                      value={reportFilters.violations}
+                      onChange={(e) =>
+                        setReportFilters((prev) => ({
+                          ...prev,
+                          violations: e.target.value,
+                        }))
+                      }
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">All Violations</option>
+                      {VIOLATIONS.map((violation) => (
+                        <option key={violation} value={violation}>
+                          {violation}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Date From
+                    </label>
+                    <input
+                      type="date"
+                      value={reportFilters.dateFrom}
+                      onChange={(e) =>
+                        setReportFilters((prev) => ({
+                          ...prev,
+                          dateFrom: e.target.value,
+                        }))
+                      }
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Date To
+                    </label>
+                    <input
+                      type="date"
+                      value={reportFilters.dateTo}
+                      onChange={(e) =>
+                        setReportFilters((prev) => ({
+                          ...prev,
+                          dateTo: e.target.value,
+                        }))
+                      }
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex items-end gap-2">
+                    <button
+                      onClick={handleResetFilters}
+                      className="flex-1 px-4 py-2 bg-slate-400 text-white rounded-lg hover:bg-slate-500 transition-colors font-medium text-sm"
+                    >
+                      ↻ Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Citation Statistics */}
+              <div className="bg-white rounded-lg border border-slate-200 p-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-4">
+                  Citation Statistics
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <p className="text-sm text-slate-600 mb-1">Total Citations</p>
+                    <p className="text-2xl font-bold text-slate-800">
+                      {getFilteredCitations().length}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <p className="text-sm text-green-600 mb-1">Paid</p>
+                    <p className="text-2xl font-bold text-green-800">
+                      {getFilteredCitations().filter((c) => c.payment_status === 'Paid').length}
+                    </p>
+                  </div>
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                    <p className="text-sm text-yellow-600 mb-1">Pending</p>
+                    <p className="text-2xl font-bold text-yellow-800">
+                      {getFilteredCitations().filter((c) => c.payment_status === 'Pending').length}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-600 mb-1">Total Fines</p>
+                    <p className="text-2xl font-bold text-blue-800">
+                      ₱{formatCurrency(getFilteredCitations().reduce((sum, c) => sum + (Number(c.fine_amount) || 0), 0))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filtered Citations Table */}
+              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                <div className="bg-slate-50 p-4 border-b border-slate-200">
+                  <h3 className="font-semibold text-slate-800">
+                    Filtered Citations ({getFilteredCitations().length})
+                  </h3>
+                </div>
+                {getFilteredCitations().length === 0 ? (
+                  <div className="p-8 text-center text-slate-600">
+                    No citations match the selected filters.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-800 text-white">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Ticket #
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Driver Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Plate Number
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Fine Amount
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Payment Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Date
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {getFilteredCitations().map((citation) => (
+                          <tr
+                            key={citation.citation_id}
+                            onClick={() => router.push(`/citations/${citation.citation_id}`)}
+                            className="hover:bg-slate-100 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                              {citation.ticket_number}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {citation.driver_name}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {citation.plate_number}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                              ₱{formatCurrency(Number(citation.fine_amount) || 0)}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  citation.payment_status === 'Paid'
+                                    ? 'bg-green-100 text-green-800'
+                                    : citation.payment_status === 'Pending'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {citation.payment_status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {new Date(citation.violation_date).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* eTracs Verification Modal */}
+          {showEtracsModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto m-4">
+                <div className="sticky top-0 bg-slate-800 text-white p-6 flex justify-between items-center">
+                  <h2 className="text-xl font-bold">🔍 Driver Verification Results from eTracs</h2>
+                  <button
+                    onClick={() => {
+                      setShowEtracsModal(false);
+                      setEtracsResults([]);
+                      setEtracsExactMatch(null);
+                    }}
+                    className="text-white hover:bg-slate-700 rounded-full w-8 h-8 flex items-center justify-center"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {etracsExactMatch && (
+                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                      <h3 className="font-bold text-green-800 mb-2">✓ Exact Match Found!</h3>
+                      <div className="space-y-2 text-sm text-green-700">
+                        <p><strong>Name:</strong> {etracsExactMatch.name}</p>
+                        <p><strong>Entity No.:</strong> {etracsExactMatch.entityno}</p>
+                        <p><strong>Address:</strong> {etracsExactMatch.address?.text || 'N/A'}</p>
+                        {etracsExactMatch.firstname && (
+                          <>
+                            <p><strong>First Name:</strong> {etracsExactMatch.firstname}</p>
+                            <p><strong>Last Name:</strong> {etracsExactMatch.lastname}</p>
+                            {etracsExactMatch.birthdate && <p><strong>Birth Date:</strong> {etracsExactMatch.birthdate}</p>}
+                          </>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            driverAddress: etracsExactMatch.address?.text?.replace(/\n/g, ', ') || prev.driverAddress
+                          }));
+                          setShowEtracsModal(false);
+                        }}
+                        className="mt-3 w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                      >
+                        ✓ Use This Information
+                      </button>
+                    </div>
+                  )}
+
+                  {etracsResults.length > 0 ? (
+                    <>
+                      {!etracsExactMatch && (
+                        <p className="text-slate-600 text-sm">Multiple matches found. Click to select or use the information below:</p>
+                      )}
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {etracsResults.map((result, index) => (
+                          <div
+                            key={index}
+                            className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                              result.match_score === 100
+                                ? 'bg-green-50 border-green-200'
+                                : result.match_score >= 80
+                                ? 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            onClick={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                driverAddress: result.address?.text?.replace(/\n/g, ', ') || prev.driverAddress,
+                                driverName: result.name || prev.driverName
+                              }));
+                              setShowEtracsModal(false);
+                            }}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="font-semibold text-slate-800">{result.name}</p>
+                                <p className="text-xs text-slate-500">{result.entityno}</p>
+                              </div>
+                              <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                result.match_score === 100
+                                  ? 'bg-green-200 text-green-800'
+                                  : result.match_score >= 80
+                                  ? 'bg-blue-200 text-blue-800'
+                                  : 'bg-slate-200 text-slate-800'
+                              }`}>
+                                {result.match_score}% match
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-2">{result.address?.text || 'No address'}</p>
+                            {result.matched_fields && (
+                              <p className="text-xs text-slate-500">
+                                Matched: {result.matched_fields.join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-center text-slate-600 py-4">No results found</p>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setShowEtracsModal(false);
+                      setEtracsResults([]);
+                      setEtracsExactMatch(null);
+                    }}
+                    className="w-full px-4 py-2 bg-slate-300 text-slate-800 rounded-lg hover:bg-slate-400 font-medium"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Layout>
+    </ProtectedRoute>
+  );
+}

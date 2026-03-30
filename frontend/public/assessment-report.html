@@ -141,6 +141,42 @@
     font-family: Arial, sans-serif;
     font-size: 12px;
   }
+  
+  /* Jasper Report Button */
+  .jasper-report-btn {
+    padding: 8px 16px;
+    margin-left: 5px;
+    background-color: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  
+  .jasper-report-btn:hover:not(:disabled) {
+    background-color: #4f46e5;
+  }
+  
+  .jasper-report-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  
+  .jasper-error {
+    padding: 12px;
+    background-color: #fee;
+    border: 1px solid #fcc;
+    border-radius: 4px;
+    color: #c33;
+    margin: 10px 15px;
+    font-size: 13px;
+    display: none;
+  }
+  
+  .jasper-error.show {
+    display: block;
+  }
 
   @page {
     size: A4;
@@ -193,8 +229,9 @@
 <body>
 <div id="report-container">
   <div class="controls">
-    <button class="btn btn-print" id="printBtn" onclick="printReport()">Print Report</button>
-    <button class="btn" id="downloadBtn" onclick="downloadPDF()">Download PDF</button>
+    <button class="jasper-report-btn" id="jasperBtn" onclick="generateJasperReportPDF()">📊 Generate Assessment Report (PDF)</button>
+    <div id="jasperError" class="jasper-error"></div>
+    
     <button class="btn btn-edit" id="editBtn" onclick="toggleEditMode()" style="display:none;">Edit Report</button>
     <button class="btn btn-save" id="saveBtn" onclick="saveCustomization()" style="display:none;">Save Changes</button>
     <button class="btn btn-cancel" id="cancelBtn" onclick="toggleEditMode()" style="display:none;">Cancel</button>
@@ -714,6 +751,59 @@ function printReport() {
 function downloadPDF() {
   alert('To save as PDF, use the Print dialog and select "Save as PDF" as the destination.');
   window.print();
+}
+
+// Generate Jasper Report PDF
+async function generateJasperReportPDF() {
+  const jasperBtn = document.getElementById('jasperBtn');
+  const jasperError = document.getElementById('jasperError');
+  
+  try {
+    jasperBtn.disabled = true;
+    jasperBtn.innerHTML = '⏳ Generating report...';
+    jasperError.classList.remove('show');
+    
+    // Post to backend to generate report
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      },
+      body: JSON.stringify({
+        templateName: 'assessment',
+        format: 'pdf',
+        applicationId: applicationId
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to generate PDF report`);
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `assessment-report_${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    
+    // Show success
+    jasperBtn.innerHTML = '✅ Report generated!';
+    setTimeout(() => {
+      jasperBtn.innerHTML = '📊 Generate Assessment Report (PDF)';
+      jasperBtn.disabled = false;
+    }, 2000);
+  } catch (error) {
+    jasperError.textContent = `Error: ${error.message}`;
+    jasperError.classList.add('show');
+    setTimeout(() => jasperError.classList.remove('show'), 5000);
+    jasperBtn.innerHTML = '📊 Generate Assessment Report (PDF)';
+    jasperBtn.disabled = false;
+  }
 }
 
 function generateReportHTML(data, settings = {}, applicationData = {}) {

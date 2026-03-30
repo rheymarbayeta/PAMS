@@ -47,6 +47,10 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState('');
   const [status, setStatus] = useState('');
 
+  // Jasper report generation state
+  const [generatingFormat, setGeneratingFormat] = useState<string | null>(null);
+  const [jasperError, setJasperError] = useState<string | null>(null);
+
   // Fetch attributes for filter
   useEffect(() => {
     const fetchAttributes = async () => {
@@ -232,6 +236,64 @@ export default function ReportsPage() {
     window.URL.revokeObjectURL(url);
   };
 
+  // Generate Jasper Report
+  const handleGenerateJasperReport = async (format: 'pdf' | 'html' | 'csv' | 'xlsx') => {
+    if (reportData.length === 0) {
+      setJasperError('No data to export. Please apply filters or ensure data exists.');
+      setTimeout(() => setJasperError(null), 3000);
+      return;
+    }
+
+    try {
+      setGeneratingFormat(format);
+      setJasperError(null);
+
+      // Call the backend report generation endpoint
+      const response = await api.post('/reports/generate', {
+        templateName: 'applications',
+        format: format,
+        attributeId: selectedAttribute || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        statusFilter: status || undefined
+      }, {
+        responseType: 'blob' // Important: get response as blob for file download
+      });
+
+      // Create a blob URL and download
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Determine file extension and proper MIME type
+      let fileName = `report_${new Date().toISOString().split('T')[0]}`;
+      const responseHeaders = response.headers['content-disposition'];
+      
+      if (responseHeaders) {
+        const match = responseHeaders.match(/filename="?(.+?)"?$/);
+        if (match) fileName = match[1];
+      } else {
+        fileName += format === 'xlsx' ? '.xlsx' : `.${format}`;
+      }
+
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      console.log(`✅ Report generated successfully in ${format.toUpperCase()} format`);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to generate report';
+      setJasperError(`Error generating ${format.toUpperCase()} report: ${errorMsg}`);
+      console.error('Report generation error:', err);
+      setTimeout(() => setJasperError(null), 5000);
+    } finally {
+      setGeneratingFormat(null);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Pending':
@@ -358,6 +420,98 @@ export default function ReportsPage() {
                 ⬇ Export CSV
               </button>
             </div>
+          </div>
+
+          {/* Jasper Report Generation Section */}
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg shadow-md p-6 mb-6 border border-indigo-200">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <span>📄</span> Generate Professional Report (Jasper)
+            </h2>
+
+            {jasperError && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{jasperError}</span>
+              </div>
+            )}
+
+            <p className="text-gray-700 text-sm mb-4">
+              Generate and download reports in your preferred format with all current filters applied.
+            </p>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => handleGenerateJasperReport('html')}
+                disabled={generatingFormat !== null}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
+              >
+                {generatingFormat === 'html' ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <span>🌐</span> HTML Report
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleGenerateJasperReport('pdf')}
+                disabled={generatingFormat !== null}
+                className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
+              >
+                {generatingFormat === 'pdf' ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <span>📕</span> PDF Report
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleGenerateJasperReport('csv')}
+                disabled={generatingFormat !== null}
+                className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
+              >
+                {generatingFormat === 'csv' ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <span>📊</span> CSV Report
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleGenerateJasperReport('xlsx')}
+                disabled={generatingFormat !== null}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
+              >
+                {generatingFormat === 'xlsx' ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <span>📗</span> Excel Report
+                  </>
+                )}
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600 mt-4 italic">
+              💡 Tip: HTML reports can be viewed in your browser and printed to PDF. PDF reports can be printed directly.
+            </p>
           </div>
 
           {/* Summary Cards */}

@@ -29,7 +29,10 @@ const ID_PREFIXES = {
   ASSESSMENT_FEE: 'asfee',
   SETTING: 'setting',
   CUSTOMIZATION: 'custom',
-  TEMPLATE: 'tmpl'
+  TEMPLATE: 'tmpl',
+  CITATION: 'cite',
+  CITATION_PAYMENT: 'citepay',
+  ENFORCER: 'enf'
 };
 
 /**

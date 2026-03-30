@@ -1,4 +1,4 @@
-node_modules/
+clearnode_modules/
 frontend/node_modules/
 backend/nodes_modules/
 .next/

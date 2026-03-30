@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
+const etracsService = require('../utils/etracsService');
 
 const router = express.Router();
 
@@ -193,6 +194,152 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', '
   } catch (error) {
     console.error('Delete entity error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ==================== eTracs Integration Endpoints ====================
+
+// Search eTracs for entities
+router.get('/etracs/search', async (req, res) => {
+  try {
+    const { search = '', page = 1 } = req.query;
+
+    const etracsResult = await etracsService.searchEntities(search, page);
+
+    res.json({
+      source: 'eTracs',
+      search,
+      ...etracsResult
+    });
+  } catch (error) {
+    console.error('eTracs search error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to search eTracs',
+      source: 'eTracs'
+    });
+  }
+});
+
+// Check for duplicate individuals in eTracs
+router.get('/etracs/check-duplicate', async (req, res) => {
+  try {
+    const { firstname, lastname, middlename, birthdate } = req.query;
+
+    if (!firstname && !lastname && !middlename && !birthdate) {
+      return res.status(400).json({ 
+        error: 'At least one field (firstname, lastname, middlename, birthdate) is required'
+      });
+    }
+
+    const duplicates = await etracsService.checkDuplicateEntity({
+      firstname,
+      lastname,
+      middlename,
+      birthdate
+    });
+
+    res.json({
+      source: 'eTracs',
+      criteria: { firstname, lastname, middlename, birthdate },
+      results: duplicates,
+      exactMatch: duplicates.find(d => d.match_score === 100) || null
+    });
+  } catch (error) {
+    console.error('eTracs duplicate check error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to check duplicates in eTracs',
+      source: 'eTracs'
+    });
+  }
+});
+
+// Sync an eTracs entity to PAMS local database
+router.post('/etracs/sync', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
+  try {
+    const { etracs_objid, etracs_entityno } = req.body;
+
+    if (!etracs_objid) {
+      return res.status(400).json({ error: 'eTracs entity ID (objid) is required' });
+    }
+
+    // Get the entity from eTracs
+    const etracsEntity = await etracsService.getEntityWithIndividuals(etracs_objid);
+
+    // Check if already synced
+    const [existing] = await pool.execute(
+      'SELECT entity_id FROM entities WHERE etracs_objid = ?',
+      [etracs_objid]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({ 
+        error: 'Entity already synced',
+        entity_id: existing[0].entity_id
+      });
+    }
+
+    // Create local entity record
+    const entity_id = generateId(ID_PREFIXES.ENTITY);
+    const entity_name = etracsEntity.name || 'Unknown Entity';
+    
+    let contact_person = null;
+    if (etracsEntity.individual && etracsEntity.individual.firstname) {
+      contact_person = [
+        etracsEntity.individual.firstname,
+        etracsEntity.individual.middlename,
+        etracsEntity.individual.lastname
+      ].filter(Boolean).join(' ');
+    }
+
+    const address = etracsEntity.address_text || null;
+
+    await pool.execute(
+      `INSERT INTO entities 
+       (entity_id, entity_name, contact_person, email, phone, address, etracs_objid, etracs_entityno, synced_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [entity_id, entity_name, contact_person, null, null, address, etracs_objid, etracs_entityno || null]
+    );
+
+    await logAction(req.user.user_id, 'SYNC_ETRACS_ENTITY', `Synced eTracs entity ${etracs_objid} as ${entity_id}`);
+
+    res.status(201).json({
+      entity_id,
+      entity_name,
+      contact_person,
+      address,
+      etracs_objid,
+      etracs_entityno,
+      source: 'eTracs',
+      synced_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('eTracs sync error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to sync eTracs entity',
+      source: 'eTracs'
+    });
+  }
+});
+
+// Get eTracs entity details without syncing
+router.get('/etracs/:etracs_id', async (req, res) => {
+  try {
+    const { etracs_id } = req.params;
+
+    const entity = await etracsService.getEntityWithIndividuals(etracs_id);
+
+    res.json({
+      source: 'eTracs',
+      ...entity
+    });
+  } catch (error) {
+    console.error(`eTracs get entity ${etracs_id} error:`, error);
+    if (error.status === 404) {
+      return res.status(404).json({ error: 'Entity not found in eTracs' });
+    }
+    res.status(500).json({ 
+      error: error.message || 'Failed to fetch eTracs entity'
+    });
   }
 });
 

@@ -249,4 +249,206 @@ router.get('/filter-options/attributes', async (req, res) => {
   }
 });
 
+// Generate Jasper Report
+router.post('/generate', async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const roleName = req.user.role_name;
+    
+    const { 
+      templateName = 'applications',
+      format = 'pdf', 
+      attributeId,
+      startDate,
+      endDate,
+      statusFilter,
+      applicationId
+    } = req.body;
+
+    // Fetch report data based on filters
+    let query = `
+      SELECT 
+        a.application_id,
+        a.application_number,
+        a.entity_id,
+        a.permit_type_id,
+        COALESCE(pt.permit_type_name, a.permit_type) as permit_type_name,
+        a.status,
+        a.created_at,
+        e.entity_name,
+        COALESCE(ar.business_name, e.entity_name, 'Unknown') as business_name,
+        ar.owner_name,
+        COALESCE(ar.address, '') as address,
+        COALESCE(
+          ar.total_amount_due,
+          (SELECT COALESCE(SUM(arf.total), 0) FROM assessment_record_fees arf WHERE arf.assessment_id = ar.assessment_id),
+          0
+        ) as total_amount_due,
+        COALESCE(ar.total_balance_due, 0) as total_balance_due,
+        COALESCE(attr.attribute_name, pt.attribute, 'N/A') as attribute_name
+      FROM applications a
+      LEFT JOIN entities e ON a.entity_id = e.entity_id
+      LEFT JOIN assessment_records ar ON a.application_id = ar.application_id
+      LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id
+      LEFT JOIN attributes attr ON pt.attribute_id = attr.attribute_id
+      WHERE 1=1
+    `;
+
+    const params = [];
+
+    // If specific application requested
+    if (applicationId) {
+      query += ' AND a.application_id = ?';
+      params.push(applicationId);
+    } else {
+      // Role-based filtering
+      if (roleName === 'Application Creator') {
+        query += ' AND a.creator_id = ?';
+        params.push(userId);
+      } else if (roleName === 'Assessor') {
+        query += ' AND (a.assessor_id = ? OR a.status = ?)';
+        params.push(userId, 'Pending');
+      } else if (roleName === 'Approver') {
+        query += ' AND (a.approver_id = ? OR a.status = ?)';
+        params.push(userId, 'Pending Approval');
+      }
+      // SuperAdmin, Admin, Viewer can see all
+
+      // Filter by Attribute
+      if (attributeId) {
+        query += ' AND pt.attribute_id = ?';
+        params.push(attributeId);
+      }
+
+      // Filter by Status
+      if (statusFilter) {
+        query += ' AND a.status = ?';
+        params.push(statusFilter);
+      }
+
+      // Date range filter
+      if (startDate) {
+        query += ' AND a.created_at >= ?';
+        params.push(startDate);
+      }
+
+      if (endDate) {
+        const endDateWithTime = new Date(endDate);
+        endDateWithTime.setHours(23, 59, 59, 999);
+        query += ' AND a.created_at <= ?';
+        params.push(endDateWithTime.toISOString().slice(0, 19).replace('T', ' '));
+      }
+    }
+
+    query += ' ORDER BY a.created_at DESC';
+
+    const [reportData] = await pool.execute(query, params);
+
+    if (reportData.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'No data found for the specified filters' 
+      });
+    }
+
+    // Build Jasper request payload
+    const jasperPayload = {
+      template: `${templateName}.jrxml`,
+      format: format,
+      data: {
+        records: reportData,
+        generatedAt: new Date().toISOString(),
+        generatedBy: req.user.full_name || 'System',
+        totalRecords: reportData.length,
+        totalAmount: reportData.reduce((sum, record) => sum + (record.total_amount_due || 0), 0)
+      }
+    };
+
+    // Call Jasper PHP service with retry logic
+    let jasperResponse;
+    let retries = 5;
+    let lastError;
+
+    while (retries > 0) {
+      try {
+        console.log(`[Report] Attempting to connect to Jasper service (${6 - retries}/5)...`);
+        
+        // Use AbortController for proper timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        
+        try {
+          // NOTE: Inside Docker network, Jasper runs on port 80, not 9000
+          // Port 9000 is only the external mapping from docker-compose ports
+          jasperResponse = await fetch('http://jasper-service:80/api/generate-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(jasperPayload),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          console.log(`[Report] Jasper service responded with status: ${jasperResponse.status}`);
+          break; // Success, exit retry loop
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+      } catch (error) {
+        lastError = error;
+        retries--;
+        console.error(`[Report] Jasper connection attempt failed:`, error.message);
+        
+        if (retries > 0) {
+          console.log(`[Report] Retrying in 2 seconds... (${retries} attempts left)`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+        }
+      }
+    }
+
+    if (!jasperResponse) {
+      console.error('[Report] Jasper service final error after retries:', lastError);
+      return res.status(503).json({ 
+        success: false,
+        error: 'Jasper service is unavailable. Please ensure the service is running and try again.'
+      });
+    }
+
+    if (!jasperResponse.ok) {
+      const error = await jasperResponse.json();
+      console.error('Jasper service error:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: `Report generation failed: ${error.error || 'Unknown error'}` 
+      });
+    }
+
+    const jasperResult = await jasperResponse.json();
+
+    if (!jasperResult.success) {
+      return res.status(500).json({ 
+        success: false,
+        error: jasperResult.error 
+      });
+    }
+
+    // Return report with appropriate headers
+    const mimeType = jasperResult.contentType || 'application/octet-stream';
+    const filename = `${templateName}_${new Date().toISOString().split('T')[0]}.${format}`;
+
+    // Decode base64 content
+    const buffer = Buffer.from(jasperResult.data, 'base64');
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+
+  } catch (error) {
+    console.error('Generate report error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
+
 module.exports = router;

@@ -74,6 +74,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: '/dashboard', label: 'Dashboard', show: true },
     { href: '/applications/new', label: 'New Application', show: canAccess(['SuperAdmin', 'Admin', 'Application Creator']) },
     { href: '/applications', label: 'Applications', show: true },
+    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) },
     { href: '/admin/entities', label: 'Entities', show: true },
     { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) },
   ];
@@ -81,6 +82,7 @@ export default function Layout({ children }: LayoutProps) {
   const adminLinks = [
     { href: '/reports', label: 'Reports' },
     { href: '/admin/users', label: 'Users' },
+    { href: '/admin/enforcers', label: 'Enforcers' },
     { href: '/admin/fees', label: 'Fees' },
     { href: '/admin/settings', label: 'Settings' },
     { href: '/admin/permit-types', label: 'Permit Types' },

@@ -52,10 +52,33 @@ services:
     networks:
       - pams-network
 
+  # Jasper Reports PHP Service
+  jasper-service:
+    build:
+      context: ./jasper-service
+      dockerfile: Dockerfile
+    container_name: pams-jasper
+    restart: unless-stopped
+    environment:
+      DB_HOST: 192.168.11.26
+      DB_PORT: 3310
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-dalaguete1000}
+      DB_NAME: ${DB_NAME:-pams_db}
+    ports:
+      - "9000:80"
+    volumes:
+      - ./jasper-service/reports:/var/www/html/reports:ro
+      - jasper_output:/var/www/html/output
+    networks:
+      - pams-network
+
 networks:
   pams-network:
     driver: bridge
 
 volumes:
   backend_uploads:
+    driver: local
+  jasper_output:
     driver: local

@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, orientation=landscape">
+    <title>Citation Ticket - Municipality of Dalaguete</title>
+    <style>
+        @page {
+            size: landscape;
+            margin: 3in;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #6c3fb8 0%, #8e44ad 50%, #27ae60 100%);
+            min-height: 100vh;
+            min-width: 100vw;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 10px;
+            margin: 0;
+            overflow-x: auto;
+        }
+
+        .container {
+            background: white;
+            border-radius: 0;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            height: auto;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 4px solid #8e44ad;
+            padding-bottom: 12px;
+            background: linear-gradient(to right, #f8f6ff, white, #f6fff8);
+            margin: -20px -20px 15px -20px;
+            padding: 15px 20px;
+            position: relative;
+        }
+
+        .header::before {
+            content: '';
+            background-image: url('https://via.placeholder.com/80x80?text=Municipality+Logo');
+            background-size: contain;
+            background-repeat: no-repeat;
+            width: 80px;
+            height: 80px;
+            display: block;
+        }
+
+        .header::after {
+            content: '';
+            background-image: url('https://via.placeholder.com/80x80?text=Laban+Pilipinas');
+            background-size: contain;
+            background-repeat: no-repeat;
+            width: 80px;
+            height: 80px;
+            display: block;
+        }
+
+        .header h1 {
+            color: #6c3fb8;
+            font-size: 28px;
+            margin-bottom: 3px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, #6c3fb8, #27ae60);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #555;
+            font-size: 12px;
+            margin: 3px 0;
+            font-weight: 500;
+        }
+
+        .header p strong {
+            background: linear-gradient(135deg, #8e44ad, #27ae60);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 16px;
+        }
+
+        .ticket-number {
+            background: linear-gradient(135deg, #f8f6ff 0%, #f6fff8 100%);
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            text-align: center;
+            border-left: 4px solid #8e44ad;
+            box-shadow: 0 4px 15px rgba(142, 68, 173, 0.1);
+        }
+
+        .ticket-number label {
+            font-weight: 700;
+            color: #6c3fb8;
+            font-size: 12px;
+        }
+
+        .ticket-number input {
+            background: white;
+            border: 2px solid #8e44ad;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-left: 8px;
+            width: 180px;
+            font-weight: 600;
+            color: #6c3fb8;
+            transition: all 0.3s;
+        }
+
+        .ticket-number input:focus {
+            border-color: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1);
+        }
+
+        .form-section {
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            background: linear-gradient(135deg, #6c3fb8 0%, #8e44ad 50%, #27ae60 100%);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            margin-top: 15px;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(142, 68, 173, 0.25);
+            text-transform: uppercase;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .form-grid.full {
+            grid-template-columns: 1fr;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 700;
+            color: #6c3fb8;
+            margin-bottom: 5px;
+            font-size: 12px;
+            letter-spacing: 0.3px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            border: 2px solid #ddd;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #8e44ad;
+            box-shadow: 0 0 0 4px rgba(142, 68, 173, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 50px;
+        }
+
+        .violations-container {
+            background: linear-gradient(to bottom, #f8f6ff, #f6fff8);
+            padding: 12px;
+            border-radius: 4px;
+            border-left: 4px solid #8e44ad;
+            box-shadow: 0 4px 15px rgba(142, 68, 173, 0.1);
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+        .violation-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 2px;
+        }
+
+        .violation-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .violation-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+            cursor: pointer;
+            accent-color: #8e44ad;
+        }
+
+        .violation-item label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: 500;
+            color: #2c3e50;
+            font-size: 11px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #8e44ad 0%, #6c3fb8 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(142, 68, 173, 0.4);
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(142, 68, 173, 0.5);
+        }
+
+        .btn-print {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);
+        }
+
+        .btn-print:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(39, 174, 96, 0.5);
+        }
+
+        .btn-report {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .btn-report:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(52, 152, 219, 0.5);
+        }
+
+        .btn-reset {
+            background: #c0392b;
+            color: white;
+            box-shadow: 0 4px 15px rgba(192, 57, 43, 0.3);
+        }
+
+        .btn-reset:hover {
+            background: #a93226;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(192, 57, 43, 0.4);
+        }
+
+        .success-message {
+            display: none;
+            background: #d4edda;
+            border: 2px solid #27ae60;
+            color: #155724;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 12px;
+            box-shadow: 0 2px 8px rgba(39, 174, 96, 0.15);
+        }
+
+        @media print {
+            body {
+                background: white;
+                margin: 0;
+                padding: 0;
+            }
+            .button-group {
+                display: none;
+            }
+            .container {
+                box-shadow: none;
+                padding: 10px;
+                max-width: 100%;
+                width: 100%;
+                min-height: auto;
+            }
+            .header {
+                margin: -10px -10px 12px -10px;
+                padding: 10px;
+            }
+            .modal {
+                position: static;
+                display: block;
+                width: 100%;
+                height: auto;
+                background: white;
+                z-index: auto;
+            }
+            .modal-content {
+                width: 100%;
+                margin: 0;
+                max-width: 100%;
+                max-height: none;
+                padding: 0;
+                box-shadow: none;
+            }
+            .close-btn {
+                display: none;
+            }
+            .report-actions {
+                display: none;
+            }
+            .form-grid {
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+            }
+            .violations-container {
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+            }
+            .signatures-container {
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+            }
+        }
+
+        .signature-box {
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background: #fafafa;
+            min-height: 50px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: flex-start;
+        }
+
+        .signature-line {
+            border-bottom: 2px solid #333;
+            width: 100%;
+            margin-top: 8px;
+        }
+
+        .signature-label {
+            font-size: 10px;
+            color: #666;
+            text-align: center;
+            margin-top: 3px;
+            font-weight: 500;
+        }
+
+        .signatures-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .signature-item {
+            text-align: center;
+        }
+
+        .stamp-area {
+            border: 2px dashed #8e44ad;
+            border-radius: 4px;
+            padding: 12px;
+            text-align: center;
+            color: #6c3fb8;
+            font-weight: bold;
+            min-height: 50px;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, transparent, rgba(142, 68, 173, 0.05));
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            overflow: auto;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 95%;
+            max-width: 1200px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-btn:hover {
+            color: #000;
+        }
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #8e44ad;
+            padding-bottom: 15px;
+        }
+
+        .report-header h2 {
+            color: #6c3fb8;
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .report-header p {
+            color: #666;
+            margin: 3px 0;
+            font-size: 12px;
+        }
+
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+
+        .report-table th {
+            background: linear-gradient(135deg, #6c3fb8 0%, #8e44ad 50%, #27ae60 100%);
+            color: white;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 11px;
+        }
+
+        .report-table td {
+            border-bottom: 1px solid #ddd;
+            padding: 8px 10px;
+            color: #333;
+            font-size: 11px;
+        }
+
+        .report-table tr:hover {
+            background-color: #f8f6ff;
+        }
+
+        .report-table tbody tr:nth-child(even) {
+            background-color: #f6fff8;
+        }
+
+        .violation-badge {
+            background: #e8f5e9;
+            color: #27ae60;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            display: inline-block;
+            margin: 1px;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 10px;
+        }
+
+        .status-paid {
+            background: #d4edda;
+            color: #155724;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 10px;
+        }
+
+        .status-installment {
+            background: #e7d4f5;
+            color: #6c3fb8;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 10px;
+        }
+
+        .report-summary {
+            background: linear-gradient(135deg, #f8f6ff, #f6fff8);
+            border-left: 5px solid #8e44ad;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+        }
+
+        .summary-card {
+            text-align: center;
+            padding: 10px;
+        }
+
+        .summary-card h4 {
+            color: #6c3fb8;
+            margin: 0 0 6px 0;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .summary-card .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #8e44ad;
+        }
+
+        .summary-card .currency {
+            font-size: 14px;
+            color: #27ae60;
+            font-weight: 600;
+        }
+
+        .report-actions {
+            margin-top: 15px;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-export {
+            background: #27ae60;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .btn-export:hover {
+            background: #229954;
+            transform: translateY(-2px);
+        }
+
+        .btn-close-report {
+            background: #c0392b;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .btn-close-report:hover {
+            background: #a93226;
+            transform: translateY(-2px);
+        }
+
+        .divider {
+            border-top: 2px solid #e0e0e0;
+            margin: 12px 0;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #f8f6ff, #f6fff8);
+            border-left: 4px solid #8e44ad;
+            padding: 10px;
+            border-radius: 3px;
+            margin-bottom: 10px;
+        }
+
+        .info-box p {
+            margin: 0;
+            color: #6c3fb8;
+            font-size: 11px;
+        }
+
+        @media (orientation: landscape) {
+            body {
+                padding: 5px;
+            }
+            
+            .container {
+                width: 100%;
+                padding: 15px;
+            }
+            
+            .header {
+                margin: -15px -15px 12px -15px;
+                padding: 12px 15px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+                gap: 10px;
+            }
+            
+            .violations-container {
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+                gap: 6px;
+                padding: 10px;
+            }
+            
+            .violation-item {
+                margin-bottom: 0px;
+            }
+            
+            .signatures-container {
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+                gap: 10px;
+            }
+            
+            .signature-item label {
+                font-size: 10px;
+            }
+            
+            .report-table th,
+            .report-table td {
+                padding: 6px 8px;
+                font-size: 11px;
+            }
+            
+            .button-group {
+                gap: 6px;
+            }
+            
+            button {
+                padding: 8px 15px;
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            .violations-container {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            .signatures-container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            .container {
+                padding: 20px;
+            }
+            .header h1 {
+                font-size: 20px;
+            }
+            .button-group {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>� OFFICIAL CITATION TICKET</h1>
+            <p><strong>Municipality of Dalaguete</strong></p>
+            <p>Dalaguete, Cebu, Philippines</p>
+        </div>
+
+        <div id="successMessage" class="success-message">
+            Citation ticket saved successfully!
+        </div>
+
+        <form id="citationForm">
+            <!-- Ticket Information -->
+            <div class="ticket-number">
+                <label for="ticketNo">TICKET NUMBER:</label>
+                <input type="text" id="ticketNo" name="ticketNo" placeholder="Auto-generated" readonly>
+            </div>
+
+            <!-- Driver Information Section -->
+            <div class="section-title">DRIVER INFORMATION</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="driverName">NAME OF DRIVER *</label>
+                    <input type="text" id="driverName" name="driverName" required>
+                </div>
+                <div class="form-group">
+                    <label for="driverAddress">ADDRESS *</label>
+                    <input type="text" id="driverAddress" name="driverAddress" required>
+                </div>
+            </div>
+
+            <div class="form-group full">
+                <label for="licenseNo">DRIVER'S LICENSE NO.</label>
+                <input type="text" id="licenseNo" name="licenseNo">
+            </div>
+
+            <!-- Vehicle Information Section -->
+            <div class="section-title">VEHICLE INFORMATION</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="vehicleType">TYPE OF VEHICLE *</label>
+                    <select id="vehicleType" name="vehicleType" required>
+                        <option value="">-- Select Vehicle Type --</option>
+                        <option value="Tricycle">Tricycle</option>
+                        <option value="Taxi">Taxi</option>
+                        <option value="Bus">Bus</option>
+                        <option value="Motorcycle">Motorcycle</option>
+                        <option value="Private Car">Private Car</option>
+                        <option value="Jeepney">Jeepney</option>
+                        <option value="Others">Others</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="plateNo">VEHICLE PLATE NO. *</label>
+                    <input type="text" id="plateNo" name="plateNo" required>
+                </div>
+            </div>
+
+            <!-- Registered Owner Information Section -->
+            <div class="section-title">REGISTERED OWNER INFORMATION</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="ownerName">REGISTERED OWNER *</label>
+                    <input type="text" id="ownerName" name="ownerName" required>
+                </div>
+                <div class="form-group">
+                    <label for="ownerAddress">ADDRESS *</label>
+                    <input type="text" id="ownerAddress" name="ownerAddress" required>
+                </div>
+            </div>
+
+            <!-- Violations Section -->
+            <div class="section-title">VIOLATIONS</div>
+            <div class="violations-container">
+                <div class="violation-item">
+                    <input type="checkbox" id="violation1" name="violations" value="No Driver's License">
+                    <label for="violation1">NO DRIVER'S LICENSE</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation2" name="violations" value="Over Pricing (Allowable Fare Rates)">
+                    <label for="violation2">OVER PRICING (ALLOWABLE FARE RATES)</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation3" name="violations" value="Not in Proper Clothes/Personal Hygiene">
+                    <label for="violation3">NOT IN PROPER CLOTHES/PERSONAL HYGIENE</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation4" name="violations" value="Under the Influence of Liquor or Drugs">
+                    <label for="violation4">UNDER THE INFLUENCE OF LIQUOR OR DRUGS</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation5" name="violations" value="Smoking while Driving">
+                    <label for="violation5">SMOKING WHILE DRIVING</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation6" name="violations" value="Use of Cellular Phone or Other Gadgets">
+                    <label for="violation6">USE OF CELLULAR PHONE OR OTHER GADGETS</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation7" name="violations" value="Failure to Convey Passenger">
+                    <label for="violation7">FAILURE TO CONVEY PASSENGER</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation8" name="violations" value="Disregarding Traffic Signs, Signals & Markings">
+                    <label for="violation8">DISREGARDING TRAFFIC SIGNS, SIGNALS & MARKINGS</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation9" name="violations" value="Over Speeding">
+                    <label for="violation9">OVER SPEEDING</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation10" name="violations" value="Drag Racing">
+                    <label for="violation10">DRAG RACING</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation11" name="violations" value="Counter Flow">
+                    <label for="violation11">COUNTER FLOW</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation12" name="violations" value="No Protective Helmet">
+                    <label for="violation12">NO PROTECTIVE HELMET</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation13" name="violations" value="Arrogant Driver">
+                    <label for="violation13">ARROGANT DRIVER</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation14" name="violations" value="No Registration">
+                    <label for="violation14">NO REGISTRATION</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation15" name="violations" value="Out of Route/Line">
+                    <label for="violation15">OUT OF ROUTE/LINE</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation16" name="violations" value="Entering National Highway">
+                    <label for="violation16">ENTERING NATIONAL HIGHWAY</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation17" name="violations" value="No Reflector, Side Mirror and Horn or Bell">
+                    <label for="violation17">NO REFLECTOR, SIDE MIRROR AND HORN OR BELL</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation18" name="violations" value="Obstruction to Traffic">
+                    <label for="violation18">OBSTRUCTION TO TRAFFIC</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation19" name="violations" value="Overloading">
+                    <label for="violation19">OVERLOADING</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation20" name="violations" value="Illegal Parking/Loading/Unloading">
+                    <label for="violation20">ILLEGAL PARKING/LOADING/UNLOADING</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation21" name="violations" value="Cutting Trip/Not Following Route">
+                    <label for="violation21">CUTTING TRIP/NOT FOLLOWING ROUTE</label>
+                </div>
+                <div class="violation-item">
+                    <input type="checkbox" id="violation22" name="violations" value="Others">
+                    <label for="violation22">OTHERS (SPECIFY): 
+                        <input type="text" id="othersSpecify" name="othersSpecify" placeholder="Please specify" style="width: 150px; margin-left: 8px; padding: 4px 8px; font-size: 12px;">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Remarks Section -->
+            <div class="form-section">
+                <div class="section-title">REMARKS</div>
+                <div class="form-group">
+                    <label for="remarks">ADDITIONAL REMARKS</label>
+                    <textarea id="remarks" name="remarks" placeholder="Enter any additional details or remarks..."></textarea>
+                </div>
+            </div>
+
+            <!-- Date Section -->
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="dateIssued">DATE ISSUED *</label>
+                    <input type="date" id="dateIssued" name="dateIssued" required>
+                </div>
+                <div class="form-group">
+                    <label for="officer">ISSUED BY (Officer Name)</label>
+                    <input type="text" id="officer" name="officer">
+                </div>
+            </div>
+
+            <!-- Violation Location & Time Section -->
+            <div class="section-title">VIOLATION DETAILS</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="placeViolation">PLACE OF VIOLATION *</label>
+                    <input type="text" id="placeViolation" name="placeViolation" placeholder="e.g., Main Street, Market Area" required>
+                </div>
+                <div class="form-group">
+                    <label for="dateTimeViolation">DATE & TIME OF VIOLATION *</label>
+                    <input type="datetime-local" id="dateTimeViolation" name="dateTimeViolation" required>
+                </div>
+            </div>
+
+            <!-- Fine/Amount Section -->
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="fineAmount">FINE AMOUNT (₱) *</label>
+                    <input type="number" id="fineAmount" name="fineAmount" placeholder="0.00" min="0" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="paymentStatus">PAYMENT STATUS *</label>
+                    <select id="paymentStatus" name="paymentStatus" required>
+                        <option value="">-- Select Status --</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Installment">Installment</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Signature & Authority Section -->
+            <div class="divider"></div>
+            <div class="section-title">SIGNATURES & AUTHORIZATION</div>
+            
+            <div class="signatures-container">
+                <div class="signature-item">
+                    <label style="display: block; margin-bottom: 15px; font-weight: 600; color: #333;">DRIVER'S SIGNATURE</label>
+                    <div class="signature-box">
+                        <input type="text" id="driverSig" name="driverSig" placeholder="Sign or print name here" style="border: none; background: transparent; font-family: 'Brush Script MT', cursive; font-size: 18px; width: 100%;">
+                    </div>
+                    <div class="signature-line"></div>
+                    <div class="signature-label">Driver / Operator Signature</div>
+                </div>
+
+                <div class="signature-item">
+                    <label style="display: block; margin-bottom: 15px; font-weight: 600; color: #333;">TRAFFIC OFFICER ON CASE</label>
+                    <div class="signature-box">
+                        <input type="text" id="trafficOfficerSig" name="trafficOfficerSig" placeholder="Sign or print name here" style="border: none; background: transparent; font-family: 'Brush Script MT', cursive; font-size: 18px; width: 100%;">
+                    </div>
+                    <div class="signature-line"></div>
+                    <div class="signature-label">Traffic Officer Signature</div>
+                </div>
+            </div>
+
+            <div class="signatures-container" style="margin-top: 30px;">
+                <div class="signature-item">
+                    <label style="display: block; margin-bottom: 15px; font-weight: 600; color: #333;">CHAIRMAN / DATCOM APPROVAL</label>
+                    <div class="signature-box">
+                        <input type="text" id="chairmanSig" name="chairmanSig" placeholder="Sign or print name here" style="border: none; background: transparent; font-family: 'Brush Script MT', cursive; font-size: 18px; width: 100%;">
+                    </div>
+                    <div class="signature-line"></div>
+                    <div class="signature-label">Chairman / DATCOM Signature</div>
+                </div>
+
+                <div class="signature-item">
+                    <label style="display: block; margin-bottom: 15px; font-weight: 600; color: #333;">OFFICIAL STAMP / SEAL</label>
+                    <div class="stamp-area">
+                        📌 OFFICIAL STAMP HERE
+                    </div>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="button-group">
+                <button type="submit" class="btn-submit">✓ SAVE CITATION</button>
+                <button type="button" class="btn-print" onclick="printTicket()">🖨️ PRINT TICKET</button>
+                <button type="button" class="btn-report" onclick="showReport()">📊 VIEW REPORT</button>
+                <button type="button" class="btn-report" onclick="showCompletedReport()">📋 COMPLETED REPORT</button>
+                <button type="reset" class="btn-reset">↻ CLEAR FORM</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="reportModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeReport()">&times;</span>
+            <div class="report-header">
+                <h2>📊 CITATIONS REPORT</h2>
+                <p><strong>Municipality of Dalaguete</strong> - Dalaguete, Cebu</p>
+                <p id="reportDate"></p>
+            </div>
+            <div id="reportTableContainer"></div>
+            <div class="report-actions">
+                <button class="btn-export" onclick="exportToCSV()">📥 EXPORT TO CSV</button>
+                <button class="btn-export" onclick="window.print()">🖨️ PRINT REPORT</button>
+                <button class="btn-close-report" onclick="closeReport()">✕ CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Generate random ticket number
+        function generateTicketNumber() {
+            const prefix = 'DG-' + new Date().getFullYear();
+            const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+            return prefix + '-' + random;
+        }
+
+        // Initialize ticket number on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('ticketNo').value = generateTicketNumber();
+            
+            // Set today's date as default
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateIssued').value = today;
+        });
+
+        // Handle form submission
+        document.getElementById('citationForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Validate violations
+            const violations = document.querySelectorAll('input[name="violations"]:checked');
+            if (violations.length === 0) {
+                alert('Please select at least one violation.');
+                return;
+            }
+
+            // Check if "Others" is selected and has a specification
+            const othersCheckbox = document.getElementById('violation22');
+            const othersSpecify = document.getElementById('othersSpecify');
+            if (othersCheckbox.checked && !othersSpecify.value.trim()) {
+                alert('Please specify the other violation.');
+                return;
+            }
+
+            // Collect violations
+            let violationsList = Array.from(violations).map(v => v.value);
+            
+            // If Others is selected, append the specification
+            if (othersCheckbox.checked && othersSpecify.value.trim()) {
+                violationsList = violationsList.map(v => v === 'Others' ? 'Others: ' + othersSpecify.value.trim() : v);
+            }
+
+            // Collect form data
+            const formData = {
+                ticketNumber: document.getElementById('ticketNo').value,
+                driverName: document.getElementById('driverName').value,
+                driverAddress: document.getElementById('driverAddress').value,
+                licenseNo: document.getElementById('licenseNo').value,
+                vehicleType: document.getElementById('vehicleType').value,
+                plateNo: document.getElementById('plateNo').value,
+                ownerName: document.getElementById('ownerName').value,
+                ownerAddress: document.getElementById('ownerAddress').value,
+                violations: violationsList,
+                remarks: document.getElementById('remarks').value,
+                dateIssued: document.getElementById('dateIssued').value,
+                officer: document.getElementById('officer').value,
+                placeViolation: document.getElementById('placeViolation').value,
+                dateTimeViolation: document.getElementById('dateTimeViolation').value,
+                fineAmount: parseFloat(document.getElementById('fineAmount').value),
+                paymentStatus: document.getElementById('paymentStatus').value,
+                completed: true, // Automatically mark as completed when saved
+                driverSignature: document.getElementById('driverSig').value,
+                trafficOfficerSignature: document.getElementById('trafficOfficerSig').value,
+                chairmanSignature: document.getElementById('chairmanSig').value,
+                savedAt: new Date().toLocaleString()
+            };
+
+            // Save to localStorage
+            let citations = JSON.parse(localStorage.getItem('citations')) || [];
+            citations.push(formData);
+            localStorage.setItem('citations', JSON.stringify(citations));
+
+            // If marked as completed, also save to completed citations
+            if (formData.completed) {
+                let completedCitations = JSON.parse(localStorage.getItem('completedCitations')) || [];
+                completedCitations.push(formData);
+                localStorage.setItem('completedCitations', JSON.stringify(completedCitations));
+            }
+
+            // Show success message
+            const successMsg = document.getElementById('successMessage');
+            successMsg.style.display = 'block';
+            setTimeout(() => {
+                successMsg.style.display = 'none';
+            }, 3000);
+
+            console.log('Citation saved:', formData);
+        });
+
+        // Print function
+        function printTicket() {
+            window.print();
+        }
+
+        // Generate new ticket on button click (optional feature)
+        function newTicket() {
+            if (confirm('Generate a new ticket? Current data will be cleared.')) {
+                document.getElementById('citationForm').reset();
+                document.getElementById('ticketNo').value = generateTicketNumber();
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('dateIssued').value = today;
+            }
+        }
+
+        // Show Report Function
+        function showReport() {
+            const citations = JSON.parse(localStorage.getItem('citations')) || [];
+            
+            if (citations.length === 0) {
+                alert('No citations saved yet.');
+                return;
+            }
+
+            // Set report date
+            document.getElementById('reportDate').textContent = 'Report Generated: ' + new Date().toLocaleString();
+
+            // Generate table HTML
+            let tableHTML = '<table class="report-table"><thead><tr>';
+            tableHTML += '<th>Ticket #</th>';
+            tableHTML += '<th>Driver Name</th>';
+            tableHTML += '<th>Vehicle</th>';
+            tableHTML += '<th>Violations</th>';
+            tableHTML += '<th>Fine Amount</th>';
+            tableHTML += '<th>Status</th>';
+            tableHTML += '<th>Completed</th>';
+            tableHTML += '<th>Date</th>';
+            tableHTML += '</tr></thead><tbody>';
+
+            let totalFine = 0;
+            let pendingCount = 0;
+            let paidCount = 0;
+            let installmentCount = 0;
+            let completedCount = 0;
+
+            citations.forEach(citation => {
+                const violationsHTML = citation.violations
+                    .map(v => `<span class="violation-badge">${v.split(':')[0]}</span>`)
+                    .join('');
+
+                const statusClass = 'status-' + citation.paymentStatus.toLowerCase();
+                const fineAmount = citation.fineAmount || 0;
+                totalFine += fineAmount;
+
+                if (citation.paymentStatus === 'Pending') pendingCount++;
+                if (citation.paymentStatus === 'Paid') paidCount++;
+                if (citation.paymentStatus === 'Installment') installmentCount++;
+                if (citation.completed) completedCount++;
+
+                tableHTML += '<tr>';
+                tableHTML += `<td>${citation.ticketNumber}</td>`;
+                tableHTML += `<td>${citation.driverName}</td>`;
+                tableHTML += `<td>${citation.vehicleType} (${citation.plateNo})</td>`;
+                tableHTML += `<td>${violationsHTML}</td>`;
+                tableHTML += `<td><strong>₱${fineAmount.toFixed(2)}</strong></td>`;
+                tableHTML += `<td><span class="${statusClass}">${citation.paymentStatus}</span></td>`;
+                tableHTML += `<td>${citation.completed ? 'Yes' : 'No'}</td>`;
+                tableHTML += `<td>${citation.dateIssued}</td>`;
+                tableHTML += '</tr>';
+            });
+
+            tableHTML += '</tbody></table>';
+
+            // Add summary
+            tableHTML += `
+                <div class="report-summary">
+                    <div class="summary-card">
+                        <h4>Total Citations</h4>
+                        <div class="value">${citations.length}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Total Fine Amount</h4>
+                        <div class="currency">₱${totalFine.toFixed(2)}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Pending Payment</h4>
+                        <div class="value">${pendingCount}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Paid</h4>
+                        <div class="value">${paidCount}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Installment</h4>
+                        <div class="value">${installmentCount}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Completed</h4>
+                        <div class="value">${completedCount}</div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('reportTableContainer').innerHTML = tableHTML;
+            document.getElementById('reportModal').style.display = 'block';
+        }
+
+        // Show Completed Report Function
+        function showCompletedReport() {
+            const citations = JSON.parse(localStorage.getItem('completedCitations')) || [];
+            
+            if (citations.length === 0) {
+                alert('No completed citations saved yet.');
+                return;
+            }
+
+            // Set report date
+            document.getElementById('reportDate').textContent = 'Completed Citations Report - ' + new Date().toLocaleString();
+
+            // Generate table HTML
+            let tableHTML = '<table class="report-table"><thead><tr>';
+            tableHTML += '<th>Ticket #</th>';
+            tableHTML += '<th>Driver Name</th>';
+            tableHTML += '<th>Vehicle</th>';
+            tableHTML += '<th>Violations</th>';
+            tableHTML += '<th>Fine Amount</th>';
+            tableHTML += '<th>Status</th>';
+            tableHTML += '<th>Date</th>';
+            tableHTML += '</tr></thead><tbody>';
+
+            let totalFine = 0;
+            let pendingCount = 0;
+            let paidCount = 0;
+            let installmentCount = 0;
+
+            citations.forEach(citation => {
+                const violationsHTML = (citation.violations || [])
+                    .map(v => `<span class="violation-badge">${v.split(':')[0]}</span>`)
+                    .join('');
+
+                const statusClass = 'status-' + citation.paymentStatus.toLowerCase();
+                const fineAmount = citation.fineAmount || 0;
+                totalFine += fineAmount;
+
+                if (citation.paymentStatus === 'Pending') pendingCount++;
+                if (citation.paymentStatus === 'Paid') paidCount++;
+                if (citation.paymentStatus === 'Installment') installmentCount++;
+
+                tableHTML += '<tr>';
+                tableHTML += `<td>${citation.ticketNumber}</td>`;
+                tableHTML += `<td>${citation.driverName}</td>`;
+                tableHTML += `<td>${citation.vehicleType} (${citation.plateNo})</td>`;
+                tableHTML += `<td>${violationsHTML}</td>`;
+                tableHTML += `<td><strong>₱${fineAmount.toFixed(2)}</strong></td>`;
+                tableHTML += `<td><span class="${statusClass}">${citation.paymentStatus}</span></td>`;
+                tableHTML += `<td>${citation.dateIssued}</td>`;
+                tableHTML += '</tr>';
+            });
+
+            tableHTML += '</tbody></table>';
+
+            // Add summary
+            tableHTML += `
+                <div class="report-summary">
+                    <div class="summary-card">
+                        <h4>Total Completed Citations</h4>
+                        <div class="value">${citations.length}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Total Fine Amount</h4>
+                        <div class="currency">₱${totalFine.toFixed(2)}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Pending Payment</h4>
+                        <div class="value">${pendingCount}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Paid</h4>
+                        <div class="value">${paidCount}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Installment</h4>
+                        <div class="value">${installmentCount}</div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('reportTableContainer').innerHTML = tableHTML;
+            document.getElementById('reportModal').style.display = 'block';
+        }
+
+        // Close Report Function
+        function closeReport() {
+            document.getElementById('reportModal').style.display = 'none';
+        }
+
+        // Export to CSV Function
+        function exportToCSV() {
+            const citations = JSON.parse(localStorage.getItem('citations')) || [];
+            
+            if (citations.length === 0) {
+                alert('No citations to export.');
+                return;
+            }
+
+            let csv = 'Ticket Number,Driver Name,Address,Vehicle Type,Plate Number,Violations,Fine Amount,Payment Status,Completed,Date Issued\n';
+
+            citations.forEach(citation => {
+                const violations = citation.violations.join('; ');
+                csv += `"${citation.ticketNumber}","${citation.driverName}","${citation.driverAddress}","${citation.vehicleType}","${citation.plateNo}","${violations}",${citation.fineAmount},"${citation.paymentStatus}","${citation.completed ? 'Yes' : 'No'}","${citation.dateIssued}"\n`;
+            });
+
+            // Create download link
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv));
+            element.setAttribute('download', 'citations_report_' + new Date().getTime() + '.csv');
+            element.style.display = 'none';
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+
+            alert('Report exported successfully!');
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('reportModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

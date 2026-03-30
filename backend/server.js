@@ -24,6 +24,8 @@ const settingsRoutes = require('./routes/settings');
 const addressRoutes = require('./routes/addresses');
 const reportRoutes = require('./routes/reports');
 const reportTemplateRoutes = require('./routes/reportTemplates');
+const citationRoutes = require('./routes/citations');
+const enforcerRoutes = require('./routes/enforcers');
 
 const app = express();
 const server = http.createServer(app);
@@ -76,6 +78,10 @@ app.use('/api/reports', reportRoutes);
 console.log('  ✓ /api/reports');
 app.use('/api/report-templates', reportTemplateRoutes);
 console.log('  ✓ /api/report-templates');
+app.use('/api/citations', citationRoutes);
+console.log('  ✓ /api/citations');
+app.use('/api/enforcers', enforcerRoutes);
+console.log('  ✓ /api/enforcers');
 console.log('✅ All routes registered');
 
 // Health check
