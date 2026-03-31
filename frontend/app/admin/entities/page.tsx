@@ -10,28 +10,22 @@ import { useAuth } from '@/contexts/AuthContext';
 interface Entity {
   entity_id: number;
   entity_name: string;
+  firstname?: string;
+  lastname?: string;
   contact_person: string | null;
   email: string | null;
   phone: string | null;
   address: string | null;
+  etracs_objid?: string;
 }
 
 export default function EntitiesPage() {
   const { user, hasRole } = useAuth();
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
-  const [formData, setFormData] = useState({
-    entity_name: '',
-    contact_person: '',
-    email: '',
-    phone: '',
-    address: '',
-  });
 
   useEffect(() => {
     setCurrentPage(1);
@@ -52,35 +46,6 @@ export default function EntitiesPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (editingEntity) {
-        await api.put(`/api/entities/${editingEntity.entity_id}`, formData);
-      } else {
-        await api.post('/api/entities', formData);
-      }
-      setShowModal(false);
-      setEditingEntity(null);
-      setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
-      fetchEntities();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error saving entity');
-    }
-  };
-
-  const handleEdit = (entity: Entity) => {
-    setEditingEntity(entity);
-    setFormData({
-      entity_name: entity.entity_name,
-      contact_person: entity.contact_person || '',
-      email: entity.email || '',
-      phone: entity.phone || '',
-      address: entity.address || '',
-    });
-    setShowModal(true);
-  };
-
   const handleDelete = async (entityId: number) => {
     if (!confirm('Are you sure you want to delete this entity?')) return;
     try {
@@ -96,12 +61,14 @@ export default function EntitiesPage() {
   const userRoles = user?.roles || [user?.role_name];
   const canEdit = userRoles.some(role => role && role !== 'Viewer');
 
-  // Filter entities by search term - searches all records
+  // Filter entities by search term
   const filteredEntities = entities.filter(e => 
     e.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (e.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
     (e.email?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-    (e.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
+    (e.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+    (e.firstname?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+    (e.lastname?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
   );
 
   // Pagination logic
@@ -167,19 +134,15 @@ export default function EntitiesPage() {
                 </svg>
               </div>
               {canEdit && (
-                <button
-                  onClick={() => {
-                    setEditingEntity(null);
-                    setFormData({ entity_name: '', contact_person: '', email: '', phone: '', address: '' });
-                    setShowModal(true);
-                  }}
+                <Link
+                  href="/admin/entities/add-entity"
                   className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 focus:ring-4 focus:ring-emerald-200 transition-all duration-200 shadow-lg shadow-emerald-200 w-full sm:w-auto"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
                   Add Entity
-                </button>
+                </Link>
               )}
             </div>
           </div>
@@ -273,8 +236,11 @@ export default function EntitiesPage() {
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-gray-900 truncate">
                           {entity.entity_name}
+                        </div>                      {entity.firstname && entity.lastname && (
+                        <div className="text-xs text-gray-500 truncate">
+                          {entity.firstname} {entity.lastname}
                         </div>
-                        <div className="flex flex-col gap-0.5 mt-1 text-xs text-gray-500">
+                      )}                        <div className="flex flex-col gap-0.5 mt-1 text-xs text-gray-500">
                           {entity.contact_person && (
                             <span className="truncate">{entity.contact_person}</span>
                           )}
@@ -295,15 +261,15 @@ export default function EntitiesPage() {
                             View Details
                           </Link>
                           {canEdit && (
-                            <button
-                              onClick={() => handleEdit(entity)}
+                            <Link
+                              href={`/admin/entities/add-entity?id=${entity.entity_id}`}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded-lg border border-emerald-200"
                             >
                               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                               Edit
-                            </button>
+                            </Link>
                           )}
                         </div>
                       </div>
@@ -322,6 +288,12 @@ export default function EntitiesPage() {
                             {entity.entity_name}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-gray-500">
+                            {entity.firstname && entity.lastname && (
+                              <>
+                                <span>{entity.firstname} {entity.lastname}</span>
+                                <span className="text-gray-300">•</span>
+                              </>
+                            )}
                             {entity.address && (
                               <>
                                 <span className="flex items-center gap-1">
@@ -367,15 +339,15 @@ export default function EntitiesPage() {
                         </Link>
                         {canEdit && (
                           <>
-                            <button
-                              onClick={() => handleEdit(entity)}
+                            <Link
+                              href={`/admin/entities/add-entity?id=${entity.entity_id}`}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-lg border border-emerald-200 hover:border-emerald-600 transition-all duration-200"
                             >
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                               Edit
-                            </button>
+                            </Link>
                             {hasRole('SuperAdmin') && (
                               <button
                                 onClick={() => handleDelete(entity.entity_id)}
@@ -408,119 +380,7 @@ export default function EntitiesPage() {
           </div>
 
           {/* Modal */}
-          {showModal && (
-            <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-              <div className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
-                <div className="p-4 sm:p-6">
-                  {/* Mobile drag handle */}
-                  <div className="flex justify-center mb-3 sm:hidden">
-                    <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
-                  </div>
-                  <div className="flex items-center gap-3 mb-4 sm:mb-6">
-                    <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center">
-                      <svg className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
-                    </div>
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900">
-                      {editingEntity ? 'Edit Entity' : 'Add New Entity'}
-                    </h3>
-                  </div>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Entity Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Enter entity name"
-                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 outline-none text-base"
-                        value={formData.entity_name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, entity_name: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Contact Person
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Enter contact person name"
-                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 outline-none text-base"
-                        value={formData.contact_person}
-                        onChange={(e) =>
-                          setFormData({ ...formData, contact_person: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        placeholder="Enter email address"
-                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 outline-none text-base"
-                        value={formData.email}
-                        onChange={(e) =>
-                          setFormData({ ...formData, email: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Phone
-                      </label>
-                      <input
-                        type="tel"
-                        placeholder="Enter phone number"
-                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 outline-none text-base"
-                        value={formData.phone}
-                        onChange={(e) =>
-                          setFormData({ ...formData, phone: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Address
-                      </label>
-                      <textarea
-                        placeholder="Enter address"
-                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-200 outline-none resize-none text-base"
-                        rows={3}
-                        value={formData.address}
-                        onChange={(e) =>
-                          setFormData({ ...formData, address: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowModal(false);
-                          setEditingEntity(null);
-                        }}
-                        className="w-full sm:w-auto px-5 py-3 sm:py-2.5 border-2 border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 hover:border-gray-300 transition-all duration-200"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 focus:ring-4 focus:ring-emerald-200 transition-all duration-200 shadow-lg shadow-emerald-200"
-                      >
-                        {editingEntity ? 'Update Entity' : 'Create Entity'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          )}
+
         </div>
       </Layout>
     </ProtectedRoute>

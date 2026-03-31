@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 
     // Parse pagination
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const limitNum = Math.min(10000, Math.max(1, parseInt(limit) || 10));
     const offset = (pageNum - 1) * limitNum;
 
     // Build base query
@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
     const selectSQL = `
       SELECT c.citation_id, c.ticket_number, c.driver_name, c.plate_number,
              c.violation_date, c.fine_amount, c.payment_status, c.is_completed,
-             c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name
+             c.violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name
       FROM citations c
       LEFT JOIN users u ON c.issued_by_user_id = u.user_id${whereSQL}
       ORDER BY c.created_at DESC
@@ -74,8 +74,21 @@ router.get('/', async (req, res) => {
 
     const [rows] = await pool.execute(selectSQL, params);
 
+    // Parse violations JSON for each citation
+    const parsedRows = rows.map(row => {
+      if (row.violations && typeof row.violations === 'string') {
+        try {
+          row.violations = JSON.parse(row.violations);
+        } catch (e) {
+          console.warn('Could not parse violations:', e);
+          row.violations = [];
+        }
+      }
+      return row;
+    });
+
     return res.json({
-      data: rows || [],
+      data: parsedRows || [],
       pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
     });
   } catch (error) {

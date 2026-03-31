@@ -107,7 +107,23 @@ router.get('/:id', async (req, res) => {
 // Create entity (all roles except Viewer)
 router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator'), async (req, res) => {
   try {
-    const { entity_name, contact_person, email, phone, address } = req.body;
+    const {
+      entity_name,
+      firstname,
+      middlename,
+      lastname,
+      birthdate,
+      gender,
+      entity_type = 'INDIVIDUAL',
+      contact_person,
+      email,
+      phone,
+      address,
+      etracs_objid,
+      etracs_entityno,
+      etracs_match_score,
+      etracs_matched_fields
+    } = req.body;
 
     if (!entity_name) {
       return res.status(400).json({ error: 'Entity name is required' });
@@ -116,8 +132,29 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Appli
     const entity_id = generateId(ID_PREFIXES.ENTITY);
 
     const [result] = await pool.execute(
-      'INSERT INTO entities (entity_id, entity_name, contact_person, email, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
-      [entity_id, entity_name, contact_person || null, email || null, phone || null, address || null]
+      `INSERT INTO entities (
+        entity_id, entity_name, firstname, middlename, lastname, birthdate, gender,
+        entity_type, contact_person, email, phone, address,
+        etracs_objid, etracs_entityno, etracs_match_score, etracs_matched_fields, etracs_synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        entity_id,
+        entity_name || null,
+        firstname || null,
+        middlename || null,
+        lastname || null,
+        birthdate || null,
+        gender || null,
+        entity_type,
+        contact_person || null,
+        email || null,
+        phone || null,
+        address || null,
+        etracs_objid || null,
+        etracs_entityno || null,
+        etracs_match_score || null,
+        etracs_matched_fields ? JSON.stringify(etracs_matched_fields) : null
+      ]
     );
 
     await logAction(req.user.user_id, 'CREATE_ENTITY', `Created entity '${entity_name}'`);
@@ -125,10 +162,21 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Appli
     res.status(201).json({
       entity_id,
       entity_name,
+      firstname,
+      middlename,
+      lastname,
+      birthdate,
+      gender,
+      entity_type,
       contact_person,
       email,
       phone,
-      address
+      address,
+      etracs_objid,
+      etracs_entityno,
+      etracs_match_score,
+      etracs_matched_fields,
+      etracs_synced_at: new Date().toISOString()
     });
   } catch (error) {
     console.error('Create entity error:', error);
@@ -139,7 +187,23 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Appli
 // Update entity (all roles except Viewer)
 router.put('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator'), async (req, res) => {
   try {
-    const { entity_name, contact_person, email, phone, address } = req.body;
+    const {
+      entity_name,
+      firstname,
+      middlename,
+      lastname,
+      birthdate,
+      gender,
+      entity_type,
+      contact_person,
+      email,
+      phone,
+      address,
+      etracs_objid,
+      etracs_entityno,
+      etracs_match_score,
+      etracs_matched_fields
+    } = req.body;
     const entityId = req.params.id;
 
     if (!entity_name) {
@@ -147,8 +211,30 @@ router.put('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'App
     }
 
     const [result] = await pool.execute(
-      'UPDATE entities SET entity_name = ?, contact_person = ?, email = ?, phone = ?, address = ? WHERE entity_id = ?',
-      [entity_name, contact_person || null, email || null, phone || null, address || null, entityId]
+      `UPDATE entities SET
+        entity_name = ?, firstname = ?, middlename = ?, lastname = ?,
+        birthdate = ?, gender = ?, entity_type = ?,
+        contact_person = ?, email = ?, phone = ?, address = ?,
+        etracs_objid = ?, etracs_entityno = ?, etracs_match_score = ?, etracs_matched_fields = ?
+       WHERE entity_id = ?`,
+      [
+        entity_name || null,
+        firstname || null,
+        middlename || null,
+        lastname || null,
+        birthdate || null,
+        gender || null,
+        entity_type || 'INDIVIDUAL',
+        contact_person || null,
+        email || null,
+        phone || null,
+        address || null,
+        etracs_objid || null,
+        etracs_entityno || null,
+        etracs_match_score || null,
+        etracs_matched_fields ? JSON.stringify(etracs_matched_fields) : null,
+        entityId
+      ]
     );
 
     if (result.affectedRows === 0) {
@@ -156,6 +242,23 @@ router.put('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'App
     }
 
     await logAction(req.user.user_id, 'UPDATE_ENTITY', `Updated entity ID ${entityId}`);
+
+    // Fetch and return updated entity
+    const [updatedEntity] = await pool.execute(
+      'SELECT * FROM entities WHERE entity_id = ?',
+      [entityId]
+    );
+
+    if (updatedEntity.length > 0) {
+      const entity = updatedEntity[0];
+      return res.json({
+        message: 'Entity updated successfully',
+        entity: {
+          ...entity,
+          etracs_matched_fields: entity.etracs_matched_fields ? JSON.parse(entity.etracs_matched_fields) : null
+        }
+      });
+    }
 
     res.json({ message: 'Entity updated successfully' });
   } catch (error) {

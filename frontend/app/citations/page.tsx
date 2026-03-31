@@ -18,6 +18,7 @@ interface Citation {
   fine_amount: number;
   payment_status: string;
   is_completed: boolean;
+  violations?: string[];
   created_at: string;
   issued_by_name: string;
 }
@@ -82,6 +83,11 @@ export default function CitationsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
+  const [listSearchTerm, setListSearchTerm] = useState<string>('');
+  const [reportCurrentPage, setReportCurrentPage] = useState<number>(1);
+  const [reportRecordsPerPage, setReportRecordsPerPage] = useState<number>(10);
 
   // Report filters
   const [reportFilters, setReportFilters] = useState({
@@ -132,8 +138,15 @@ export default function CitationsPage() {
 
   useEffect(() => {
     fetchEnforcers();
+    fetchCitations();
+  }, []);
+
+  useEffect(() => {
     if (activeTab === 'list') {
-      fetchCitations();
+      setCurrentPage(1);
+      setListSearchTerm('');
+    } else if (activeTab === 'report') {
+      setReportCurrentPage(1);
     }
   }, [activeTab]);
 
@@ -149,7 +162,8 @@ export default function CitationsPage() {
   const fetchCitations = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/citations');
+      setCurrentPage(1);
+      const response = await api.get('/api/citations?limit=10000');
       setCitations(response.data.data || []);
     } catch (error) {
       console.error('Error fetching citations:', error);
@@ -341,19 +355,51 @@ export default function CitationsPage() {
         }
       }
 
-      // Filter by violations - only applied if a violation is selected
-      // Note: This would require violations data from API response
-      // Currently violations are not included in the citations list response
+      // Filter by violations
       if (reportFilters.violations !== '') {
-        // Placeholder for violations filtering when data becomes available
-        // This would check if the citation's violation matches selected violation
+        const citationViolations = citation.violations || [];
+        // Check if the selected violation is in the citation's violations array
+        if (!citationViolations.includes(reportFilters.violations)) {
+          return false;
+        }
       }
 
       return true;
     });
   };
 
+  // Pagination logic for list tab
+  const filteredCitations = citations.filter(citation => {
+    const searchLower = listSearchTerm.toLowerCase();
+    return (
+      citation.ticket_number.toLowerCase().includes(searchLower) ||
+      citation.driver_name.toLowerCase().includes(searchLower)
+    );
+  });
+  const totalPages = Math.ceil(filteredCitations.length / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const endIndex = startIndex + recordsPerPage;
+  const paginatedCitations = filteredCitations.slice(startIndex, endIndex);
+
+  // Ensure current page doesn't exceed total pages
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1);
+  }
+
+  // Pagination logic for report tab
+  const reportFilteredCitations = getFilteredCitations();
+  const reportTotalPages = Math.ceil(reportFilteredCitations.length / reportRecordsPerPage);
+  const reportStartIndex = (reportCurrentPage - 1) * reportRecordsPerPage;
+  const reportEndIndex = reportStartIndex + reportRecordsPerPage;
+  const paginatedReportCitations = reportFilteredCitations.slice(reportStartIndex, reportEndIndex);
+
+  // Ensure report current page doesn't exceed total pages
+  if (reportCurrentPage > reportTotalPages && reportTotalPages > 0) {
+    setReportCurrentPage(1);
+  }
+
   const handleResetFilters = () => {
+    setReportCurrentPage(1);
     setReportFilters({
       paymentStatus: 'all',
       dateFrom: '',
@@ -857,84 +903,191 @@ export default function CitationsPage() {
 
           {/* Citations List Tab */}
           {activeTab === 'list' && (
-            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-              {loading ? (
-                <div className="P-8 text-center">
-                  <div className="inline-flex items-center justify-center">
-                    <div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-slate-600 animate-spin"></div>
+            <div className="space-y-6">
+              {/* Search Bar */}
+              <div className="flex items-center gap-3 bg-white p-4 rounded-lg border border-slate-200">
+                <svg className="h-5 w-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search by ticket number or driver name..."
+                  value={listSearchTerm}
+                  onChange={(e) => {
+                    setListSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="flex-1 bg-transparent outline-none text-slate-900 placeholder-slate-400 text-sm"
+                />
+                {listSearchTerm && (
+                  <button
+                    onClick={() => {
+                      setListSearchTerm('');
+                      setCurrentPage(1);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                    aria-label="Clear search"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Pagination and records info */}
+              {filteredCitations.length > 0 && (
+                <div className="flex flex-col gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  {/* Records per page selector */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="text-sm text-slate-600">
+                      Showing <span className="font-semibold">{Math.min(recordsPerPage, filteredCitations.length)}</span> records per page out of <span className="font-semibold">{filteredCitations.length}</span> total
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label htmlFor="records-per-page-selector" className="text-sm font-medium text-slate-700">
+                        Records per page:
+                      </label>
+                      <select
+                        id="records-per-page-selector"
+                        value={recordsPerPage}
+                        onChange={(e) => {
+                          setRecordsPerPage(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:border-slate-800 focus:ring-2 focus:ring-slate-300 transition-all outline-none cursor-pointer"
+                      >
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
                   </div>
-                  <p className="mt-2 text-slate-600">Loading citations...</p>
-                </div>
-              ) : citations.length === 0 ? (
-                <div className="p-8 text-center text-slate-600">
-                  No citations found. Create a new citation to get started.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-slate-800 text-white">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Ticket #
-                        </th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Driver Name
-                        </th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Plate Number
-                        </th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Fine Amount
-                        </th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Payment Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold">
-                          Date
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {citations.map((citation) => (
-                        <tr
-                          key={citation.citation_id}
-                          onClick={() => router.push(`/citations/${citation.citation_id}`)}
-                          className="hover:bg-slate-100 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                            {citation.ticket_number}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-slate-600">
-                            {citation.driver_name}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-slate-600">
-                            {citation.plate_number}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                            ₱{formatCurrency(Number(citation.fine_amount) || 0)}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                citation.payment_status === 'Paid'
-                                  ? 'bg-green-100 text-green-800'
-                                  : citation.payment_status === 'Pending'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-blue-100 text-blue-800'
-                              }`}
-                            >
-                              {citation.payment_status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-slate-600">
-                            {new Date(citation.violation_date).toLocaleDateString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+                  {/* Page navigation */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
+                    <div className="text-sm text-slate-600">
+                      Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                        aria-label="Previous page"
+                      >
+                        Previous
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                          <button
+                            key={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                              currentPage === pageNum
+                                ? 'bg-slate-800 text-white'
+                                : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            }`}
+                            aria-label={`Go to page ${pageNum}`}
+                            aria-current={currentPage === pageNum ? 'page' : undefined}
+                          >
+                            {pageNum}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                        aria-label="Next page"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
+
+              {/* Citations Table */}
+              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                {loading ? (
+                  <div className="P-8 text-center">
+                    <div className="inline-flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-slate-600 animate-spin"></div>
+                    </div>
+                    <p className="mt-2 text-slate-600">Loading citations...</p>
+                  </div>
+                ) : citations.length === 0 ? (
+                  <div className="p-8 text-center text-slate-600">
+                    No citations found. Create a new citation to get started.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-800 text-white">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Ticket #
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Driver Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Plate Number
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Fine Amount
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Payment Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold">
+                            Date
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {paginatedCitations.map((citation) => (
+                          <tr
+                            key={citation.citation_id}
+                            onClick={() => router.push(`/citations/${citation.citation_id}`)}
+                            className="hover:bg-slate-100 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                              {citation.ticket_number}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {citation.driver_name}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {citation.plate_number}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                              ₱{formatCurrency(Number(citation.fine_amount) || 0)}
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  citation.payment_status === 'Paid'
+                                    ? 'bg-green-100 text-green-800'
+                                    : citation.payment_status === 'Pending'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {citation.payment_status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {new Date(citation.violation_date).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1043,38 +1196,111 @@ export default function CitationsPage() {
                   <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                     <p className="text-sm text-slate-600 mb-1">Total Citations</p>
                     <p className="text-2xl font-bold text-slate-800">
-                      {getFilteredCitations().length}
+                      {reportFilteredCitations.length}
                     </p>
                   </div>
                   <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                     <p className="text-sm text-green-600 mb-1">Paid</p>
                     <p className="text-2xl font-bold text-green-800">
-                      {getFilteredCitations().filter((c) => c.payment_status === 'Paid').length}
+                      {reportFilteredCitations.filter((c) => c.payment_status === 'Paid').length}
                     </p>
                   </div>
                   <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                     <p className="text-sm text-yellow-600 mb-1">Pending</p>
                     <p className="text-2xl font-bold text-yellow-800">
-                      {getFilteredCitations().filter((c) => c.payment_status === 'Pending').length}
+                      {reportFilteredCitations.filter((c) => c.payment_status === 'Pending').length}
                     </p>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                     <p className="text-sm text-blue-600 mb-1">Total Fines</p>
                     <p className="text-2xl font-bold text-blue-800">
-                      ₱{formatCurrency(getFilteredCitations().reduce((sum, c) => sum + (Number(c.fine_amount) || 0), 0))}
+                      ₱{formatCurrency(reportFilteredCitations.reduce((sum, c) => sum + (Number(c.fine_amount) || 0), 0))}
                     </p>
                   </div>
                 </div>
               </div>
 
+              {/* Pagination and records info for report */}
+              {reportFilteredCitations.length > 0 && (
+                <div className="flex flex-col gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  {/* Records per page selector */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="text-sm text-slate-600">
+                      Showing <span className="font-semibold">{Math.min(reportRecordsPerPage, reportFilteredCitations.length)}</span> records per page out of <span className="font-semibold">{reportFilteredCitations.length}</span> total
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label htmlFor="report-records-per-page-selector" className="text-sm font-medium text-slate-700">
+                        Records per page:
+                      </label>
+                      <select
+                        id="report-records-per-page-selector"
+                        value={reportRecordsPerPage}
+                        onChange={(e) => {
+                          setReportRecordsPerPage(Number(e.target.value));
+                          setReportCurrentPage(1);
+                        }}
+                        className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:border-slate-800 focus:ring-2 focus:ring-slate-300 transition-all outline-none cursor-pointer"
+                      >
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Page navigation */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
+                    <div className="text-sm text-slate-600">
+                      Page <span className="font-semibold">{reportCurrentPage}</span> of <span className="font-semibold">{reportTotalPages}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setReportCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={reportCurrentPage === 1}
+                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                        aria-label="Previous page"
+                      >
+                        Previous
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: reportTotalPages }, (_, i) => i + 1).map((pageNum) => (
+                          <button
+                            key={pageNum}
+                            onClick={() => setReportCurrentPage(pageNum)}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                              reportCurrentPage === pageNum
+                                ? 'bg-slate-800 text-white'
+                                : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            }`}
+                            aria-label={`Go to page ${pageNum}`}
+                            aria-current={reportCurrentPage === pageNum ? 'page' : undefined}
+                          >
+                            {pageNum}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => setReportCurrentPage(prev => Math.min(reportTotalPages, prev + 1))}
+                        disabled={reportCurrentPage === reportTotalPages}
+                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                        aria-label="Next page"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Filtered Citations Table */}
               <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 p-4 border-b border-slate-200">
                   <h3 className="font-semibold text-slate-800">
-                    Filtered Citations ({getFilteredCitations().length})
+                    Filtered Citations ({reportFilteredCitations.length})
                   </h3>
                 </div>
-                {getFilteredCitations().length === 0 ? (
+                {reportFilteredCitations.length === 0 ? (
                   <div className="p-8 text-center text-slate-600">
                     No citations match the selected filters.
                   </div>
@@ -1104,7 +1330,7 @@ export default function CitationsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {getFilteredCitations().map((citation) => (
+                        {paginatedReportCitations.map((citation) => (
                           <tr
                             key={citation.citation_id}
                             onClick={() => router.push(`/citations/${citation.citation_id}`)}
