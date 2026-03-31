@@ -66,6 +66,13 @@ export default function Layout({ children }: LayoutProps) {
 
   const isActive = (path: string) => pathname === path;
 
+  const isLinkActive = (path: string, activePaths?: string[]) => {
+    if (activePaths) {
+      return activePaths.some(p => pathname === p || pathname.startsWith(p + '/'));
+    }
+    return pathname === path;
+  };
+
   const canAccess = (roles: string[]) => {
     if (!user) return false;
     return hasRole(roles);
@@ -102,23 +109,50 @@ export default function Layout({ children }: LayoutProps) {
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', show: true },
-    { href: '/applications/new', label: 'New Application', show: canAccess(['SuperAdmin', 'Admin', 'Application Creator']) },
     { href: '/applications', label: 'Applications', show: true },
-    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) },
     { href: '/admin/entities', label: 'Entities', show: true },
+    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) },
     { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) },
   ];
 
-  const adminLinks = [
-    { href: '/reports', label: 'Reports' },
-    { href: '/admin/users', label: 'Users' },
+  const adminLinks: { href: string; label: string; activePaths?: string[] }[] = [
+    { href: '/admin/permit-types', label: 'Permit Setup', activePaths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees'] },
     { href: '/admin/enforcers', label: 'Enforcers' },
-    { href: '/admin/fees', label: 'Fees' },
-    { href: '/admin/settings', label: 'Settings' },
-    { href: '/admin/permit-types', label: 'Permit Types' },
-    { href: '/admin/attributes', label: 'Attributes' },
-    { href: '/admin/rules', label: 'Rules' },
+    { href: '/admin/users', label: 'Users' },
+    { href: '/reports', label: 'Reports', activePaths: ['/reports', '/admin/reports', '/admin/templates', '/admin/report-templates'] },
+    { href: '/admin/settings', label: 'Settings', activePaths: ['/admin/settings'] },
   ];
+
+  // Page groups: show SubNav tabs when on any page in a group
+  const pageGroups = [
+    {
+      paths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees'],
+      tabs: [
+        { href: '/admin/permit-types', label: 'Permit Types' },
+        { href: '/admin/attributes', label: 'Attributes' },
+        { href: '/admin/rules', label: 'Assessment Rules' },
+        { href: '/admin/fees', label: 'Fees' },
+      ],
+    },
+    {
+      paths: ['/reports', '/admin/reports', '/admin/templates', '/admin/report-templates'],
+      tabs: [
+        { href: '/reports', label: 'Permit Reports' },
+        { href: '/admin/reports', label: 'Financial Reports' },
+        { href: '/admin/templates', label: 'DOCX Templates' },
+        { href: '/admin/report-templates', label: 'HTML Templates' },
+      ],
+    },
+    {
+      paths: ['/admin/settings'],
+      tabs: [
+        { href: '/admin/settings', label: 'General' },
+        { href: '/admin/settings/permit-display', label: 'Permit Display' },
+      ],
+    },
+  ];
+
+  const currentGroup = pageGroups.find(g => g.paths.some(p => pathname === p || pathname.startsWith(p + '/')));
 
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex flex-col h-full">
@@ -176,7 +210,7 @@ export default function Layout({ children }: LayoutProps) {
                 href={link.href}
                 title={link.label}
                 className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group ${
-                  isActive(link.href)
+                  isLinkActive(link.href, link.activePaths)
                     ? 'bg-teal-600 text-white'
                     : 'text-slate-300 hover:bg-slate-700/60 hover:text-white'
                 }`}
@@ -252,7 +286,7 @@ export default function Layout({ children }: LayoutProps) {
 
           <div className="hidden md:block mr-auto">
             <h2 className="text-sm font-medium text-slate-600">
-              {navLinks.find(l => isActive(l.href))?.label || adminLinks.find(l => isActive(l.href))?.label || ''}
+              {navLinks.find(l => isActive(l.href))?.label || adminLinks.find(l => isLinkActive(l.href, l.activePaths))?.label || ''}
             </h2>
           </div>
 
@@ -292,7 +326,28 @@ export default function Layout({ children }: LayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 p-4 sm:p-6">
+          {currentGroup && (
+            <div className="border-b border-slate-200 bg-white -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 px-4 sm:px-6 mb-6">
+              <nav className="flex gap-1 overflow-x-auto">
+                {currentGroup.tabs.map((tab) => (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                      isActive(tab.href)
+                        ? 'border-teal-600 text-teal-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

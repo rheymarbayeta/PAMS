@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
@@ -179,7 +180,17 @@ export default function ApplicationsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            {hasRole(['SuperAdmin', 'Admin', 'Application Creator']) && (
+              <Link
+                href="/applications/new"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                New Application
+              </Link>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 sm:flex-none sm:min-w-64">
                 <input
                   type="text"
@@ -231,7 +242,6 @@ export default function ApplicationsPage() {
                 ))}
               </select>
             </div>
-          </div>
 
           {/* Pagination and records info - BEFORE records list */}
           {filteredApplications.length > 0 && (
