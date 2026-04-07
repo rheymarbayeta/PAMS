@@ -69,6 +69,7 @@ function StatusBadge({ status }: { status: string }) {
     Paid: 'bg-green-100 text-green-800 border-green-200',
     Pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     Installment: 'bg-blue-100 text-blue-800 border-blue-200',
+    'Partially Paid': 'bg-orange-100 text-orange-800 border-orange-200',
   };
   return (
     <span
@@ -379,6 +380,13 @@ export default function CitationDetailsPage() {
   const fineAmount = Number(citation.fine_amount) || 0;
   const balanceDue = fineAmount - totalPaid;
 
+  // Compute effective payment status based on actual payments
+  const effectiveStatus = totalPaid <= 0
+    ? (citation.payment_status === 'Paid' ? 'Pending' : citation.payment_status)
+    : totalPaid >= fineAmount
+      ? 'Paid'
+      : 'Partially Paid';
+
   return (
     <ProtectedRoute>
       <Layout>
@@ -422,7 +430,7 @@ export default function CitationDetailsPage() {
                       Ticket #{citation.ticket_number}
                     </h1>
                     <div className="flex items-center gap-2">
-                      <StatusBadge status={citation.payment_status} />
+                      <StatusBadge status={effectiveStatus} />
                       <span className="text-xs px-2 py-1 rounded text-slate-600 bg-slate-100">
                         {payments.length} {payments.length === 1 ? 'payment' : 'payments'}
                       </span>
@@ -750,7 +758,7 @@ export default function CitationDetailsPage() {
                       >
                         <option value="Pending">Pending</option>
                         <option value="Paid">Paid</option>
-                        <option value="Installment">Installment</option>
+                        <option value="Partially Paid">Partially Paid</option>
                       </select>
                     </div>
                     <div className="flex items-end">

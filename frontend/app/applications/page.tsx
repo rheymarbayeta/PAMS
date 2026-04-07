@@ -15,6 +15,7 @@ interface Application {
   permit_type: string;
   permit_type_name: string;
   status: string;
+  permit_number: string | null;
   creator_name: string;
   assessor_name: string | null;
   approver_name: string | null;
@@ -349,6 +350,11 @@ export default function ApplicationsPage() {
                           >
                             {app.status}
                           </span>
+                          {app.permit_number && (
+                            <span className="inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-xs font-medium border border-blue-200 bg-blue-50 text-blue-700">
+                              {app.permit_number}
+                            </span>
+                          )}
                         </div>
                         <div className="mt-1.5 sm:mt-2 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 text-sm text-slate-600">
                           <span className="font-medium text-slate-700 truncate">{app.entity_name}</span>

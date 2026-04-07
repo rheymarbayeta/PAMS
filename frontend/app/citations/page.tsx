@@ -824,7 +824,7 @@ export default function CitationsPage() {
                       >
                         <option value="Pending">Pending</option>
                         <option value="Paid">Paid</option>
-                        <option value="Installment">Installment</option>
+                        <option value="Partially Paid">Partially Paid</option>
                       </select>
                     </div>
                   </div>
@@ -1072,6 +1072,8 @@ export default function CitationsPage() {
                                     ? 'bg-green-100 text-green-800'
                                     : citation.payment_status === 'Pending'
                                     ? 'bg-yellow-100 text-yellow-800'
+                                    : citation.payment_status === 'Partially Paid' || citation.payment_status === 'Installment'
+                                    ? 'bg-orange-100 text-orange-800'
                                     : 'bg-blue-100 text-blue-800'
                                 }`}
                               >
@@ -1355,6 +1357,8 @@ export default function CitationsPage() {
                                     ? 'bg-green-100 text-green-800'
                                     : citation.payment_status === 'Pending'
                                     ? 'bg-yellow-100 text-yellow-800'
+                                    : citation.payment_status === 'Partially Paid' || citation.payment_status === 'Installment'
+                                    ? 'bg-orange-100 text-orange-800'
                                     : 'bg-blue-100 text-blue-800'
                                 }`}
                               >

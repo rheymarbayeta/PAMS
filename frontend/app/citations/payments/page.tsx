@@ -289,8 +289,8 @@ export default function PaymentPortalPage() {
                                   className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${
                                     citation.payment_status === 'Paid'
                                       ? 'bg-green-100 text-green-800'
-                                      : citation.payment_status === 'Installment'
-                                      ? 'bg-blue-100 text-blue-800'
+                                      : citation.payment_status === 'Partially Paid' || citation.payment_status === 'Installment'
+                                      ? 'bg-orange-100 text-orange-800'
                                       : 'bg-yellow-100 text-yellow-800'
                                   }`}
                                 >

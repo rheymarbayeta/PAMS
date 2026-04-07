@@ -163,6 +163,20 @@ export default function SettingsPage() {
                     <p className="text-sm text-gray-500 mt-1">Configure how permit activities are displayed (table vs paragraph format)</p>
                   </div>
                 </Link>
+                <Link
+                  href="/admin/settings/permit-header"
+                  className="group flex items-start gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all duration-200"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-.293.707L13 15.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-5.586L4.293 7.707A1 1 0 014 7V5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">Permit Header</h3>
+                    <p className="text-sm text-gray-500 mt-1">Upload logos and customize header text on permit documents</p>
+                  </div>
+                </Link>
               </div>
             </div>
 

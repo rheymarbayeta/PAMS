@@ -64,10 +64,18 @@ router.get('/', async (req, res) => {
     // Select with pagination - use LIMIT and OFFSET as values not placeholders
     const selectSQL = `
       SELECT c.citation_id, c.ticket_number, c.driver_name, c.plate_number,
-             c.violation_date, c.fine_amount, c.payment_status, c.is_completed,
-             c.violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name
+             c.violation_date, c.fine_amount, c.is_completed,
+             c.violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name,
+             COALESCE(cp.total_paid, 0) as total_paid,
+             CASE
+               WHEN COALESCE(cp.total_paid, 0) <= 0 THEN
+                 CASE WHEN c.payment_status = 'Paid' THEN 'Pending' ELSE c.payment_status END
+               WHEN COALESCE(cp.total_paid, 0) >= c.fine_amount THEN 'Paid'
+               ELSE 'Partially Paid'
+             END as payment_status
       FROM citations c
-      LEFT JOIN users u ON c.issued_by_user_id = u.user_id${whereSQL}
+      LEFT JOIN users u ON c.issued_by_user_id = u.user_id
+      LEFT JOIN (SELECT citation_id, SUM(amount_paid) as total_paid FROM citation_payments GROUP BY citation_id) cp ON cp.citation_id = c.citation_id${whereSQL}
       ORDER BY c.created_at DESC
       LIMIT ${limitNum} OFFSET ${offset}
     `;
@@ -108,7 +116,7 @@ router.get('/report/summary', async (req, res) => {
         SUM(fine_amount) as total_fines,
         COUNT(CASE WHEN payment_status = 'Paid' THEN 1 END) as paid_count,
         COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_count,
-        COUNT(CASE WHEN payment_status = 'Installment' THEN 1 END) as installment_count,
+        COUNT(CASE WHEN payment_status IN ('Installment', 'Partially Paid') THEN 1 END) as installment_count,
         COUNT(CASE WHEN is_completed = true THEN 1 END) as completed_count
       FROM citations
       WHERE 1=1
@@ -189,6 +197,16 @@ router.get('/:id', async (req, res) => {
       `SELECT * FROM Citation_Payments WHERE citation_id = ? ORDER BY payment_date DESC`,
       [citationId]
     );
+
+    // Compute effective payment status based on actual payments
+    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+    if (totalPaid <= 0 && citation.payment_status === 'Paid') {
+      citation.payment_status = 'Pending';
+    } else if (totalPaid > 0 && totalPaid < Number(citation.fine_amount)) {
+      citation.payment_status = 'Partially Paid';
+    } else if (totalPaid >= Number(citation.fine_amount) && Number(citation.fine_amount) > 0) {
+      citation.payment_status = 'Paid';
+    }
 
     console.log('Citation fetched:', citation.citation_id, 'with', payments.length, 'payments');
     res.json({
@@ -544,7 +562,7 @@ router.post('/:id/payment', async (req, res) => {
     );
 
     const totalPaid = payments[0].total_paid || 0;
-    const newStatus = totalPaid >= citation[0].fine_amount ? 'Paid' : 'Installment';
+    const newStatus = totalPaid >= citation[0].fine_amount ? 'Paid' : 'Partially Paid';
 
     await pool.execute(
       'UPDATE citations SET payment_status = ?, updated_at = NOW() WHERE citation_id = ?',

@@ -4,9 +4,8 @@
 <meta charset="utf-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<!-- Include html2pdf.js for PDF generation -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap');
   * {
     margin: 0;
     padding: 0;
@@ -16,7 +15,7 @@
     margin: 0;
     padding: 0;
     background-color: #f5f5f5;
-    font-family: Arial, sans-serif;
+    font-family: 'Cambria', 'Noto Serif', 'Georgia', serif;
   }
   #report-container {
     max-width: 8.5in;
@@ -77,8 +76,8 @@
     background-color: #c82333;
   }
   
-  /* Jasper Report Button */
-  .jasper-report-btn {
+  /* Report PDF Button */
+  .report-pdf-btn {
     padding: 8px 16px;
     margin-left: 5px;
     background-color: #6366f1;
@@ -89,16 +88,16 @@
     font-size: 14px;
   }
   
-  .jasper-report-btn:hover:not(:disabled) {
+  .report-pdf-btn:hover:not(:disabled) {
     background-color: #4f46e5;
   }
   
-  .jasper-report-btn:disabled {
+  .report-pdf-btn:disabled {
     background-color: #ccc;
     cursor: not-allowed;
   }
   
-  .jasper-error {
+  .report-error {
     padding: 12px;
     background-color: #fee;
     border: 1px solid #fcc;
@@ -109,22 +108,23 @@
     display: none;
   }
   
-  .jasper-error.show {
+  .report-error.show {
     display: block;
   }
   
-  /* Page container for proper sizing */
+  /* Page container for proper sizing — fixed height so footer is always at the bottom */
   .page {
     width: 8.5in;
-    min-height: 13in;
+    height: 13in;
     padding: 0.5in;
+    padding-bottom: 0.75in; /* leave room for footer */
     margin: 0 auto 20px auto;
     background: white;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     position: relative;
     page-break-after: always;
-    display: flex;
-    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
   }
   
   .page:last-child {
@@ -132,19 +132,21 @@
   }
   
   .page-content {
-    flex: 1;
+    height: 100%;
     display: flex;
     flex-direction: column;
   }
   
   .page-footer {
-    flex-shrink: 0;
-    padding-top: 15px;
+    position: absolute;
+    bottom: 0.35in;
+    left: 0.5in;
+    right: 0.5in;
+    padding-top: 6px;
     border-top: 1px solid #ccc;
     text-align: center;
     font-size: 8px;
     color: #666;
-    margin-top: auto;
   }
   
   .hidden {
@@ -197,7 +199,7 @@
   }
   
   @page {
-    size: 8.5in 13in;
+    size: 8.5in 13in portrait;
     margin: 0;
   }
   
@@ -219,8 +221,9 @@
       box-shadow: none;
       margin: 0;
       width: 8.5in;
-      min-height: 13in;
+      height: 13in;
       page-break-after: always;
+      overflow: hidden;
     }
     .page:last-child {
       page-break-after: avoid;
@@ -232,8 +235,9 @@
 <body>
 <div id="report-container">
   <div class="controls">
-    <button class="jasper-report-btn" id="jasperBtn" onclick="generateJasperReportPDF()">📊 Generate Permit Report (PDF)</button>
-    <div id="jasperError" class="jasper-error"></div>
+    <button class="btn btn-print" onclick="printReport()">🖨️ Print</button>
+    <button class="report-pdf-btn" id="reportPdfBtn" onclick="generateReportPDF()">📄 Download PDF</button>
+    <div id="reportError" class="report-error"></div>
   </div>
   
   <div id="loading" class="loading">
@@ -447,18 +451,34 @@ async function fetchPermitReport() {
       console.warn('Could not fetch payment data:', paymentError);
     }
     
-    // Get assessment fees from assessmentData (already fetched)
-    const assessmentFees = assessmentData.fees || [];
+    // Get assessed fees directly from the application (assessed_fees table)
+    const assessmentFees = applicationData.assessed_fees || assessmentData.fees || [];
     console.log('✅ Assessment fees:', assessmentFees);
+
+    // Fetch current user info for footer
+    let currentUserName = 'PAMS';
+    try {
+      const meResponse = await fetch(`${apiBaseUrl}/api/auth/me`, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include'
+      });
+      if (meResponse.ok) {
+        const meData = await meResponse.json();
+        if (meData.full_name) currentUserName = meData.full_name;
+      }
+    } catch (meError) {
+      console.warn('Could not fetch current user info:', meError);
+    }
     
-    renderReport(assessmentData, settings, applicationData, permitTypeData, paymentData, assessmentFees);
+    renderReport(assessmentData, settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName);
   } catch (error) {
     console.error('Error fetching permit data:', error);
     showError(`Failed to load permit report: ${error.message}`);
   }
 }
 
-function renderReport(appData, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}, assessmentFees = []) {
+function renderReport(appData, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}, assessmentFees = [], currentUserName = 'PAMS') {
   console.log('\n========== RENDER REPORT ==========');
   console.log('Input parameters:');
   console.log('  - appData:', appData);
@@ -468,7 +488,7 @@ function renderReport(appData, settings = {}, applicationData = {}, permitTypeDa
   console.log('  - paymentData:', paymentData);
   console.log('  - assessmentFees:', assessmentFees);
   
-  const reportHTML = generateReportHTML(appData, settings, applicationData, permitTypeData, paymentData, assessmentFees);
+  const reportHTML = generateReportHTML(appData, settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName);
   
   document.getElementById('report-content').innerHTML = reportHTML;
   document.getElementById('loading').classList.add('hidden');
@@ -477,9 +497,59 @@ function renderReport(appData, settings = {}, applicationData = {}, permitTypeDa
   // Auto-size permit title to fit on one line
   setTimeout(() => {
     adjustPermitTitleSize();
-  }, 100);
+    paginateContent();
+  }, 150);
   
   console.log('===================================\n');
+}
+
+/**
+ * Automatically paginate content if page 1 overflows.
+ * Moves the approval section to a new page 2.
+ */
+function paginateContent() {
+  // Remove any previously created pages (in case this is called again)
+  document.querySelectorAll('.page:not(#page-1)').forEach(p => p.remove());
+
+  const page = document.getElementById('page-1');
+  if (!page) return;
+
+  // scrollHeight > clientHeight means content is clipped
+  if (page.scrollHeight <= page.clientHeight) return;
+
+  const pageContent = page.querySelector('.page-content');
+  if (!pageContent) return;
+
+  // Find the approval section (contains "APPROVED BY")
+  const approvalDiv = Array.from(pageContent.children).find(
+    el => el.innerHTML && el.innerHTML.includes('APPROVED BY')
+  );
+  if (!approvalDiv) return;
+
+  // Capture before removing
+  const approvalOuterHTML = approvalDiv.outerHTML;
+  const oldFooter = page.querySelector('.page-footer');
+  const footerInnerHTML = oldFooter ? oldFooter.innerHTML : '';
+
+  // Remove approval section from page 1
+  approvalDiv.remove();
+
+  // Insert page 2 after page 1
+  const page2Html = `
+    <div class="page" id="page-2">
+      <div class="page-content">
+        <div class="continuation-header">
+          <h3>— Continuation —</h3>
+        </div>
+        ${approvalOuterHTML}
+      </div>
+      <div class="page-footer">${footerInnerHTML}</div>
+    </div>
+  `;
+  page.insertAdjacentHTML('afterend', page2Html);
+
+  // Recalculate page numbers
+  updatePageNumbers();
 }
 
 // Function to adjust permit title font size to fit on one line
@@ -521,51 +591,64 @@ function adjustPermitTitleSize() {
  * - "table_simple": Shows just fee names in a table
  * - "paragraph" (default): Shows as regular paragraph text
  */
-function getPermitActivitiesDisplayMode(settings, permitTypeData) {
-  // Get the tabular display conditions from settings
+function getPermitActivitiesDisplayMode(settings, permitTypeData, assessmentFees, applicationData) {
+  // applicationData has attribute_id and attribute_name joined from assessment_rules → attributes
+  // This is more reliable than permitTypeData which depends on a separate API call
+  const appAttrId   = applicationData?.attribute_id   || permitTypeData?.attribute_id;
+  const appAttrName = applicationData?.attribute_name || permitTypeData?.attribute_name;
+  const appPermitTypeName = permitTypeData?.permit_type_name || applicationData?.permit_type;
+
+  console.log('getPermitActivitiesDisplayMode - sources:');
+  console.log('  - applicationData.attribute_id:', applicationData?.attribute_id);
+  console.log('  - applicationData.attribute_name:', applicationData?.attribute_name);
+  console.log('  - permitTypeData.attribute_id:', permitTypeData?.attribute_id);
+  console.log('  - permitTypeData.attribute_name:', permitTypeData?.attribute_name);
+  console.log('  - permit_type_name used:', appPermitTypeName);
+  console.log('  - attribute_id used:', appAttrId);
+  console.log('  - attribute_name used:', appAttrName);
+
   const conditionsStr = settings.permit_tabular_display_conditions?.value;
   
-  if (!conditionsStr) {
-    console.log('No tabular display conditions found in settings, using default paragraph mode');
-    return { mode: 'paragraph' };
-  }
-  
-  try {
-    const conditions = JSON.parse(conditionsStr);
-    console.log('Parsed tabular display conditions:', conditions);
-    
-    // Check each condition
-    for (const condition of conditions) {
-      // Check by attribute_name
-      if (condition.attribute_name && 
-          permitTypeData.attribute_name && 
-          permitTypeData.attribute_name.toUpperCase() === condition.attribute_name.toUpperCase()) {
-        console.log(`✅ Matched condition by attribute_name: ${condition.attribute_name}`);
-        return { mode: condition.display_mode || 'table_with_quantity', condition };
+  if (conditionsStr) {
+    try {
+      const conditions = JSON.parse(conditionsStr);
+      console.log('Parsed tabular display conditions:', conditions);
+      
+      for (const condition of conditions) {
+        // Check by attribute_name
+        if (condition.attribute_name && appAttrName &&
+            appAttrName.toUpperCase() === condition.attribute_name.toUpperCase()) {
+          console.log(`✅ Matched by attribute_name: "${condition.attribute_name}"`);
+          return { mode: condition.display_mode || 'table_with_quantity', condition };
+        }
+        
+        // Check by permit_type_name
+        if (condition.permit_type_name && appPermitTypeName &&
+            appPermitTypeName.toUpperCase() === condition.permit_type_name.toUpperCase()) {
+          console.log(`✅ Matched by permit_type_name: "${condition.permit_type_name}"`);
+          return { mode: condition.display_mode || 'table_with_quantity', condition };
+        }
+        
+        // Check by attribute_id
+        if (condition.attribute_id && appAttrId) {
+          console.log(`Comparing attribute_id: condition="${condition.attribute_id}" vs app="${appAttrId}"`);
+          if (String(appAttrId) === String(condition.attribute_id)) {
+            console.log(`✅ Matched by attribute_id: "${condition.attribute_id}"`);
+            return { mode: condition.display_mode || 'table_with_quantity', condition };
+          }
+        }
       }
       
-      // Check by permit_type_name
-      if (condition.permit_type_name && 
-          permitTypeData.permit_type_name && 
-          permitTypeData.permit_type_name.toUpperCase() === condition.permit_type_name.toUpperCase()) {
-        console.log(`✅ Matched condition by permit_type_name: ${condition.permit_type_name}`);
-        return { mode: condition.display_mode || 'table_with_quantity', condition };
-      }
-      
-      // Check by attribute_id
-      if (condition.attribute_id && 
-          permitTypeData.attribute_id === condition.attribute_id) {
-        console.log(`✅ Matched condition by attribute_id: ${condition.attribute_id}`);
-        return { mode: condition.display_mode || 'table_with_quantity', condition };
-      }
+      console.log('No matching conditions found in settings.');
+    } catch (parseError) {
+      console.error('Error parsing tabular display conditions:', parseError);
     }
-    
-    console.log('No matching conditions found, using default paragraph mode');
-    return { mode: 'paragraph' };
-  } catch (parseError) {
-    console.error('Error parsing tabular display conditions:', parseError);
-    return { mode: 'paragraph' };
+  } else {
+    console.log('No tabular display conditions configured in settings.');
   }
+
+  console.log('No matching conditions → paragraph mode');
+  return { mode: 'paragraph' };
 }
 
 /**
@@ -685,7 +768,7 @@ function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentF
   }
 }
 
-function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}, assessmentFees = []) {
+function generateReportHTML(data, settings = {}, applicationData = {}, permitTypeData = {}, paymentData = {}, assessmentFees = [], currentUserName = 'PAMS') {
   const now = new Date();
   const currentYear = now.getFullYear();
   const yearEndDate = new Date(currentYear, 11, 31); // December 31 of current year
@@ -777,9 +860,14 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - permitTypeData.permit_type_id:', permitTypeData.permit_type_id);
   console.log('  - permitTypeData.permit_type_name:', permitTypeData.permit_type_name);
   console.log('  - permitActivities (final value):', permitActivities);
+  console.log('  - assessmentFees count:', assessmentFees.length);
+  console.log('  - assessmentFees data:', assessmentFees);
+  assessmentFees.forEach((fee, i) => {
+    console.log(`    [${i}] fee_name="${fee.fee_name}" quantity=${fee.quantity} assessed_amount=${fee.assessed_amount}`);
+  });
   
   // Check if we should display activities in tabular format
-  const displayInfo = getPermitActivitiesDisplayMode(settings, permitTypeData);
+  const displayInfo = getPermitActivitiesDisplayMode(settings, permitTypeData, assessmentFees, applicationData);
   console.log('Step 6 - Display Mode:');
   console.log('  - displayInfo:', displayInfo);
   console.log('==========================================\n');
@@ -876,25 +964,60 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
     issueDate: now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   };
 
+  // ── Dynamic header from settings ─────────────────────────────────────────────
+  const getLogoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
+    return url;
+  };
+
+  const logoLeftUrl  = getLogoUrl(settings.permit_header_logo_left?.value)  || '/dalaguete-logo.png';
+  const logoRightUrl = getLogoUrl(settings.permit_header_logo_right?.value) || null;
+
+  // Logo height in px (20–120, default 50)
+  const hLogoH = Math.max(20, Math.min(120, parseFloat(settings.permit_header_logo_size?.value) || 50));
+
+  const hLine1 = settings.permit_header_line_1?.value !== undefined ? settings.permit_header_line_1.value : 'REPUBLIC OF THE PHILIPPINES';
+  const hLine2 = settings.permit_header_line_2?.value !== undefined ? settings.permit_header_line_2.value : 'MUNICIPALITY OF DALAGUETE';
+  const hLine3 = settings.permit_header_line_3?.value !== undefined ? settings.permit_header_line_3.value : 'PROVINCE OF CEBU';
+  const hLine4 = settings.permit_header_line_4?.value !== undefined ? settings.permit_header_line_4.value : 'OFFICE OF THE MUNICIPAL MAYOR';
+  const hLine5 = settings.permit_header_line_5?.value !== undefined ? settings.permit_header_line_5.value : 'Tel. # 520 4141 loc. 315';
+
+  // Base font size for header lines (px). Line 4 scales up by ~1.45x.
+  const hBasePx = Math.max(7, Math.min(20, parseFloat(settings.permit_header_font_size?.value) || 11));
+  const hLine4Px = Math.round(hBasePx * 1.45);
+
+  const headerTextLines = `
+    ${hLine1 ? `<div style="font-size: ${hBasePx}px; font-weight: bold;">${hLine1}</div>` : ''}
+    ${hLine2 ? `<div style="font-size: ${hBasePx}px; font-weight: bold;">${hLine2}</div>` : ''}
+    ${hLine3 ? `<div style="font-size: ${hBasePx}px; font-weight: bold;">${hLine3}</div>` : ''}
+    ${hLine4 ? `<div style="font-size: ${hLine4Px}px; font-weight: bold; margin-top: 2px;">${hLine4}</div>` : ''}
+    ${hLine5 ? `<div style="font-size: ${hBasePx}px; font-weight: bold; margin-top: 2px;">${hLine5}</div>` : ''}
+  `;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return `
     <div class="page" id="page-1">
       <div class="page-content">
         <!-- Header -->
         <div class="avoid-break" style="text-align: center; margin-bottom: 20px;">
-          <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 8px;">
-            <img src="/dalaguete-logo.png" alt="Logo" style="height: 50px; width: auto;">
-          </div>
-          <div style="text-align: center; line-height: 1.2;">
-            <div style="font-size: 11px; font-weight: bold;">REPUBLIC OF THE PHILIPPINES</div>
-            <div style="font-size: 11px; font-weight: bold;">MUNICIPALITY OF DALAGUETE</div>
-            <div style="font-size: 11px; font-weight: bold;">PROVINCE OF CEBU</div>
-            <div style="font-size: 16px; font-weight: bold; margin-top: 2px;">OFFICE OF THE MUNICIPAL MAYOR</div>
-            <div style="font-size: 11px; font-weight: bold; margin-top: 2px;">Tel. # 520 4141 loc. 315</div>
+          <div style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-bottom: 8px;">
+            ${logoLeftUrl ? `<img src="${logoLeftUrl}" alt="Logo" style="height: ${hLogoH}px; width: auto; object-fit: contain;">` : ''}
+            <div style="text-align: center; line-height: 1.2;">
+              ${headerTextLines}
+            </div>
+            ${logoRightUrl ? `<img src="${logoRightUrl}" alt="Logo 2" style="height: ${hLogoH}px; width: auto; object-fit: contain;">` : ''}
           </div>
         </div>
 
+        <!-- Permit Number (right-aligned, above permit title) -->
+        <div style="text-align: right; margin-bottom: 4px; font-size: 15px; color: #333;">
+          ${applicationData.permit_number ? `Permit No.: <strong>${applicationData.permit_number}</strong>` : '&nbsp;'}
+        </div>
+
         <!-- Permit Title -->
-        <div id="permit-title" class="avoid-break" style="text-align: center; margin-bottom: 30px; font-weight: bold; text-transform: uppercase; letter-spacing: 3px; white-space: nowrap;">
+        <div id="permit-title" class="avoid-break" style="text-align: center; margin-bottom: 8px; font-weight: bold; text-transform: uppercase; letter-spacing: 3px; white-space: nowrap;">
           ${permitTypeName}
         </div>
 
@@ -925,17 +1048,17 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
         <div class="avoid-break" style="margin-top: 60px; margin-left: 40px; margin-right: 40px; font-size: 18px; line-height: 1.8;">
           ${settings.permit_by_signatory_enabled?.value !== 'false' ? `
           <div style="margin-bottom: 20px;"><strong>BY:</strong></div>
-          <div style="margin-bottom: 5px;">
+          <div style="margin-bottom: 5px; line-height: 1.2;">
             <div style="font-weight: bold; text-transform: uppercase;">${settings.permit_by_signatory_name?.value || 'NAME'}</div>
-            <div style="text-transform: uppercase;">${settings.permit_by_signatory_title?.value || 'POSITION'}</div>
+            <div style="text-transform: uppercase; font-size: 14px;">${settings.permit_by_signatory_title?.value || 'POSITION'}</div>
           </div>
           ` : ''}
           <div style="margin-top: 30px; margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
-          <div style="margin-bottom: 5px;">
+          <div style="margin-bottom: 5px; line-height: 1.2;">
             <div style="font-weight: bold;">${settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA'}</div>
-            <div style="font-weight: normal;">${settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR'}</div>
+            <div style="font-weight: normal; font-size: 14px;">${settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR'}</div>
           </div>
-          <div style="margin-top: 20px; font-size: 10px; line-height: 1.2;">
+          <div style="margin-top: 20px; font-size: 14px; line-height: 1.2;">
             <div>PAID: ₱ ${paymentData.amount ? parseFloat(paymentData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '18,700.00'}</div>
             <div>O.R. NO: ${paymentData.official_receipt_no || '1238282'}</div>
             <div>DATE: ${paymentData.payment_date ? new Date(paymentData.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
@@ -946,7 +1069,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
 
       <!-- Footer -->
       <div class="page-footer">
-        <div>Generated by PAMS | Permit and Assessment Management System | Issued: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} | Page <span class="page-number">1</span> of <span class="total-pages">1</span></div>
+        <div>Generated by: ${currentUserName} | Permit and Assessment Management System | Issued: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} | Page <span class="page-number">1</span> of <span class="total-pages">1</span></div>
       </div>
     </div>
   `;
@@ -1076,56 +1199,86 @@ function showError(message) {
   document.getElementById('loading').classList.add('hidden');
 }
 
-// Generate Jasper Report PDF
-async function generateJasperReportPDF() {
-  const jasperBtn = document.getElementById('jasperBtn');
-  const jasperError = document.getElementById('jasperError');
-  
+// Generate PDF via Puppeteer (server-side)
+async function generateReportPDF() {
+  const reportPdfBtn = document.getElementById('reportPdfBtn');
+  const reportError = document.getElementById('reportError');
+
   try {
-    jasperBtn.disabled = true;
-    jasperBtn.innerHTML = '⏳ Generating report...';
-    jasperError.classList.remove('show');
-    
-    // Post to backend to generate report
-    const response = await fetch(`${apiBaseUrl}/api/reports/generate`, {
+    const reportContent = document.getElementById('report-content');
+    if (!reportContent || reportContent.classList.contains('hidden')) {
+      throw new Error('Report not loaded yet. Wait for the permit to load first.');
+    }
+
+    reportPdfBtn.disabled = true;
+    reportPdfBtn.innerHTML = '⏳ Generating PDF...';
+    reportError.classList.remove('show');
+
+    // Collect all <style> blocks from the page for embedding
+    const styleText = Array.from(document.querySelectorAll('style'))
+      .map(s => s.innerHTML).join('\n');
+
+    // Build a self-contained HTML document for Puppeteer
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+${styleText}
+body { background: white; margin: 0; padding: 0; }
+.controls { display: none !important; }
+#report-container { box-shadow: none; margin: 0; max-width: 100%; }
+.page { box-shadow: none; margin: 0; }
+</style>
+</head>
+<body>
+<div id="report-container">
+${reportContent.innerHTML}
+</div>
+</body>
+</html>`;
+
+    const meta = window.permitReportMeta || {};
+    const businessName = (meta.businessName || 'Permit').replace(/[^a-zA-Z0-9]/g, '_');
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `Permit_${businessName}_${date}.pdf`;
+
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       },
-      body: JSON.stringify({
-        templateName: 'permits',
-        format: 'pdf',
-        applicationId: applicationId
-      })
+      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal' })
     });
-    
+
     if (!response.ok) {
-      throw new Error(`Failed to generate PDF report`);
+      const err = await response.json().catch(() => ({ error: 'Server error' }));
+      throw new Error(err.error || `HTTP ${response.status}`);
     }
-    
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `permit-report_${new Date().toISOString().split('T')[0]}.pdf`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-    
-    // Show success
-    jasperBtn.innerHTML = '✅ Report generated!';
+
+    reportPdfBtn.innerHTML = '✅ Downloaded!';
     setTimeout(() => {
-      jasperBtn.innerHTML = '📊 Generate Permit Report (PDF)';
-      jasperBtn.disabled = false;
+      reportPdfBtn.innerHTML = '📄 Download PDF';
+      reportPdfBtn.disabled = false;
     }, 2000);
+
   } catch (error) {
-    jasperError.textContent = `Error: ${error.message}`;
-    jasperError.classList.add('show');
-    setTimeout(() => jasperError.classList.remove('show'), 5000);
-    jasperBtn.innerHTML = '📊 Generate Permit Report (PDF)';
-    jasperBtn.disabled = false;
+    reportError.textContent = `Error: ${error.message}`;
+    reportError.classList.add('show');
+    setTimeout(() => reportError.classList.remove('show'), 5000);
+    reportPdfBtn.innerHTML = '📄 Download PDF';
+    reportPdfBtn.disabled = false;
   }
 }
 </script>

@@ -47,9 +47,9 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState('');
   const [status, setStatus] = useState('');
 
-  // Jasper report generation state
+  // Report generation state
   const [generatingFormat, setGeneratingFormat] = useState<string | null>(null);
-  const [jasperError, setJasperError] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   // Fetch attributes for filter
   useEffect(() => {
@@ -236,17 +236,17 @@ export default function ReportsPage() {
     window.URL.revokeObjectURL(url);
   };
 
-  // Generate Jasper Report
-  const handleGenerateJasperReport = async (format: 'pdf' | 'html' | 'csv' | 'xlsx') => {
+  // Generate Report
+  const handleGenerateReport = async (format: 'pdf' | 'html' | 'csv' | 'xlsx') => {
     if (reportData.length === 0) {
-      setJasperError('No data to export. Please apply filters or ensure data exists.');
-      setTimeout(() => setJasperError(null), 3000);
+      setReportError('No data to export. Please apply filters or ensure data exists.');
+      setTimeout(() => setReportError(null), 3000);
       return;
     }
 
     try {
       setGeneratingFormat(format);
-      setJasperError(null);
+      setReportError(null);
 
       // Call the backend report generation endpoint
       const response = await api.post('/reports/generate', {
@@ -286,9 +286,9 @@ export default function ReportsPage() {
       console.log(`✅ Report generated successfully in ${format.toUpperCase()} format`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to generate report';
-      setJasperError(`Error generating ${format.toUpperCase()} report: ${errorMsg}`);
+      setReportError(`Error generating ${format.toUpperCase()} report: ${errorMsg}`);
       console.error('Report generation error:', err);
-      setTimeout(() => setJasperError(null), 5000);
+      setTimeout(() => setReportError(null), 5000);
     } finally {
       setGeneratingFormat(null);
     }
@@ -422,16 +422,16 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Jasper Report Generation Section */}
+          {/* Report Generation Section */}
           <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg shadow-md p-6 mb-6 border border-indigo-200">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span>📄</span> Generate Professional Report (Jasper)
+              <span>📄</span> Generate Professional Report
             </h2>
 
-            {jasperError && (
+            {reportError && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
                 <span>⚠️</span>
-                <span>{jasperError}</span>
+                <span>{reportError}</span>
               </div>
             )}
 
@@ -441,7 +441,7 @@ export default function ReportsPage() {
 
             <div className="flex flex-wrap gap-3">
               <button
-                onClick={() => handleGenerateJasperReport('html')}
+                onClick={() => handleGenerateReport('html')}
                 disabled={generatingFormat !== null}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
               >
@@ -458,7 +458,7 @@ export default function ReportsPage() {
               </button>
 
               <button
-                onClick={() => handleGenerateJasperReport('pdf')}
+                onClick={() => handleGenerateReport('pdf')}
                 disabled={generatingFormat !== null}
                 className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
               >
@@ -475,7 +475,7 @@ export default function ReportsPage() {
               </button>
 
               <button
-                onClick={() => handleGenerateJasperReport('csv')}
+                onClick={() => handleGenerateReport('csv')}
                 disabled={generatingFormat !== null}
                 className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
               >
@@ -492,7 +492,7 @@ export default function ReportsPage() {
               </button>
 
               <button
-                onClick={() => handleGenerateJasperReport('xlsx')}
+                onClick={() => handleGenerateReport('xlsx')}
                 disabled={generatingFormat !== null}
                 className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg transition font-medium flex items-center gap-2 shadow-sm hover:shadow-md"
               >

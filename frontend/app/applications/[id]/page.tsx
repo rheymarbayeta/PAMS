@@ -57,6 +57,7 @@ export default function ApplicationDetailPage() {
   const { user, hasRole } = useAuth();
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<Record<string, { value: string }>>({});
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [releaseData, setReleaseData] = useState({ released_by: '', received_by: '' });
   const [releasing, setReleasing] = useState(false);
@@ -68,8 +69,31 @@ export default function ApplicationDetailPage() {
   useEffect(() => {
     if (params.id) {
       fetchApplication();
+      fetchSettings();
     }
   }, [params.id]);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await api.get('/api/settings');
+      setSettings(res.data || {});
+    } catch (e) {
+      // non-critical, ignore
+    }
+  };
+
+  const getPermitTemplateUrl = (app: ApplicationDetail, token: string): string => {
+    const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+    const attrName = (app.attribute_name || '').trim().toUpperCase();
+    const mahjongAttrs = (settings.permit_mahjong_template_attributes?.value || '')
+      .split(',')
+      .map((s: string) => s.trim().toUpperCase())
+      .filter(Boolean);
+    if (mahjongAttrs.length > 0 && mahjongAttrs.includes(attrName)) {
+      return `/mahjong-permit.html?id=${app.application_id}${encodedToken}`;
+    }
+    return `/permit-report.html?id=${app.application_id}${encodedToken}`;
+  };
 
   const fetchApplication = async () => {
     try {
@@ -128,10 +152,9 @@ export default function ApplicationDetailPage() {
     setIssuing(true);
     try {
       await api.put(`/api/applications/${application.application_id}/issue`);
-      // Open permit report in new tab
+      // Open permit report in new tab (choose template based on attribute)
       const token = localStorage.getItem('token') || '';
-      const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
-      const url = `/permit-report.html?id=${application.application_id}${encodedToken}`;
+      const url = getPermitTemplateUrl(application, token);
       window.open(url, '_blank');
       fetchApplication();
     } catch (error: any) {
@@ -297,8 +320,7 @@ export default function ApplicationDetailPage() {
                               <button
                                 onClick={() => {
                                   const token = localStorage.getItem('token') || '';
-                                  const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
-                                  const url = `/permit-report.html?id=${application.application_id}${encodedToken}`;
+                                  const url = getPermitTemplateUrl(application, token);
                                   window.open(url, '_blank');
                                   setShowReportsDropdown(false);
                                 }}

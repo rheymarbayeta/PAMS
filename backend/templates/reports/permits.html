@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Permit Issuance Report</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #333;
+    background: #fff;
+  }
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 15mm 15mm 15mm 15mm;
+    margin: 0 auto;
+  }
+  /* Header */
+  .report-header {
+    background-color: #1F4788;
+    color: #fff;
+    padding: 14px 18px;
+    margin-bottom: 6px;
+  }
+  .report-header h1 {
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+  .report-header .subtitle {
+    font-size: 11px;
+    margin-top: 4px;
+    opacity: 0.85;
+  }
+  /* Meta row */
+  .report-meta {
+    display: flex;
+    justify-content: space-between;
+    background: #f0f4fb;
+    border: 1px solid #c8d4e8;
+    padding: 6px 12px;
+    font-size: 10px;
+    color: #555;
+    margin-bottom: 10px;
+  }
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+  thead tr {
+    background-color: #1F4788;
+    color: #fff;
+  }
+  thead th {
+    padding: 7px 8px;
+    text-align: left;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  tbody tr:nth-child(even) {
+    background-color: #f5f7fa;
+  }
+  tbody tr:hover {
+    background-color: #ebf0fa;
+  }
+  tbody td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e0e6f0;
+    vertical-align: top;
+  }
+  /* Summary footer */
+  .summary {
+    margin-top: 14px;
+    background: #E8E8E8;
+    border: 1px solid #c8cfd8;
+    padding: 10px 14px;
+    display: flex;
+    gap: 40px;
+    font-size: 11px;
+  }
+  .summary .summary-item strong {
+    font-size: 13px;
+    color: #1F4788;
+  }
+  .summary .summary-item span {
+    display: block;
+    font-size: 9px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 2px;
+  }
+  .status-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  .status-approved    { background:#d4edda; color:#155724; }
+  .status-pending     { background:#fff3cd; color:#856404; }
+  .status-rejected    { background:#f8d7da; color:#721c24; }
+  .status-draft       { background:#e2e3e5; color:#383d41; }
+  .status-other       { background:#d1ecf1; color:#0c5460; }
+  .amount { text-align: right; font-variant-numeric: tabular-nums; }
+  @media print {
+    .page { padding: 10mm; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="report-header">
+    <h1>Permit Issuance Report</h1>
+    <div class="subtitle">Permit and Business Application Management System (PAMS)</div>
+  </div>
+
+  <div class="report-meta">
+    <span>Generated: {{generatedAt}}</span>
+    <span>Prepared by: {{generatedBy}}</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>App. No.</th>
+        <th>Business Name</th>
+        <th>Owner</th>
+        <th>Address</th>
+        <th>Permit Type</th>
+        <th>Status</th>
+        <th>Amount Due</th>
+        <th>Balance Due</th>
+        <th>Date Filed</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{rows}}
+    </tbody>
+  </table>
+
+  <div class="summary">
+    <div class="summary-item">
+      <span>Total Records</span>
+      <strong>{{totalRecords}}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Total Amount Due</span>
+      <strong>{{totalAmount}}</strong>
+    </div>
+  </div>
+</div>
+</body>
+</html>

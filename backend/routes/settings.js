@@ -2,6 +2,29 @@ const express = require('express');
 const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const logosDir = path.join(__dirname, '..', 'uploads', 'logos');
+fs.mkdirSync(logosDir, { recursive: true });
+
+const logoStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, logosDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.png';
+    cb(null, `logo_${Date.now()}${ext}`);
+  }
+});
+const logoUpload = multer({
+  storage: logoStorage,
+  fileFilter: (req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype))
+      cb(null, true);
+    else cb(new Error('Only image files are accepted'));
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 const router = express.Router();
 
@@ -113,6 +136,24 @@ router.get('/:key', authenticate, async (req, res) => {
     console.error('Get setting error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Upload logo (admin only) — POST /api/settings/upload-logo
+router.post('/upload-logo', authenticate, authorize('SuperAdmin', 'Admin'), (req, res) => {
+  logoUpload.single('logo')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    res.json({ url: `/api/settings/logo/${req.file.filename}`, filename: req.file.filename });
+  });
+});
+
+// Serve logo file (no auth — needed for print/PDF rendering)
+router.get('/logo/:filename', (req, res) => {
+  const { filename } = req.params;
+  if (!/^[a-zA-Z0-9._-]+$/.test(filename)) return res.status(400).json({ error: 'Invalid filename' });
+  const filePath = path.join(logosDir, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Logo not found' });
+  res.sendFile(filePath);
 });
 
 module.exports = router;

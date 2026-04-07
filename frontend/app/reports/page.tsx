@@ -97,9 +97,9 @@ export default function ReportsPage() {
   const [permitCategories, setPermitCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
 
-  // Jasper report generation state
+  // Report generation state
   const [generatingFormat, setGeneratingFormat] = useState<string | null>(null);
-  const [jasperError, setJasperError] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPermitCategories();
@@ -282,18 +282,18 @@ export default function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  // Generate Jasper Report
-  const handleGenerateJasperReport = async (format: 'pdf' | 'html' | 'csv' | 'xlsx') => {
+  // Generate Report
+  const handleGenerateReport = async (format: 'pdf' | 'html' | 'csv' | 'xlsx') => {
     const filteredData = getFilteredApplications();
     if (filteredData.length === 0) {
-      setJasperError('No data to export. Please adjust your filters.');
-      setTimeout(() => setJasperError(null), 3000);
+      setReportError('No data to export. Please adjust your filters.');
+      setTimeout(() => setReportError(null), 3000);
       return;
     }
 
     try {
       setGeneratingFormat(format);
-      setJasperError(null);
+      setReportError(null);
 
       // Call the backend report generation endpoint
       const response = await api.post('/reports/generate', {
@@ -329,9 +329,9 @@ export default function ReportsPage() {
       console.log(`✅ Report generated successfully in ${format.toUpperCase()} format`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to generate report';
-      setJasperError(`Error generating ${format.toUpperCase()} report: ${errorMsg}`);
+      setReportError(`Error generating ${format.toUpperCase()} report: ${errorMsg}`);
       console.error('Report generation error:', err);
-      setTimeout(() => setJasperError(null), 5000);
+      setTimeout(() => setReportError(null), 5000);
     } finally {
       setGeneratingFormat(null);
     }
@@ -480,11 +480,11 @@ export default function ReportsPage() {
                     <span className="hidden sm:inline">Export</span>
                   </button>
 
-                  {/* Jasper Report Dropdown */}
+                  {/* Report Dropdown */}
                   <div className="relative group">
                     <button
                       className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-700 hover:from-indigo-100 hover:to-blue-100 transition-all duration-200"
-                      title="Generate Jasper Report"
+                      title="Generate Report"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -498,28 +498,28 @@ export default function ReportsPage() {
                     <div className="hidden group-hover:block absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
                       <div className="p-2 space-y-1">
                         <button
-                          onClick={() => handleGenerateJasperReport('html')}
+                          onClick={() => handleGenerateReport('html')}
                           disabled={generatingFormat !== null}
                           className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {generatingFormat === 'html' ? '⏳ Generating HTML...' : '🌐 HTML Report'}
                         </button>
                         <button
-                          onClick={() => handleGenerateJasperReport('pdf')}
+                          onClick={() => handleGenerateReport('pdf')}
                           disabled={generatingFormat !== null}
                           className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {generatingFormat === 'pdf' ? '⏳ Generating PDF...' : '📕 PDF Report'}
                         </button>
                         <button
-                          onClick={() => handleGenerateJasperReport('csv')}
+                          onClick={() => handleGenerateReport('csv')}
                           disabled={generatingFormat !== null}
                           className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {generatingFormat === 'csv' ? '⏳ Generating CSV...' : '📊 CSV Report'}
                         </button>
                         <button
-                          onClick={() => handleGenerateJasperReport('xlsx')}
+                          onClick={() => handleGenerateReport('xlsx')}
                           disabled={generatingFormat !== null}
                           className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -531,12 +531,12 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {jasperError && (
+              {reportError && (
                 <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
                   <svg className="h-5 w-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
-                  <span>{jasperError}</span>
+                  <span>{reportError}</span>
                 </div>
               )}
 

@@ -221,6 +221,15 @@ export default function NewApplicationPage() {
     (r) => r.rule_id === formData.rule_id
   );
 
+  const getDefaultParameters = (attributeName: string) => {
+    const isMahjong = (attributeName || '').trim().toLowerCase() === 'mahjong';
+    return [
+      { param_name: isMahjong ? 'Location' : 'Date', param_value: '' },
+      { param_name: isMahjong ? 'Color' : 'Conduct/engage in', param_value: '' },
+      { param_name: 'Attachment', param_value: '' },
+    ];
+  };
+
   if (!canCreate) {
     return (
       <ProtectedRoute>
@@ -360,7 +369,8 @@ export default function NewApplicationPage() {
                   setFormData({ 
                     ...formData, 
                     rule_id: e.target.value,
-                    permit_type: selectedRule ? selectedRule.rule_name : ''
+                    permit_type: selectedRule ? selectedRule.rule_name : '',
+                    parameters: getDefaultParameters(selectedRule?.attribute_name || ''),
                   });
                 }}
                 aria-label="Select permit type"

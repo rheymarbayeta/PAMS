@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background-color: #f5f5f5;
+    font-family: 'Cambria', 'Noto Serif', 'Georgia', serif;
+  }
+  #report-container { max-width: 8.5in; margin: 20px auto; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .loading { padding: 40px; text-align: center; font-size: 18px; color: #666; }
+  .error { padding: 20px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404; margin: 20px; }
+  .controls {
+    padding: 15px; background-color: #f8f9fa; border-bottom: 1px solid #dee2e6;
+    text-align: right; position: sticky; top: 0; z-index: 100;
+  }
+  .btn { padding: 8px 16px; margin-left: 5px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+  .btn-print { background-color: #28a745; }
+  .btn-print:hover { background-color: #1e7e34; }
+  .report-pdf-btn { padding: 8px 16px; margin-left: 5px; background-color: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+  .report-pdf-btn:hover:not(:disabled) { background-color: #4f46e5; }
+  .report-pdf-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+  .report-error { padding: 12px; background-color: #fee; border: 1px solid #fcc; border-radius: 4px; color: #c33; margin: 10px 15px; font-size: 13px; display: none; }
+  .report-error.show { display: block; }
+  .page {
+    width: 8.5in; height: 13in;
+    padding: 0.5in; padding-bottom: 0.75in;
+    margin: 0 auto 20px auto;
+    background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative; page-break-after: always; box-sizing: border-box; overflow: hidden;
+  }
+  .page:last-child { page-break-after: avoid; }
+  .page-footer {
+    position: absolute; bottom: 0.35in; left: 0.5in; right: 0.5in;
+    padding-top: 6px; border-top: 1px solid #ccc;
+    text-align: center; font-size: 8px; color: #666;
+  }
+  .hidden { display: none; }
+  .avoid-break { page-break-inside: avoid; }
+  @page { size: 8.5in 13in portrait; margin: 0; }
+  @media print {
+    body { background: white; margin: 0; padding: 0; }
+    #report-container { box-shadow: none; margin: 0; max-width: 100%; }
+    .controls { display: none !important; }
+    .page { box-shadow: none; margin: 0; width: 8.5in; height: 13in; page-break-after: always; overflow: hidden; }
+    .page:last-child { page-break-after: avoid; }
+  }
+</style>
+<title>Mahjong Permit Report</title>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn btn-print" onclick="printReport()">🖨️ Print</button>
+    <button class="report-pdf-btn" id="reportPdfBtn" onclick="generateReportPDF()">📄 Download PDF</button>
+    <div id="reportError" class="report-error"></div>
+  </div>
+  <div id="loading" class="loading"><p>Loading permit report...</p></div>
+  <div id="error" class="error hidden"></div>
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const applicationId = urlParams.get('id') || urlParams.get('applicationId');
+const authToken = urlParams.get('token') || localStorage.getItem('token') || '';
+
+let apiBaseUrl = '';
+if (typeof window !== 'undefined') {
+  const origin = window.location.origin;
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    apiBaseUrl = 'http://localhost:5000';
+  } else if (origin.includes(':6070')) {
+    apiBaseUrl = origin.replace(':6070', ':5040');
+  } else if (origin.includes(':3000')) {
+    apiBaseUrl = origin.replace(':3000', ':5000');
+  } else {
+    apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (!applicationId) {
+    showError('No application ID provided. Please pass ?id=<applicationId> in the URL.');
+    return;
+  }
+  fetchPermitReport();
+});
+
+async function fetchPermitReport() {
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const [applicationResponse, settingsResponse] = await Promise.all([
+      fetch(`${apiBaseUrl}/api/applications/${applicationId}`, { method: 'GET', headers, credentials: 'include' }),
+      fetch(`${apiBaseUrl}/api/settings`, { method: 'GET', headers, credentials: 'include' })
+    ]);
+
+    if (!applicationResponse.ok) {
+      if (applicationResponse.status === 401) throw new Error('Unauthorized. Please login again.');
+      if (applicationResponse.status === 404) throw new Error('Application not found.');
+      throw new Error(`HTTP Error: ${applicationResponse.status}`);
+    }
+
+    const applicationData = await applicationResponse.json();
+    const settings = settingsResponse.ok ? await settingsResponse.json() : {};
+
+    // Fetch permit type data
+    let permitTypeData = {};
+    if (applicationData.permit_type_id) {
+      try {
+        const ptRes = await fetch(`${apiBaseUrl}/api/permit-types/${applicationData.permit_type_id}`, { method: 'GET', headers, credentials: 'include' });
+        if (ptRes.ok) permitTypeData = await ptRes.json();
+      } catch (e) { console.warn('Could not fetch permit type:', e); }
+    }
+
+    // Fetch payment data
+    let paymentData = {};
+    try {
+      const payRes = await fetch(`${apiBaseUrl}/api/applications/${applicationId}/payment`, { method: 'GET', headers, credentials: 'include' });
+      if (payRes.ok) {
+        const payments = await payRes.json();
+        if (payments && payments.length > 0) paymentData = payments[0];
+      }
+    } catch (e) { console.warn('Could not fetch payment:', e); }
+
+    // Fetch current user name
+    let currentUserName = 'PAMS';
+    try {
+      const meRes = await fetch(`${apiBaseUrl}/api/auth/me`, { method: 'GET', headers, credentials: 'include' });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.full_name) currentUserName = meData.full_name;
+      }
+    } catch (e) { console.warn('Could not fetch user:', e); }
+
+    const assessmentFees = applicationData.assessed_fees || [];
+
+    renderReport(settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName);
+  } catch (error) {
+    console.error('Error fetching permit data:', error);
+    showError(`Failed to load permit report: ${error.message}`);
+  }
+}
+
+function numberToWords(n) {
+  const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+                 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN',
+                 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+  if (n <= 0 || !Number.isInteger(n)) return String(n);
+  if (n < 20) return ones[n];
+  if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? '-' + ones[n % 10] : '');
+  return String(n);
+}
+
+function renderReport(settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName) {
+  const reportHTML = generateReportHTML(settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName);
+  document.getElementById('report-content').innerHTML = reportHTML;
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('report-content').classList.remove('hidden');
+  setTimeout(() => adjustPermitTitleSize(), 150);
+}
+
+function adjustPermitTitleSize() {
+  const titleElement = document.getElementById('permit-title');
+  if (!titleElement) return;
+  const container = titleElement.parentElement;
+  const maxWidth = container.offsetWidth - 80;
+  let fontSize = 70;
+  const minFontSize = 36;
+  titleElement.style.fontSize = fontSize + 'px';
+  while (titleElement.scrollWidth > maxWidth && fontSize > minFontSize) {
+    fontSize -= 2;
+    titleElement.style.fontSize = fontSize + 'px';
+  }
+}
+
+function generateReportHTML(settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const yearEndDate = new Date(currentYear, 11, 31);
+
+  const formatDateWithOrdinal = (date) => {
+    const day = date.getDate();
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear();
+    let ordinal = 'th';
+    if (day % 10 === 1 && day !== 11) ordinal = 'st';
+    else if (day % 10 === 2 && day !== 12) ordinal = 'nd';
+    else if (day % 10 === 3 && day !== 13) ordinal = 'rd';
+    return `${day}<sup>${ordinal}</sup> day of ${month} ${year}`;
+  };
+
+  // ── Extract parameters ────────────────────────────────────────────────────
+  const parameters = applicationData.parameters || [];
+  let barangay = 'Poblacion';
+  let municipality = 'Dalaguete';
+  let province = 'Cebu';
+  let street = '';
+  let locationParam = '';
+  let colorParam = '';
+  let permitStartDate = null;
+
+  parameters.forEach(param => {
+    const name = (param.param_name || '').toLowerCase();
+    const value = param.param_value || '';
+    if (name.includes('barangay'))          barangay      = value;
+    if (name.includes('municipality'))      municipality  = value;
+    if (name.includes('province'))          province      = value;
+    if (name.includes('street') || name.includes('sitio')) street = value;
+    if (name === 'location')               locationParam = value;
+    if (name.includes('color'))            colorParam    = value;
+    if (name.includes('date') && !name.includes('birth')) permitStartDate = value;
+  });
+
+  // Complete address: Sitio/Street, Barangay, Municipality
+  const addressParts = [street, barangay, municipality].filter(Boolean);
+  const businessAddress = addressParts.length > 0 ? addressParts.join(', ') : `${barangay}, ${municipality}`;
+
+  // ── Mahjong table count from assessed fees ────────────────────────────────
+  const businessName = applicationData.entity_name || 'N/A';
+  const mahjongFee = assessmentFees.find(f => (f.fee_name || '').toLowerCase().includes('mahjong'));
+  const tableCount = (mahjongFee?.quantity) || (assessmentFees[0]?.quantity) || 1;
+  const tableCountWords = numberToWords(parseInt(tableCount) || 1);
+
+  // ── Validity date ─────────────────────────────────────────────────────────
+  const validityDateStr = yearEndDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // ── Settings: PNP Chief ───────────────────────────────────────────────────
+  const pnpChiefName = settings.permit_pnp_chief_name?.value || '';
+
+  // ── Permit type name ──────────────────────────────────────────────────────
+  const permitTypeName = permitTypeData.permit_type_name || applicationData.permit_type || 'SPECIAL MAYOR\'S PERMIT';
+
+  // ── Dynamic header ────────────────────────────────────────────────────────
+  const getLogoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
+    return url;
+  };
+  const logoLeftUrl  = getLogoUrl(settings.permit_header_logo_left?.value)  || '/dalaguete-logo.png';
+  const logoRightUrl = getLogoUrl(settings.permit_header_logo_right?.value) || null;
+  const hLogoH   = Math.max(20, Math.min(120, parseFloat(settings.permit_header_logo_size?.value) || 50));
+  const hLine1   = settings.permit_header_line_1?.value !== undefined ? settings.permit_header_line_1.value : 'REPUBLIC OF THE PHILIPPINES';
+  const hLine2   = settings.permit_header_line_2?.value !== undefined ? settings.permit_header_line_2.value : 'MUNICIPALITY OF DALAGUETE';
+  const hLine3   = settings.permit_header_line_3?.value !== undefined ? settings.permit_header_line_3.value : 'PROVINCE OF CEBU';
+  const hLine4   = settings.permit_header_line_4?.value !== undefined ? settings.permit_header_line_4.value : 'OFFICE OF THE MUNICIPAL MAYOR';
+  const hLine5   = settings.permit_header_line_5?.value !== undefined ? settings.permit_header_line_5.value : 'Tel. # 520 4141 loc. 315';
+  const hBasePx  = Math.max(7, Math.min(20, parseFloat(settings.permit_header_font_size?.value) || 11));
+  const hLine4Px = Math.round(hBasePx * 1.45);
+
+  const headerTextLines = `
+    ${hLine1 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine1}</div>` : ''}
+    ${hLine2 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine2}</div>` : ''}
+    ${hLine3 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine3}</div>` : ''}
+    ${hLine4 ? `<div style="font-size:${hLine4Px}px;font-weight:bold;margin-top:2px;">${hLine4}</div>` : ''}
+    ${hLine5 ? `<div style="font-size:${hBasePx}px;font-weight:bold;margin-top:2px;">${hLine5}</div>` : ''}
+  `;
+
+  // ── Permit number ─────────────────────────────────────────────────────────
+  const permitNumberHtml = applicationData.permit_number
+    ? `<div style="text-align:right;margin-bottom:4px;font-size:15px;color:#333;">Permit No.: <strong>${applicationData.permit_number}</strong></div>`
+    : `<div style="margin-bottom:4px;">&nbsp;</div>`;
+
+  // ── Signatory ─────────────────────────────────────────────────────────────
+  const bySignatoryEnabled = settings.permit_by_signatory_enabled?.value !== 'false';
+  const byName    = settings.permit_by_signatory_name?.value  || 'NAME';
+  const byTitle   = settings.permit_by_signatory_title?.value || 'POSITION';
+  const aprvName  = settings.permit_signatory_name?.value     || 'HON. NELIN B. TAMBIS, CPA, MPA';
+  const aprvTitle = settings.permit_signatory_title?.value    || 'MUNICIPAL MAYOR';
+
+  // ── Payment ───────────────────────────────────────────────────────────────
+  const paidAmount = paymentData.amount
+    ? `₱ ${parseFloat(paymentData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : '₱ 0.00';
+  const orNumber  = paymentData.official_receipt_no || '—';
+  const paidDate  = paymentData.payment_date
+    ? new Date(paymentData.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Store metadata for PDF generation
+  window.permitReportMeta = {
+    permitTypeName,
+    businessName,
+    issueDate: now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  };
+
+  return `
+    <div class="page" id="page-1">
+      <div class="page-content">
+
+        <!-- Header -->
+        <div class="avoid-break" style="text-align:center;margin-bottom:20px;">
+          <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:8px;">
+            ${logoLeftUrl ? `<img src="${logoLeftUrl}" alt="Logo" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+            <div style="text-align:center;line-height:1.2;">${headerTextLines}</div>
+            ${logoRightUrl ? `<img src="${logoRightUrl}" alt="Logo 2" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+          </div>
+        </div>
+
+        <!-- Permit Number -->
+        ${permitNumberHtml}
+
+        <!-- Permit Title -->
+        <div id="permit-title" class="avoid-break" style="text-align:center;margin-bottom:16px;font-weight:bold;text-transform:uppercase;text-decoration:underline;letter-spacing:2px;white-space:nowrap;">
+          ${permitTypeName}
+        </div>
+
+        <!-- IS HEREBY GRANTED TO -->
+        <div style="text-align:center;margin-bottom:20px;font-size:16px;font-weight:bold;text-transform:uppercase;">
+          IS HEREBY GRANTED TO
+        </div>
+
+        <!-- Applicant Name -->
+        <div style="text-align:center;margin-bottom:6px;font-size:25px;font-weight:bold;text-decoration:underline;text-transform:uppercase;">
+          ${businessName}
+        </div>
+
+        <!-- Address block -->
+        <div style="text-align:center;margin-bottom:4px;font-size:15px;">
+          <strong>Address : ${businessAddress}</strong>
+        </div>
+        <div style="text-align:center;margin-bottom:4px;font-size:14px;font-style:italic;">
+          <strong>(LOCATED at the house of the permittee)</strong>
+        </div>
+        ${locationParam ? `
+        <div style="text-align:center;margin-bottom:16px;font-size:14px;">
+          <strong>( ${locationParam} )</strong>
+        </div>` : '<div style="margin-bottom:16px;"></div>'}
+
+        <!-- Body -->
+        <div style="text-align:justify;font-size:16px;line-height:1.7;margin-left:40px;margin-right:40px;margin-top:20px;">
+          <p style="text-indent:40px;">
+            To operate Family Entertainment business like <strong>MAHJONG GAME</strong> &ndash; with
+            <strong>${tableCountWords} (${tableCount}) SET MAHJONG TABLE</strong>
+            ${colorParam ? `with <strong>${colorParam.toUpperCase()}</strong> color mahjong tiles` : ''}
+            which is located at <strong>${businessAddress}</strong>
+            provided that implementing rules and regulations of the Local Government Code is strictly observed.
+          </p>
+
+          <p style="margin-top:20px;text-indent:40px;">
+            This permit shall valid until <strong>${validityDateStr}</strong> unless sooner revoked for a
+            cause as provided by law, ordinance and regulations or when public interests so demand.
+          </p>
+
+          <p style="margin-top:30px;text-indent:0;">
+            Given this <strong>${formatDateWithOrdinal(now)}</strong> at Municipal Hall, Dalaguete, Cebu, Philippines.
+          </p>
+        </div>
+
+        <!-- Signatory Section: REVIEWED BY / APPROVED BY side-by-side -->
+        <div style="margin-top:40px;margin-left:40px;margin-right:40px;font-size:16px;">
+          <div style="display:flex;justify-content:space-between;gap:40px;">
+            <!-- Left: REVIEWED BY -->
+            <div style="flex:1;">
+              ${bySignatoryEnabled ? `
+              <div style="margin-bottom:16px;font-weight:bold;">REVIEWED BY:</div>
+              <div style="font-weight:bold;text-transform:uppercase;text-decoration:underline;">${byName}</div>
+              <div style="font-size:13px;text-transform:uppercase;">${byTitle}</div>
+              ` : ''}
+            </div>
+            <!-- Right: APPROVED BY -->
+            <div style="flex:1;">
+              <div style="margin-bottom:16px;font-weight:bold;">APPROVED BY:</div>
+              <div style="font-weight:bold;text-transform:uppercase;text-decoration:underline;">${aprvName}</div>
+              <div style="font-size:13px;text-transform:uppercase;">${aprvTitle}</div>
+            </div>
+          </div>
+
+          <!-- Payment Info -->
+          <div style="margin-top:24px;font-size:14px;line-height:1.6;">
+            <div><strong>Paid:</strong> ${paidAmount}</div>
+            <div><strong>O.R. NO:</strong> ${orNumber}</div>
+            <div><strong>Date:</strong> ${paidDate}</div>
+            <div>Dalaguete, Cebu</div>
+          </div>
+
+          <!-- PNP Chief -->
+          ${pnpChiefName ? `
+          <div style="margin-top:24px;font-size:14px;line-height:1.6;">
+            <div style="font-weight:bold;text-decoration:underline;">${pnpChiefName}</div>
+            <div>CC: OIC Dalaguete Police Station</div>
+            <div>Dalaguete, Cebu</div>
+          </div>` : ''}
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="page-footer">
+        <div>Generated by: ${currentUserName} | Permit and Assessment Management System | Issued: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} | Page 1 of 1</div>
+      </div>
+    </div>
+  `;
+}
+
+function printReport() { window.print(); }
+
+function showError(message) {
+  document.getElementById('error').textContent = message;
+  document.getElementById('error').classList.remove('hidden');
+  document.getElementById('loading').classList.add('hidden');
+}
+
+async function generateReportPDF() {
+  const reportPdfBtn = document.getElementById('reportPdfBtn');
+  const reportError  = document.getElementById('reportError');
+  try {
+    const reportContent = document.getElementById('report-content');
+    if (!reportContent || reportContent.classList.contains('hidden')) {
+      throw new Error('Report not loaded yet.');
+    }
+    reportPdfBtn.disabled = true;
+    reportPdfBtn.innerHTML = '⏳ Generating PDF...';
+    reportError.classList.remove('show');
+
+    const styleText = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<style>
+${styleText}
+body { background: white; margin: 0; padding: 0; }
+.controls { display: none !important; }
+#report-container { box-shadow: none; margin: 0; max-width: 100%; }
+.page { box-shadow: none; margin: 0; }
+</style></head>
+<body><div id="report-container">${reportContent.innerHTML}</div></body></html>`;
+
+    const meta = window.permitReportMeta || {};
+    const businessName = (meta.businessName || 'Permit').replace(/[^a-zA-Z0-9]/g, '_');
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `Mahjong_Permit_${businessName}_${date}.pdf`;
+
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      },
+      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal' })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Server error' }));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const url  = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    reportPdfBtn.innerHTML = '✅ Downloaded!';
+    setTimeout(() => { reportPdfBtn.innerHTML = '📄 Download PDF'; reportPdfBtn.disabled = false; }, 2000);
+  } catch (error) {
+    reportError.textContent = `Error: ${error.message}`;
+    reportError.classList.add('show');
+    setTimeout(() => reportError.classList.remove('show'), 5000);
+    reportPdfBtn.innerHTML = '📄 Download PDF';
+    reportPdfBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

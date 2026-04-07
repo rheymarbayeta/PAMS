@@ -13,7 +13,7 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const [permitTypes] = await pool.execute(
-      `SELECT pt.*, a.attribute_name, a.attribute_id, a.description AS attribute_description
+      `SELECT pt.*, a.attribute_name, a.description AS attribute_description
        FROM permit_types pt
        LEFT JOIN attributes a ON pt.attribute_id = a.attribute_id
        ORDER BY pt.permit_type_name`
@@ -35,7 +35,7 @@ router.get('/:id', async (req, res) => {
     
     // Get permit type
     const [permitTypes] = await pool.execute(
-      `SELECT pt.*, a.attribute_name, a.attribute_id, a.description AS attribute_description
+      `SELECT pt.*, a.attribute_name, a.description AS attribute_description
        FROM permit_types pt
        LEFT JOIN attributes a ON pt.attribute_id = a.attribute_id
        WHERE pt.permit_type_id = ?`,

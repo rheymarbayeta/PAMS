@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { generateReport } = require('../utils/puppeteerReportGenerator');
 
 const router = express.Router();
 
@@ -249,7 +250,7 @@ router.get('/filter-options/attributes', async (req, res) => {
   }
 });
 
-// Generate Jasper Report
+// Generate Report (Puppeteer-based)
 router.post('/generate', async (req, res) => {
   try {
     const userId = req.user.user_id;
@@ -351,93 +352,21 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    // Build Jasper request payload
-    const jasperPayload = {
-      template: `${templateName}.jrxml`,
-      format: format,
-      data: {
-        records: reportData,
-        generatedAt: new Date().toISOString(),
-        generatedBy: req.user.full_name || 'System',
-        totalRecords: reportData.length,
-        totalAmount: reportData.reduce((sum, record) => sum + (record.total_amount_due || 0), 0)
-      }
-    };
+    const totalAmount = reportData.reduce((sum, r) => sum + (parseFloat(r.total_amount_due) || 0), 0);
 
-    // Call Jasper PHP service with retry logic
-    let jasperResponse;
-    let retries = 5;
-    let lastError;
+    console.log(`[Report] Generating ${format} report for template '${templateName}' (${reportData.length} records)...`);
 
-    while (retries > 0) {
-      try {
-        console.log(`[Report] Attempting to connect to Jasper service (${6 - retries}/5)...`);
-        
-        // Use AbortController for proper timeout handling
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-        
-        try {
-          // NOTE: Inside Docker network, Jasper runs on port 80, not 9000
-          // Port 9000 is only the external mapping from docker-compose ports
-          jasperResponse = await fetch('http://jasper-service:80/api/generate-report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(jasperPayload),
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          console.log(`[Report] Jasper service responded with status: ${jasperResponse.status}`);
-          break; // Success, exit retry loop
-        } catch (error) {
-          clearTimeout(timeoutId);
-          throw error;
-        }
-      } catch (error) {
-        lastError = error;
-        retries--;
-        console.error(`[Report] Jasper connection attempt failed:`, error.message);
-        
-        if (retries > 0) {
-          console.log(`[Report] Retrying in 2 seconds... (${retries} attempts left)`);
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
-        }
-      }
-    }
+    const { buffer, mimeType } = await generateReport({
+      templateName,
+      format,
+      records: reportData,
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.full_name || 'System',
+      totalRecords: reportData.length,
+      totalAmount,
+    });
 
-    if (!jasperResponse) {
-      console.error('[Report] Jasper service final error after retries:', lastError);
-      return res.status(503).json({ 
-        success: false,
-        error: 'Jasper service is unavailable. Please ensure the service is running and try again.'
-      });
-    }
-
-    if (!jasperResponse.ok) {
-      const error = await jasperResponse.json();
-      console.error('Jasper service error:', error);
-      return res.status(500).json({ 
-        success: false,
-        error: `Report generation failed: ${error.error || 'Unknown error'}` 
-      });
-    }
-
-    const jasperResult = await jasperResponse.json();
-
-    if (!jasperResult.success) {
-      return res.status(500).json({ 
-        success: false,
-        error: jasperResult.error 
-      });
-    }
-
-    // Return report with appropriate headers
-    const mimeType = jasperResult.contentType || 'application/octet-stream';
     const filename = `${templateName}_${new Date().toISOString().split('T')[0]}.${format}`;
-
-    // Decode base64 content
-    const buffer = Buffer.from(jasperResult.data, 'base64');
-
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
@@ -448,6 +377,52 @@ router.post('/generate', async (req, res) => {
       success: false,
       error: error.message 
     });
+  }
+});
+
+// Generate PDF from raw HTML (used by individual permit/assessment report pages)
+router.post('/generate-from-html', async (req, res) => {
+  try {
+    const { html, filename = 'report.pdf', pageSize } = req.body;
+
+    if (!html || typeof html !== 'string') {
+      return res.status(400).json({ success: false, error: 'html field is required' });
+    }
+
+    const { generatePDFFromHTML } = require('../utils/puppeteerReportGenerator');
+    const path = require('path');
+    const fs = require('fs');
+    const logosDir = path.join(__dirname, '..', 'uploads', 'logos');
+
+    // Replace API logo URLs with base64 data URIs so Puppeteer needs no network access
+    const processedHtml = html.replace(
+      /src="[^"]*\/api\/settings\/logo\/([^"/?]+)"/gi,
+      (match, fname) => {
+        if (!/^[a-zA-Z0-9._-]+$/.test(fname)) return match;
+        const filePath = path.join(logosDir, fname);
+        if (!fs.existsSync(filePath)) return match;
+        const data = fs.readFileSync(filePath);
+        const ext = path.extname(fname).slice(1).toLowerCase();
+        const mimeMap = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
+        const mime = mimeMap[ext] || 'image/png';
+        return `src="data:${mime};base64,${data.toString('base64')}"`;
+      }
+    );
+
+    const pdfOptions = pageSize === 'legal'
+      ? { width: '8.5in', height: '13in', margin: { top: '0', right: '0', bottom: '0', left: '0' } }
+      : { format: 'A4', margin: { top: '0', right: '0', bottom: '0', left: '0' } };
+
+    const pdfBuffer = await generatePDFFromHTML(processedHtml, pdfOptions);
+
+    const safeFilename = filename.replace(/[^a-zA-Z0-9_\-. ]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error('Generate-from-html error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

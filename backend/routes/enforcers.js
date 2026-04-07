@@ -463,7 +463,7 @@ router.get('/:id/citations', async (req, res) => {
         SUM(fine_amount) as total_fines,
         COUNT(CASE WHEN payment_status = 'Paid' THEN 1 END) as paid_count,
         COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_count,
-        COUNT(CASE WHEN payment_status = 'Installment' THEN 1 END) as installment_count
+        COUNT(CASE WHEN payment_status IN ('Installment', 'Partially Paid') THEN 1 END) as installment_count
        FROM citations 
        WHERE enforcer_id = ?`,
       [enforcerId]

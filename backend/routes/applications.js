@@ -6,6 +6,7 @@ const { createNotification, notifyRole } = require('../utils/notificationService
 const { generatePermitPDF, generateAssessmentReportPDF, generateAssessmentReportHTML, getAssessmentData } = require('../utils/pdfGenerator');
 const { generateApplicationNumber } = require('../utils/applicationNumberGenerator');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
+const { generatePermitNumber } = require('../utils/permitNumberGenerator');
 
 const router = express.Router();
 
@@ -92,6 +93,7 @@ router.get('/', async (req, res) => {
       SELECT 
         a.application_id,
         a.application_number,
+        a.permit_number,
         a.entity_id,
         a.creator_id,
         a.assessor_id,
@@ -259,6 +261,8 @@ router.get('/:id', async (req, res) => {
         af.assessed_fee_id,
         af.fee_id,
         af.assessed_amount,
+        af.unit_amount,
+        af.quantity,
         af.assessed_by_user_id,
         af.created_at,
         fc.fee_name,
@@ -1558,7 +1562,8 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
     const [apps] = await pool.execute(
       `SELECT a.status, a.application_number, a.permit_type_id, a.permit_type,
               pt.validity_date as permit_type_validity_date,
-              pt.validity_type as permit_type_validity_type
+              pt.validity_type as permit_type_validity_type,
+              pt.permit_type_name
        FROM applications a
        LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id
        WHERE a.application_id = ?`,
@@ -1603,7 +1608,10 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       }
     }
     
-    // Update status to Issued with validity_date
+    // Generate unique permit number
+    const permitNumber = await generatePermitNumber(apps[0].permit_type_name || apps[0].permit_type);
+
+    // Update status to Issued with validity_date and permit_number
     // Note: For custom validity, we store the text as-is; for fixed, it's a date
     await pool.execute(
       `UPDATE applications 
@@ -1611,20 +1619,21 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
            issued_by_user_id = ?, 
            issued_at = CURRENT_TIMESTAMP, 
            validity_date = ?,
+           permit_number = ?,
            updated_at = CURRENT_TIMESTAMP 
        WHERE application_id = ?`,
-      ['Issued', req.user.user_id, validityDate, applicationId]
+      ['Issued', req.user.user_id, validityDate, permitNumber, applicationId]
     );
 
     // Log action
     await logAction(
       req.user.user_id,
       'ISSUE_PERMIT',
-      `Issued permit for application ${apps[0].application_number || applicationId} (${validityMsg})`,
+      `Issued permit ${permitNumber} for application ${apps[0].application_number || applicationId} (${validityMsg})`,
       applicationId
     );
 
-    res.json({ message: 'Permit issued successfully', validity_date: validityDate, validity_type: apps[0].permit_type_validity_type || 'fixed' });
+    res.json({ message: 'Permit issued successfully', permit_number: permitNumber, validity_date: validityDate, validity_type: apps[0].permit_type_validity_type || 'fixed' });
   } catch (error) {
     console.error('Issue permit error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
