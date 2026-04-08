@@ -14,6 +14,7 @@ interface Application {
   entity_name: string;
   permit_type: string;
   permit_type_name: string;
+  attribute_name: string | null;
   status: string;
   permit_number: string | null;
   creator_name: string;
@@ -359,7 +360,7 @@ export default function ApplicationsPage() {
                         <div className="mt-1.5 sm:mt-2 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 text-sm text-slate-600">
                           <span className="font-medium text-slate-700 truncate">{app.entity_name}</span>
                           <span className="hidden sm:inline text-slate-300">•</span>
-                          <span className="text-slate-500 text-xs sm:text-sm">{app.permit_type_name}</span>
+                          <span className="text-slate-500 text-xs sm:text-sm">{app.attribute_name ? `${app.permit_type_name} - ${app.attribute_name}` : app.permit_type_name}</span>
                         </div>
                         <div className="mt-1 sm:mt-1.5 flex items-center gap-2 text-[10px] sm:text-xs text-slate-400">
                           <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -99,7 +99,14 @@ router.get('/', async (req, res) => {
         a.assessor_id,
         a.approver_id,
         a.permit_type,
-        COALESCE(pt.permit_type_name, a.permit_type) as permit_type_name,
+        CASE 
+          WHEN a.permit_type LIKE '% - %' THEN TRIM(SUBSTRING_INDEX(a.permit_type, ' - ', 1))
+          ELSE a.permit_type
+        END as permit_type_name,
+        CASE 
+          WHEN a.permit_type LIKE '% - %' THEN TRIM(SUBSTRING_INDEX(a.permit_type, ' - ', -1))
+          ELSE ''
+        END as attribute_name,
         a.status,
         a.created_at,
         a.updated_at,
@@ -112,7 +119,6 @@ router.get('/', async (req, res) => {
       LEFT JOIN users u1 ON a.creator_id = u1.user_id
       LEFT JOIN users u2 ON a.assessor_id = u2.user_id
       LEFT JOIN users u3 ON a.approver_id = u3.user_id
-      LEFT JOIN permit_types pt ON a.permit_type_id = pt.permit_type_id
     `;
 
     const conditions = [];
