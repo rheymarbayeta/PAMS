@@ -6,7 +6,7 @@ const { createNotification, notifyRole } = require('../utils/notificationService
 const { generatePermitPDF, generateAssessmentReportPDF, generateAssessmentReportHTML, getAssessmentData } = require('../utils/pdfGenerator');
 const { generateApplicationNumber } = require('../utils/applicationNumberGenerator');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
-const { generatePermitNumber } = require('../utils/permitNumberGenerator');
+const { generatePermitNumber, generatePermitNumberForRenewal } = require('../utils/permitNumberGenerator');
 
 const router = express.Router();
 
@@ -474,9 +474,33 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
         permit_type_id = permitTypes.length > 0 ? permitTypes[0].permit_type_id : null;
       }
 
+      // Parse and validate validity_date from "Valid Until" parameter
+      let validity_date = null;
+      if (parameters && Array.isArray(parameters)) {
+        const validUntilParam = parameters.find(p => p.param_name === 'Valid Until' && p.param_value);
+        if (validUntilParam && validUntilParam.param_value) {
+          const dateValue = validUntilParam.param_value.trim();
+          // Try to parse the date in MM-DD-YYYY format
+          const dateMatch = dateValue.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+          if (dateMatch) {
+            // Convert to YYYY-MM-DD format for MySQL
+            validity_date = `${dateMatch[3]}-${dateMatch[1]}-${dateMatch[2]}`;
+          } else {
+            // Try to parse as a general date string
+            const parsedDate = new Date(dateValue);
+            if (!isNaN(parsedDate.getTime())) {
+              const year = parsedDate.getFullYear();
+              const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+              const day = String(parsedDate.getDate()).padStart(2, '0');
+              validity_date = `${year}-${month}-${day}`;
+            }
+          }
+        }
+      }
+
       const [result] = await connection.execute(
-        'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, rule_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, permit_type_id, rule_id || null, 'Pending']
+        'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, rule_id, status, validity_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [application_id, applicationNumber, entity_id, req.user.user_id, permit_type, permit_type_id, rule_id || null, 'Pending', validity_date]
       );
 
       // Insert parameters
@@ -807,12 +831,14 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
   try {
     const applicationId = req.params.id;
+    const { quantity_entered } = req.body;
 
     // Check application status and get full details
     const [apps] = await connection.execute(
       `SELECT 
         a.*,
         a.application_number,
+        a.rule_id,
         e.entity_name,
         e.contact_person,
         e.email,
@@ -835,6 +861,25 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     const app = apps[0];
 
+    // Check for quantity-based fee configuration
+    let quantityFeeConfig = null;
+    let feesCalculatedFromQuantity = false;
+
+    if (app.rule_id && quantity_entered) {
+      const [quantityConfigs] = await connection.execute(
+        'SELECT * FROM assessment_rule_quantity_fees WHERE rule_id = ? AND is_enabled = 1 LIMIT 1',
+        [app.rule_id]
+      );
+
+      if (quantityConfigs.length > 0) {
+        quantityFeeConfig = quantityConfigs[0];
+        // Parse JSON fields
+        if (quantityFeeConfig.additional_charges && typeof quantityFeeConfig.additional_charges === 'string') {
+          quantityFeeConfig.additional_charges = JSON.parse(quantityFeeConfig.additional_charges);
+        }
+      }
+    }
+
     // Get assessed fees
     const [assessedFees] = await connection.execute(
       `SELECT 
@@ -852,6 +897,109 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
        ORDER BY fc.fee_name`,
       [applicationId]
     );
+
+    // If quantity-based fees are configured, recalculate fees
+    if (quantityFeeConfig && quantity_entered) {
+      // Validate quantity
+      const minQty = quantityFeeConfig.min_quantity || 1;
+      const maxQty = quantityFeeConfig.max_quantity || 999;
+      
+      if (quantity_entered < minQty || quantity_entered > maxQty) {
+        await connection.rollback();
+        return res.status(400).json({ 
+          error: `Quantity must be between ${minQty} and ${maxQty}` 
+        });
+      }
+
+      try {
+        // Get the selected fee's amount from assessment_rule_fees
+        const [selectedFee] = await connection.execute(
+          'SELECT fee_id, amount FROM assessment_rule_fees WHERE fee_id = ? AND rule_id = ? LIMIT 1',
+          [quantityFeeConfig.selected_fee_id, app.rule_id]
+        );
+
+        if (selectedFee.length === 0) {
+          await connection.rollback();
+          return res.status(400).json({ error: 'Selected fee not found' });
+        }
+
+        const baseFeeAmount = parseFloat(selectedFee[0].amount) * quantity_entered;
+        
+        // Delete existing assessed fees for this application (they'll be recalculated)
+        await connection.execute(
+          'DELETE FROM assessed_fees WHERE application_id = ?',
+          [applicationId]
+        );
+
+        // Create assessed fee for the quantity-based fee
+        const baseFeeInsertId = generateId(ID_PREFIXES.ASSESSED_FEE);
+        await connection.execute(
+          `INSERT INTO assessed_fees (
+            assessed_fee_id, application_id, fee_id, assessed_amount, unit_amount, quantity, assessed_by_user_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            baseFeeInsertId,
+            applicationId,
+            quantityFeeConfig.selected_fee_id,
+            baseFeeAmount.toFixed(2),
+            selectedFee[0].amount,
+            quantity_entered,
+            req.user.user_id
+          ]
+        );
+
+        // Add additional charge fees if configured
+        if (quantityFeeConfig.additional_charges && Array.isArray(quantityFeeConfig.additional_charges)) {
+          for (const charge of quantityFeeConfig.additional_charges) {
+            if (charge.fee_id) {
+              const additionalFeeId = generateId(ID_PREFIXES.ASSESSED_FEE);
+              await connection.execute(
+                `INSERT INTO assessed_fees (
+                  assessed_fee_id, application_id, fee_id, assessed_amount, unit_amount, quantity, assessed_by_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  additionalFeeId,
+                  applicationId,
+                  charge.fee_id,
+                  charge.amount || 0,
+                  charge.amount || 0,
+                  1,
+                  req.user.user_id
+                ]
+              );
+            }
+          }
+        }
+
+        feesCalculatedFromQuantity = true;
+
+        // Re fetch assessed fees after recalculation
+        const [recalculatedFees] = await connection.execute(
+          `SELECT 
+            af.assessed_fee_id,
+            af.fee_id,
+            af.assessed_amount,
+            af.unit_amount,
+            af.quantity,
+            fc.fee_name,
+            fcat.category_name
+           FROM assessed_fees af
+           INNER JOIN fees_charges fc ON af.fee_id = fc.fee_id
+           INNER JOIN fees_categories fcat ON fc.category_id = fcat.category_id
+           WHERE af.application_id = ?
+           ORDER BY fc.fee_name`,
+          [applicationId]
+        );
+        
+        // Update assessedFees array with recalculated values
+        assessedFees.length = 0;
+        recalculatedFees.forEach(fee => assessedFees.push(fee));
+      } catch (error) {
+        console.error('Quantity-based fee calculation error:', error);
+        await connection.rollback();
+        return res.status(400).json({ error: `Fee calculation failed: ${error.message}` });
+      }
+    }
 
     if (assessedFees.length === 0) {
       await connection.rollback();
@@ -933,6 +1081,9 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
           q2_amount = ?,
           q3_amount = ?,
           q4_amount = ?,
+          quantity_entered = ?,
+          quantity_unit = ?,
+          fees_calculated_from_quantity = ?,
           prepared_by_user_id = ?,
           updated_at = CURRENT_TIMESTAMP
          WHERE assessment_id = ?`,
@@ -952,6 +1103,9 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
           q2Amount,
           q3Amount,
           q4Amount,
+          quantity_entered || null,
+          quantityFeeConfig ? quantityFeeConfig.quantity_label : null,
+          feesCalculatedFromQuantity ? 1 : 0,
           req.user.user_id,
           assessmentId
         ]
@@ -969,8 +1123,9 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
         `INSERT INTO assessment_records (
           assessment_id, application_id, business_name, owner_name, address, app_number, app_type, app_date,
           validity_date, total_balance_due, total_surcharge, total_interest, total_amount_due,
-          q1_amount, q2_amount, q3_amount, q4_amount, prepared_by_user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          q1_amount, q2_amount, q3_amount, q4_amount, quantity_entered, quantity_unit, 
+          fees_calculated_from_quantity, prepared_by_user_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           assessment_id,
           applicationId,
@@ -989,6 +1144,9 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
           q2Amount,
           q3Amount,
           q4Amount,
+          quantity_entered || null,
+          quantityFeeConfig ? quantityFeeConfig.quantity_label : null,
+          feesCalculatedFromQuantity ? 1 : 0,
           req.user.user_id
         ]
       );
@@ -1192,26 +1350,36 @@ router.post('/:id/renew', authorize('SuperAdmin', 'Admin', 'Application Creator'
 
     const originalApp = apps[0];
 
-    // Check if user can renew (must be creator or admin)
-    if (originalApp.creator_id !== req.user.user_id && 
-        !['SuperAdmin', 'Admin'].includes(req.user.role_name)) {
-      return res.status(403).json({ error: 'You can only renew your own applications' });
-    }
+    // Application Creator, Admin, and SuperAdmin can all renew any application
+    // (The authorize middleware already verified they have one of these roles)
 
     // Start transaction
     const connection = await pool.getConnection();
     await connection.beginTransaction();
 
     try {
+      // Determine parent_application_id for renewal tracking:
+      // If original is already a renewal, use its parent; otherwise use the original app itself
+      const parentApplicationId = originalApp.parent_application_id || originalApp.application_id;
+      
+      // Calculate renewal count: count how many renewals exist for this parent, then add 1
+      const [renewalCountResult] = await connection.execute(
+        'SELECT COUNT(*) as count FROM applications WHERE parent_application_id = ? AND application_type = "RENEWAL"',
+        [parentApplicationId]
+      );
+      const renewalCount = renewalCountResult[0].count + 1;
+
       // Generate unique application number for renewal using the same connection
       const applicationNumber = await generateApplicationNumber(connection);
 
-      // Create new application
+      // Create new application with renewal tracking
       const new_application_id = generateId(ID_PREFIXES.APPLICATION);
 
       const [result] = await connection.execute(
-        'INSERT INTO applications (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)' ,
-        [new_application_id, applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, originalApp.permit_type_id, 'Pending']
+        `INSERT INTO applications 
+         (application_id, application_number, entity_id, creator_id, permit_type, permit_type_id, rule_id, status, application_type, parent_application_id, renewal_count) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        [new_application_id, applicationNumber, originalApp.entity_id, req.user.user_id, originalApp.permit_type, originalApp.permit_type_id, originalApp.rule_id, 'Pending', 'RENEWAL', parentApplicationId, renewalCount]
       );
 
       // Copy parameters
@@ -1389,8 +1557,8 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
 });
 
 // Record payment for an application
-// Restricted to SuperAdmin and Admin roles
-router.post('/:id/payment', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+// Restricted to SuperAdmin, Admin, and Application Creator roles
+router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
   try {
     console.log('[Payment] Recording payment for application:', req.params.id);
     console.log('[Payment] User:', req.user);
@@ -1564,9 +1732,10 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
   try {
     const applicationId = req.params.id;
 
-    // Check current status and get permit type info for validity
+    // Check current status and get permit type info for validity, also get renewal info
     const [apps] = await pool.execute(
       `SELECT a.status, a.application_number, a.permit_type_id, a.permit_type,
+              a.application_type, a.parent_application_id, a.renewal_count,
               pt.validity_date as permit_type_validity_date,
               pt.validity_type as permit_type_validity_type,
               pt.permit_type_name
@@ -1614,8 +1783,30 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       }
     }
     
-    // Generate unique permit number
-    const permitNumber = await generatePermitNumber(apps[0].permit_type_name || apps[0].permit_type);
+    // Generate permit number based on application type
+    let permitNumber = null;
+
+    if (apps[0].application_type === 'RENEWAL' && apps[0].parent_application_id) {
+      // For renewal: get the parent application's permit number
+      const [parentApps] = await pool.execute(
+        'SELECT permit_number FROM applications WHERE application_id = ?',
+        [apps[0].parent_application_id]
+      );
+      
+      if (parentApps.length > 0 && parentApps[0].permit_number) {
+        // Generate renewal permit number: <PARENT_PERMIT>-<RENEWAL_COUNT>R
+        permitNumber = await generatePermitNumberForRenewal(
+          parentApps[0].permit_number,
+          apps[0].renewal_count || 1
+        );
+      } else {
+        // Fallback: generate normal permit number if parent doesn't have one yet
+        permitNumber = await generatePermitNumber(apps[0].permit_type_name || apps[0].permit_type);
+      }
+    } else {
+      // For new applications: generate normal permit number
+      permitNumber = await generatePermitNumber(apps[0].permit_type_name || apps[0].permit_type);
+    }
 
     // Update status to Issued with validity_date and permit_number
     // Note: For custom validity, we store the text as-is; for fixed, it's a date

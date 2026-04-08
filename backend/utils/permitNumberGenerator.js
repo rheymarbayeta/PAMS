@@ -77,4 +77,27 @@ async function generatePermitNumber(permitTypeName, issuedAt = new Date()) {
   }
 }
 
-module.exports = { generatePermitNumber, derivePrefix };
+/**
+ * Generate permit number for a renewal application.
+ * Format: <PARENT_PERMIT_NUMBER>-<RENEWAL_COUNT>R
+ *   <PARENT_PERMIT_NUMBER> = original permit number (e.g. "SMP-04-26-0001")
+ *   <RENEWAL_COUNT>        = number of renewals (1, 2, 3, etc. for 1st, 2nd, 3rd renewal)
+ *   R                      = renewal indicator
+ * Example: "SMP-04-26-0001-1R" for first renewal, "SMP-04-26-0001-2R" for second renewal
+ *
+ * @param {string} parentPermitNumber  e.g. "SMP-04-26-0001"
+ * @param {number} renewalCount         e.g. 1 for first renewal
+ * @returns {Promise<string>}           e.g. "SMP-04-26-0001-1R"
+ */
+async function generatePermitNumberForRenewal(parentPermitNumber, renewalCount) {
+  if (!parentPermitNumber || renewalCount === undefined) {
+    throw new Error('Parent permit number and renewal count are required for renewal permits');
+  }
+  
+  // Ensure renewalCount is a valid positive integer
+  const count = Math.max(1, Math.floor(renewalCount));
+  
+  return `${parentPermitNumber}-${count}R`;
+}
+
+module.exports = { generatePermitNumber, generatePermitNumberForRenewal, derivePrefix };

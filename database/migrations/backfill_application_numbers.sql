@@ -6,11 +6,11 @@ USE pams_db;
 -- Create sequence table if it doesn't exist (in case migration wasn't run)
 CREATE TABLE IF NOT EXISTS Application_Sequence (
     sequence_id INT AUTO_INCREMENT PRIMARY KEY,
-    year_month VARCHAR(7) NOT NULL UNIQUE,
+    `year_month` VARCHAR(7) NOT NULL UNIQUE,
     sequence_number INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_year_month (year_month)
+    INDEX idx_year_month (`year_month`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Add application_number column if it doesn't exist

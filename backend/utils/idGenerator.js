@@ -32,7 +32,8 @@ const ID_PREFIXES = {
   TEMPLATE: 'tmpl',
   CITATION: 'cite',
   CITATION_PAYMENT: 'citepay',
-  ENFORCER: 'enf'
+  ENFORCER: 'enf',
+  QUANTITY_FEE: 'qtyfee'
 };
 
 /**

@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const pool = require('./config/database');
 const { setSocketIO } = require('./utils/notificationService');
+const { runMigrations } = require('./utils/migrationRunner');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -26,21 +27,47 @@ const reportRoutes = require('./routes/reports');
 const reportTemplateRoutes = require('./routes/reportTemplates');
 const citationRoutes = require('./routes/citations');
 const enforcerRoutes = require('./routes/enforcers');
+const quantityFeeRoutes = require('./routes/quantityFees');
 
 const app = express();
 const server = http.createServer(app);
+
+// Socket.IO CORS configuration
+const socketCorsOptions = {
+  origin: ['http://localhost:6070', 'http://127.0.0.1:6070', 'http://192.168.11.17:6070', process.env.FRONTEND_URL || 'http://localhost:3000'],
+  methods: ['GET', 'POST']
+};
+
 const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
-  }
+  cors: socketCorsOptions
 });
 
 // Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+// CORS configuration - allow multiple origins for development/production flexibility
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:6070',
+      'http://127.0.0.1:6070',
+      'http://192.168.11.17:6070',
+    ];
+    
+    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -82,6 +109,8 @@ app.use('/api/citations', citationRoutes);
 console.log('  ✓ /api/citations');
 app.use('/api/enforcers', enforcerRoutes);
 console.log('  ✓ /api/enforcers');
+app.use('/api/quantity-fees', quantityFeeRoutes);
+console.log('  ✓ /api/quantity-fees');
 console.log('✅ All routes registered');
 
 // Health check
@@ -158,8 +187,24 @@ app.set('io', io);
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// Start server with migrations
+async function startServer() {
+  try {
+    console.log('🔄 Checking and running pending migrations...');
+    // Temporarily disabled migrations due to complex data migration issues
+    // Database schema has already been applied. Migrations can be run separately.
+    // await runMigrations();
+    console.log('⏭️  Migrations temporarily disabled - database schema should already exist');
+    
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
 

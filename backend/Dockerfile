@@ -19,11 +19,14 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 WORKDIR /app
 
 # Install dependencies
-COPY package*.json ./
+COPY backend/package*.json ./
 RUN npm install --omit=dev
 
 # Copy application source
-COPY . .
+COPY backend/ .
+
+# Copy database migrations
+COPY database/migrations/ ./database/migrations/
 
 # Create uploads directory
 RUN mkdir -p uploads/templates

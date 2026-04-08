@@ -27,6 +27,8 @@ interface AssessmentRuleOption {
   validity_type?: 'fixed' | 'custom';
 }
 
+type DateMode = 'range' | 'multiple' | 'yearly';
+
 export default function NewApplicationPage() {
   const { user, hasRole } = useAuth();
   const router = useRouter();
@@ -50,6 +52,15 @@ export default function NewApplicationPage() {
     street: '',
     parameters: [] as { param_name: string; param_value: string }[],
   });
+  const [dateMode, setDateMode] = useState<DateMode>('range');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
+  const [rangeStart, setRangeStart] = useState<Date | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<Date | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [showValidUntilPicker, setShowValidUntilPicker] = useState(false);
+  const [validUntilDate, setValidUntilDate] = useState<Date | null>(null);
+  const [validUntilMonth, setValidUntilMonth] = useState(new Date());
 
   useEffect(() => {
     fetchEntities();
@@ -111,6 +122,7 @@ export default function NewApplicationPage() {
         parameters: [
           { param_name: 'Date', param_value: '' },
           { param_name: 'Conduct/engage in', param_value: '' },
+          { param_name: 'Valid Until', param_value: '' },
           { param_name: 'Attachment', param_value: '' },
         ],
       }));
@@ -125,6 +137,7 @@ export default function NewApplicationPage() {
         parameters: [
           { param_name: 'Date', param_value: '' },
           { param_name: 'Conduct/engage in', param_value: '' },
+          { param_name: 'Valid Until', param_value: '' },
           { param_name: 'Attachment', param_value: '' },
         ],
       }));
@@ -191,13 +204,37 @@ export default function NewApplicationPage() {
 
     try {
       // Build parameters array including address fields
+      let userParameters = formData.parameters.filter((p) => p.param_name && p.param_value);
+      
+      // Convert Valid Until parameter to proper date format (MM-DD-YYYY)
+      userParameters = userParameters.map((param: any) => {
+        if (param.param_name === 'Valid Until' && param.param_value) {
+          const value = param.param_value.trim();
+          // If it's already in MM-DD-YYYY format, keep it; otherwise try to parse it
+          if (!/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+            try {
+              const parsedDate = new Date(value);
+              if (!isNaN(parsedDate.getTime())) {
+                const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+                const day = String(parsedDate.getDate()).padStart(2, '0');
+                const year = parsedDate.getFullYear();
+                return { ...param, param_value: `${month}-${day}-${year}` };
+              }
+            } catch (e) {
+              // Keep original if parsing fails
+            }
+          }
+        }
+        return param;
+      });
+      
       const parameters = [
         { param_name: 'Municipality', param_value: formData.municipality },
         { param_name: 'Province', param_value: formData.province },
         { param_name: 'Country', param_value: formData.country },
         { param_name: 'Barangay', param_value: formData.barangay },
         { param_name: 'Street/Sitio', param_value: formData.street },
-        ...formData.parameters.filter((p) => p.param_name && p.param_value),
+        ...userParameters,
       ];
 
       const response = await api.post('/api/applications', {
@@ -226,9 +263,172 @@ export default function NewApplicationPage() {
     return [
       { param_name: isMahjong ? 'Location' : 'Date', param_value: '' },
       { param_name: isMahjong ? 'Color' : 'Conduct/engage in', param_value: '' },
+      { param_name: 'Valid Until', param_value: '' },
       { param_name: 'Attachment', param_value: '' },
     ];
   };
+
+  // Format date to MM-DD-YYYY
+  const formatDateInput = (date: Date): string => {
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}-${day}-${year}`;
+  };
+
+  // Format date to full text (April 8, 2026)
+  const formatDateText = (date: Date): string => {
+    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
+  // Format range mode
+  const formatRangeMode = (): string => {
+    if (!rangeStart || !rangeEnd) return '';
+    return `${formatDateText(rangeStart)} up to ${formatDateText(rangeEnd)}`;
+  };
+
+  // Format multiple dates mode
+  const formatMultipleDatesMode = (): string => {
+    if (selectedDates.length === 0) return '';
+    
+    const sorted = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
+    
+    // Group dates by month/year
+    const grouped: { [key: string]: { day: number; date: Date }[] } = {};
+    sorted.forEach(date => {
+      const key = `${date.getMonth()}-${date.getFullYear()}`;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push({ day: date.getDate(), date });
+    });
+
+    const keys = Object.keys(grouped).sort();
+    const parts: string[] = [];
+
+    keys.forEach((key, idx) => {
+      const dates = grouped[key];
+      const firstDate = dates[0].date;
+      const monthYear = `${firstDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+      
+      if (dates.length === 1) {
+        const dayMonthYear = firstDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        parts.push(dayMonthYear);
+      } else {
+        const days = dates.map(d => d.day).join(', ');
+        parts.push(`${days} ${monthYear}`);
+      }
+    });
+
+    // Join with comma and 'and' before last
+    if (parts.length === 1) return parts[0];
+    if (parts.length === 2) return `${parts[0]} & ${parts[1]}`;
+    return `${parts.slice(0, -1).join(', ')} & ${parts[parts.length - 1]}`;
+  };
+
+  // Handle date selection
+  const handleDateClick = (day: number) => {
+    const newDate = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+
+    if (dateMode === 'range') {
+      if (!rangeStart) {
+        setRangeStart(newDate);
+        setRangeEnd(null);
+      } else if (!rangeEnd) {
+        if (newDate < rangeStart) {
+          setRangeEnd(rangeStart);
+          setRangeStart(newDate);
+        } else {
+          setRangeEnd(newDate);
+        }
+      } else {
+        setRangeStart(newDate);
+        setRangeEnd(null);
+      }
+    } else if (dateMode === 'multiple') {
+      const exists = selectedDates.some(d => d.getTime() === newDate.getTime());
+      if (exists) {
+        setSelectedDates(selectedDates.filter(d => d.getTime() !== newDate.getTime()));
+      } else {
+        setSelectedDates([...selectedDates, newDate]);
+      }
+    }
+  };
+
+  // Get days in month and starting day of week
+  const getDaysInMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const getStartingDayOfWeek = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  };
+
+  // Navigate calendar
+  const handlePrevMonth = () => {
+    setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1));
+  };
+
+  const handleNextMonth = () => {
+    setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1));
+  };
+
+  // Valid Until date picker functions
+  const handleValidUntilDateClick = (day: number) => {
+    const newDate = new Date(validUntilMonth.getFullYear(), validUntilMonth.getMonth(), day);
+    setValidUntilDate(newDate);
+    
+    // Update the Valid Until parameter with MM-DD-YYYY format
+    const validUntilIdx = formData.parameters.findIndex(p => p.param_name === 'Valid Until');
+    if (validUntilIdx !== -1) {
+      const newParameters = [...formData.parameters];
+      newParameters[validUntilIdx].param_value = formatDateInput(newDate);
+      setFormData({ ...formData, parameters: newParameters });
+    }
+    
+    setShowValidUntilPicker(false);
+  };
+
+  const handleValidUntilPrevMonth = () => {
+    setValidUntilMonth(new Date(validUntilMonth.getFullYear(), validUntilMonth.getMonth() - 1));
+  };
+
+  const handleValidUntilNextMonth = () => {
+    setValidUntilMonth(new Date(validUntilMonth.getFullYear(), validUntilMonth.getMonth() + 1));
+  };
+
+  // Handle yearly mode
+  const handleYearlyMode = () => {
+    const currentYear = new Date().getFullYear();
+    const yearEnd = new Date(currentYear, 11, 31); // Dec 31
+    
+    const dateParamIdx = formData.parameters.findIndex(p => p.param_name === 'Date');
+    const validUntilIdx = formData.parameters.findIndex(p => p.param_name === 'Valid Until');
+    
+    const newParameters = [...formData.parameters];
+    if (dateParamIdx !== -1) {
+      newParameters[dateParamIdx].param_value = `Yearly ${currentYear}`;
+    }
+    if (validUntilIdx !== -1) {
+      newParameters[validUntilIdx].param_value = formatDateInput(yearEnd);
+    }
+    
+    setFormData({ ...formData, parameters: newParameters });
+    setDateMode('yearly');
+    setShowDatePicker(false);
+  };
+
+  // Update Date parameter when dates change
+  useEffect(() => {
+    if (dateMode === 'yearly') return;
+
+    const formattedDate = dateMode === 'range' ? formatRangeMode() : formatMultipleDatesMode();
+    const dateParamIdx = formData.parameters.findIndex(p => p.param_name === 'Date');
+    
+    if (dateParamIdx !== -1 && formattedDate) {
+      const newParameters = [...formData.parameters];
+      newParameters[dateParamIdx].param_value = formattedDate;
+      setFormData({ ...formData, parameters: newParameters });
+    }
+  }, [selectedDates, rangeStart, rangeEnd, dateMode]);
 
   if (!canCreate) {
     return (
@@ -522,32 +722,273 @@ export default function NewApplicationPage() {
               </div>
               <div className="space-y-3">
                 {formData.parameters.map((param, index) => (
-                  <div key={index} className="flex gap-3 items-center p-4 bg-gray-50/50 border border-gray-200 rounded-xl">
-                    <input
-                      type="text"
-                      placeholder="Parameter name"
-                      className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-4 py-2.5 text-gray-700 cursor-not-allowed disabled:opacity-70"
-                      value={param.param_name}
-                      disabled
-                      readOnly
-                    />
-                    <input
-                      type="text"
-                      placeholder="Value"
-                      className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                      value={param.param_value}
-                      onChange={(e) => handleParameterChange(index, e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      title="Remove parameter"
-                      onClick={() => removeParameter(index)}
-                      className="p-2.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                  <div key={index}>
+                    <div className="flex gap-3 items-center p-4 bg-gray-50/50 border border-gray-200 rounded-xl">
+                      <input
+                        type="text"
+                        placeholder="Parameter name"
+                        className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-4 py-2.5 text-gray-700 cursor-not-allowed disabled:opacity-70"
+                        value={param.param_name}
+                        disabled
+                        readOnly
+                      />
+                      {param.param_name === 'Date' ? (
+                        <div className="flex-1 relative">
+                          <input
+                            type="text"
+                            placeholder="Select dates..."
+                            className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
+                            value={param.param_value}
+                            readOnly
+                            onClick={() => setShowDatePicker(!showDatePicker)}
+                          />
+                          {showDatePicker && (
+                            <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-4 w-80">
+                              <div className="flex gap-2 mb-4">
+                                <button
+                                  type="button"
+                                  onClick={() => setDateMode('range')}
+                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                    dateMode === 'range'
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  Range
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDateMode('multiple')}
+                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                    dateMode === 'multiple'
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  Multiple
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleYearlyMode}
+                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                    dateMode === 'yearly'
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  Yearly
+                                </button>
+                              </div>
+
+                              {dateMode !== 'yearly' && (
+                                <div className="border-t border-gray-200 pt-4">
+                                  <div className="text-sm font-medium text-gray-700 mb-3">
+                                    {dateMode === 'range' ? 'Select date range' : 'Select individual dates'}
+                                  </div>
+
+                                  {/* Month/Year Navigation */}
+                                  <div className="flex items-center justify-between gap-2 mb-4">
+                                    <button
+                                      type="button"
+                                      onClick={handlePrevMonth}
+                                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                      </svg>
+                                    </button>
+                                    <div className="text-center flex-1">
+                                      <div className="font-semibold text-gray-900">
+                                        {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleNextMonth}
+                                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                    </button>
+                                  </div>
+
+                                  {/* Calendar Grid */}
+                                  <div className="grid grid-cols-7 gap-1 mb-4">
+                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                                      <div key={day} className="text-center text-xs font-semibold text-gray-500 py-2">
+                                        {day}
+                                      </div>
+                                    ))}
+                                    {Array.from({ length: getStartingDayOfWeek(calendarMonth) }).map((_, idx) => (
+                                      <div key={`empty-${idx}`} className="p-2"></div>
+                                    ))}
+                                    {Array.from({ length: getDaysInMonth(calendarMonth) }).map((_, idx) => {
+                                      const dayNum = idx + 1;
+                                      const currentDate = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), dayNum);
+                                      const isSelected =
+                                        (dateMode === 'range' && (currentDate.getTime() === rangeStart?.getTime() || currentDate.getTime() === rangeEnd?.getTime())) ||
+                                        (dateMode === 'multiple' && selectedDates.some((d) => d.getTime() === currentDate.getTime()));
+                                      const isInRange =
+                                        dateMode === 'range' &&
+                                        rangeStart &&
+                                        rangeEnd &&
+                                        currentDate.getTime() > rangeStart.getTime() &&
+                                        currentDate.getTime() < rangeEnd.getTime();
+
+                                      return (
+                                        <button
+                                          key={dayNum}
+                                          type="button"
+                                          onClick={() => handleDateClick(dayNum)}
+                                          className={`p-2 text-sm rounded-lg transition-colors ${
+                                            isSelected
+                                              ? 'bg-indigo-600 text-white font-semibold'
+                                              : isInRange
+                                              ? 'bg-indigo-100 text-indigo-900'
+                                              : 'hover:bg-gray-100 text-gray-900'
+                                          }`}
+                                        >
+                                          {dayNum}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+
+                                  {dateMode === 'range' && rangeStart && rangeEnd && (
+                                    <div className="text-sm text-gray-600 p-2 bg-gray-50 rounded-lg mb-3">
+                                      Selected: {formatRangeMode()}
+                                    </div>
+                                  )}
+                                  {dateMode === 'multiple' && selectedDates.length > 0 && (
+                                    <div className="text-sm text-gray-600 p-2 bg-gray-50 rounded-lg mb-3">
+                                      Selected: {formatMultipleDatesMode()}
+                                    </div>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowDatePicker(false)}
+                                    className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                                  >
+                                    Done
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : param.param_name === 'Valid Until' ? (
+                        <div className="flex-1 relative">
+                          <input
+                            type="text"
+                            placeholder="Select validity date..."
+                            className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
+                            value={param.param_value}
+                            readOnly
+                            onClick={() => setShowValidUntilPicker(!showValidUntilPicker)}
+                          />
+                          {showValidUntilPicker && (
+                            <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-4 w-80">
+                              <div className="text-sm font-medium text-gray-700 mb-3">
+                                Select Validity Date
+                              </div>
+
+                              {/* Month/Year Navigation */}
+                              <div className="flex items-center justify-between gap-2 mb-4">
+                                <button
+                                  type="button"
+                                  onClick={handleValidUntilPrevMonth}
+                                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                  </svg>
+                                </button>
+                                <div className="text-center flex-1">
+                                  <div className="font-semibold text-gray-900">
+                                    {validUntilMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleValidUntilNextMonth}
+                                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </button>
+                              </div>
+
+                              {/* Calendar Grid */}
+                              <div className="grid grid-cols-7 gap-1 mb-4">
+                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                                  <div key={day} className="text-center text-xs font-semibold text-gray-500 py-2">
+                                    {day}
+                                  </div>
+                                ))}
+                                {Array.from({ length: getStartingDayOfWeek(validUntilMonth) }).map((_, idx) => (
+                                  <div key={`empty-${idx}`} className="p-2"></div>
+                                ))}
+                                {Array.from({ length: getDaysInMonth(validUntilMonth) }).map((_, idx) => {
+                                  const dayNum = idx + 1;
+                                  const currentDate = new Date(validUntilMonth.getFullYear(), validUntilMonth.getMonth(), dayNum);
+                                  const isSelected = validUntilDate?.getTime() === currentDate.getTime();
+
+                                  return (
+                                    <button
+                                      key={dayNum}
+                                      type="button"
+                                      onClick={() => handleValidUntilDateClick(dayNum)}
+                                      className={`p-2 text-sm rounded-lg transition-colors ${
+                                        isSelected
+                                          ? 'bg-indigo-600 text-white font-semibold'
+                                          : 'hover:bg-gray-100 text-gray-900'
+                                      }`}
+                                    >
+                                      {dayNum}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {validUntilDate && (
+                                <div className="text-sm text-gray-600 p-2 bg-gray-50 rounded-lg mb-3">
+                                  Selected: {formatDateText(validUntilDate)}
+                                </div>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => setShowValidUntilPicker(false)}
+                                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                              >
+                                Done
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                          value={param.param_value}
+                          onChange={(e) => handleParameterChange(index, e.target.value)}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        title="Remove parameter"
+                        onClick={() => removeParameter(index)}
+                        className="p-2.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

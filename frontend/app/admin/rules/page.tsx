@@ -595,10 +595,10 @@ export default function RulesPage() {
                     ) : (
                       <div className="space-y-3">
                         {ruleFees.map((fee, index) => (
-                          <div key={index} className="flex gap-2 items-center p-4 bg-gray-50/50 border border-gray-200 rounded-xl hover:bg-gray-100/50 transition-colors duration-150">
+                          <div key={index} className="grid grid-cols-12 gap-2 items-start p-4 bg-gray-50/50 border border-gray-200 rounded-xl hover:bg-gray-100/50 transition-colors duration-150">
                             <select
                               required
-                              className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                              className="col-span-6 bg-white border border-gray-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                               value={fee.fee_id || ''}
                               onChange={(e) => updateFee(index, 'fee_id', e.target.value)}
                               aria-label={`Select fee for row ${index + 1}`}
@@ -610,7 +610,7 @@ export default function RulesPage() {
                                 </option>
                               ))}
                             </select>
-                            <div className="w-40">
+                            <div className="col-span-3">
                               <div className="relative">
                                 <span className="absolute left-3 top-2.5 text-gray-400 text-sm">₱</span>
                                 <input
@@ -618,7 +618,7 @@ export default function RulesPage() {
                                   step="0.01"
                                   min="0"
                                   required
-                                  className="w-full bg-white border border-gray-200 rounded-lg pl-7 pr-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                                  className="w-full bg-white border border-gray-200 rounded-lg pl-7 pr-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 text-lg"
                                   placeholder="0.00"
                                   value={fee.amount}
                                   onChange={(e) =>
@@ -633,7 +633,7 @@ export default function RulesPage() {
                                 </div>
                               )}
                             </div>
-                            <label className="flex items-center gap-1.5 cursor-pointer">
+                            <label className="col-span-1 flex items-center gap-1.5 cursor-pointer">
                               <input
                                 type="checkbox"
                                 className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
@@ -646,7 +646,7 @@ export default function RulesPage() {
                               type="button"
                               title="Remove fee"
                               onClick={() => removeFee(index)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150"
+                              className="col-span-2 p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150 flex justify-center"
                             >
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

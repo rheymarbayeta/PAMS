@@ -21,6 +21,7 @@ interface ApplicationDetail {
   permit_type_id: string;
   attribute_id: string | null;
   attribute_name: string | null;
+  rule_id: string | null;
   status: string;
   creator_name: string;
   assessor_name: string | null;
@@ -65,6 +66,13 @@ export default function ApplicationDetailPage() {
   const [showReportsDropdown, setShowReportsDropdown] = useState(false);
   const reportsButtonRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  
+  // Quantity-based fee assessment state
+  const [showQuantityModal, setShowQuantityModal] = useState(false);
+  const [quantityInput, setQuantityInput] = useState('');
+  const [quantityFeeConfig, setQuantityFeeConfig] = useState<any>(null);
+  const [assessingWithQuantity, setAssessingWithQuantity] = useState(false);
+  const [quantityPreview, setQuantityPreview] = useState<{baseAmount: number; additionalTotal: number; totalAmount: number} | null>(null);
 
   useEffect(() => {
     if (params.id) {
@@ -129,6 +137,107 @@ export default function ApplicationDetailPage() {
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleAssessClick = async () => {
+    if (!application?.rule_id) {
+      // No rule assigned, go to manual assess page
+      router.push(`/applications/${application?.application_id}/assess`);
+      return;
+    }
+
+    try {
+      // Check if rule has quantity-based fee configuration
+      const response = await api.get(`/api/quantity-fees/assessment-rules/${application.rule_id}/quantity-fee`);
+      
+      if (response.data && response.data.is_enabled) {
+        // Quantity-based fees configured - show modal
+        // Convert selected_fee_amount to number
+        const config = {
+          ...response.data,
+          selected_fee_amount: parseFloat(response.data.selected_fee_amount || '0') || 0
+        };
+        setQuantityFeeConfig(config);
+        setQuantityInput('');
+        setQuantityPreview(null);
+        setShowQuantityModal(true);
+      } else {
+        // No quantity-based fees - go to manual assess page
+        router.push(`/applications/${application?.application_id}/assess`);
+      }
+    } catch (error: any) {
+      // If not found (404), go to manual assess page
+      if (error.response?.status === 404) {
+        router.push(`/applications/${application?.application_id}/assess`);
+      } else {
+        alert('Error loading assessment configuration');
+      }
+    }
+  };
+
+  const calculateQuantityFeePreview = (qty: number) => {
+    if (!quantityFeeConfig) return;
+
+    try {
+      // Use the selected_fee_amount directly from the config (convert to number)
+      const baseFeeAmount = (parseFloat(quantityFeeConfig.selected_fee_amount || '0') || 0) * qty;
+
+      // Calculate additional charges
+      let additionalTotal = 0;
+      if (quantityFeeConfig.additional_charges && Array.isArray(quantityFeeConfig.additional_charges)) {
+        additionalTotal = quantityFeeConfig.additional_charges.reduce((sum: number, charge: any) => 
+          sum + (parseFloat(charge.amount) || 0), 0);
+      }
+
+      setQuantityPreview({
+        baseAmount: Math.round(baseFeeAmount * 100) / 100,
+        additionalTotal: Math.round(additionalTotal * 100) / 100,
+        totalAmount: Math.round((baseFeeAmount + additionalTotal) * 100) / 100
+      });
+    } catch (error) {
+      console.error('Error calculating preview:', error);
+      setQuantityPreview(null);
+    }
+  };
+
+  const handleQuantityInputChange = (value: string) => {
+    setQuantityInput(value);
+    const qty = parseFloat(value);
+    if (!isNaN(qty) && qty > 0) {
+      calculateQuantityFeePreview(qty);
+    } else {
+      setQuantityPreview(null);
+    }
+  };
+
+  const handleAssessWithQuantity = async () => {
+    if (!quantityInput || !application) return;
+
+    const qty = parseFloat(quantityInput);
+    if (isNaN(qty) || qty <= 0) {
+      alert('Please enter a valid quantity');
+      return;
+    }
+
+    setAssessingWithQuantity(true);
+    try {
+      await api.put(`/api/applications/${application.application_id}/assess`, {
+        quantity_entered: qty
+      });
+      
+      alert('Assessment completed successfully!');
+      setShowQuantityModal(false);
+      setQuantityInput('');
+      setQuantityFeeConfig(null);
+      setQuantityPreview(null);
+      
+      // Refresh application data
+      await fetchApplication();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Error processing assessment');
+    } finally {
+      setAssessingWithQuantity(false);
     }
   };
 
@@ -441,7 +550,7 @@ export default function ApplicationDetailPage() {
                   )}
                   {canAssess && application.status === 'Pending' && (
                     <button
-                      onClick={() => router.push(`/applications/${application.application_id}/assess`)}
+                      onClick={() => handleAssessClick()}
                       className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
                       <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -774,6 +883,113 @@ export default function ApplicationDetailPage() {
                 >
                   {releasing ? 'Releasing...' : 'Release Permit'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quantity-Based Fee Assessment Modal */}
+        {showQuantityModal && quantityFeeConfig && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+              <div className="p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-1">
+                  Assess {application?.permit_type_id}
+                </h2>
+                <p className="text-sm text-gray-500 mb-6">
+                  Enter the {quantityFeeConfig.quantity_label?.toLowerCase() || 'quantity'} to calculate fees
+                </p>
+
+                {/* Quantity Input */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {quantityFeeConfig.quantity_label || 'Quantity'} 
+                    <span className="text-red-500">*</span>
+                  </label>
+                  {quantityFeeConfig.quantity_description && (
+                    <p className="text-xs text-gray-500 mb-2">{quantityFeeConfig.quantity_description}</p>
+                  )}
+                  <input
+                    type="number"
+                    min={quantityFeeConfig.min_quantity || 0}
+                    max={quantityFeeConfig.max_quantity}
+                    value={quantityInput}
+                    onChange={(e) => handleQuantityInputChange(e.target.value)}
+                    placeholder="Enter quantity"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                  />
+                  {(quantityFeeConfig.min_quantity || quantityFeeConfig.max_quantity) && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {quantityFeeConfig.min_quantity && `Min: ${quantityFeeConfig.min_quantity}`}
+                      {quantityFeeConfig.min_quantity && quantityFeeConfig.max_quantity && ' • '}
+                      {quantityFeeConfig.max_quantity && `Max: ${quantityFeeConfig.max_quantity}`}
+                    </p>
+                  )}
+                </div>
+
+                {/* Fee Preview */}
+                {quantityPreview && (
+                  <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Fee Breakdown</h3>
+                    
+                    {/* Base Fee */}
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-600">
+                        {quantityFeeConfig.selected_fee_name || 'Base Fee'} (₱{quantityFeeConfig.selected_fee_amount?.toFixed(2)} × {quantityInput})
+                      </span>
+                      <span className="text-gray-900 font-medium">
+                        ₱{quantityPreview.baseAmount.toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Additional Charges */}
+                    {quantityFeeConfig.additional_charges && quantityFeeConfig.additional_charges.length > 0 && (
+                      <>
+                        {quantityFeeConfig.additional_charges.map((charge: any, idx: number) => (
+                          <div key={idx} className="flex justify-between text-sm mb-2">
+                            <span className="text-gray-600">{charge.charge_name}</span>
+                            <span className="text-gray-900 font-medium">
+                              ₱{parseFloat(charge.amount || 0).toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-200 my-3"></div>
+
+                    {/* Total */}
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-900">Total</span>
+                      <span className="font-bold text-lg text-indigo-600">
+                        ₱{quantityPreview.totalAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowQuantityModal(false);
+                      setQuantityInput('');
+                      setQuantityFeeConfig(null);
+                      setQuantityPreview(null);
+                    }}
+                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAssessWithQuantity}
+                    disabled={!quantityInput || assessingWithQuantity}
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {assessingWithQuantity ? 'Processing...' : 'Assess'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

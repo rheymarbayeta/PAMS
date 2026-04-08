@@ -50,12 +50,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.get('/api/auth/me');
       setUser(response.data);
       localStorage.setItem('user', JSON.stringify(response.data));
-    } catch (error) {
-      // Token invalid, clear storage
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setToken(null);
-      setUser(null);
+    } catch (error: any) {
+      // Only logout if it's an auth error (401/403)
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        // Token invalid, clear storage
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setToken(null);
+        setUser(null);
+      }
+      // For other errors (network, 500, etc), keep the user logged in
+      // as they might have a valid token that just can't be verified right now
     } finally {
       setLoading(false);
     }

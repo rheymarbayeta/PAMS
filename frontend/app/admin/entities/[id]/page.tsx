@@ -10,6 +10,7 @@ import api from '@/services/api';
 interface Application {
   application_id: string;
   application_number: string | null;
+  permit_number: string | null;
   permit_type: string;
   permit_type_name: string | null;
   status: string;
@@ -365,7 +366,7 @@ export default function EntityDetailPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50/80">
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Application</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Permit Number</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Permit Type</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Application Status</th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Permit Status</th>
@@ -379,7 +380,7 @@ export default function EntityDetailPage() {
                       <tr key={app.application_id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
-                            {app.application_number || `#${app.application_id.substring(0, 8)}`}
+                            {app.permit_number || '—'}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

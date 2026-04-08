@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const mysql = require('mysql2/promise');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 async function resetAdminPassword() {
@@ -45,8 +46,8 @@ async function resetAdminPassword() {
 
       // Create admin user
       await connection.execute(
-        'INSERT INTO users (username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?)',
-        ['admin', password_hash, 'System Administrator', roles[0].role_id]
+        'INSERT INTO users (user_id, username, password_hash, full_name, role_id) VALUES (?, ?, ?, ?, ?)',
+        [uuidv4(), 'admin', password_hash, 'System Administrator', roles[0].role_id]
       );
 
       console.log('✅ Admin user created successfully!');

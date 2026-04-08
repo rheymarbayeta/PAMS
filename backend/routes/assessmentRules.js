@@ -537,5 +537,26 @@ router.delete('/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   }
 });
 
+// Get fees for an assessment rule
+router.get('/:id/fees', async (req, res) => {
+  try {
+    const ruleId = req.params.id;
+
+    // Get fees from assessment_rule_fees table (which has the amount configured for this rule)
+    const [fees] = await pool.execute(
+      `SELECT arf.fee_id, arf.fee_name, arf.amount
+       FROM assessment_rule_fees arf
+       WHERE arf.rule_id = ?
+       ORDER BY arf.fee_order`,
+      [ruleId]
+    );
+
+    res.json(fees || []);
+  } catch (error) {
+    console.error('Get rule fees error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
 

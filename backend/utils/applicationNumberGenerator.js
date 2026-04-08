@@ -35,8 +35,8 @@ const generateApplicationNumber = async (connection = null) => {
       // Use INSERT ... ON DUPLICATE KEY UPDATE to handle race condition
       sequenceNumber = 1;
       await dbConnection.execute(
-        'INSERT INTO application_sequence (sequence_id, period, sequence_number) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE sequence_number = sequence_number + 1',
-        [require('../utils/idGenerator').generateId(require('../utils/idGenerator').ID_PREFIXES.APPLICATION_SEQUENCE), yearMonth, sequenceNumber]
+        'INSERT INTO application_sequence (period, sequence_number) VALUES (?, ?) ON DUPLICATE KEY UPDATE sequence_number = sequence_number + 1',
+        [yearMonth, sequenceNumber]
       );
       // Check if insert succeeded or if another transaction created it
       const [updatedSequences] = await dbConnection.execute(

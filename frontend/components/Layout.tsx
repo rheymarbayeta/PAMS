@@ -55,6 +55,9 @@ const navIcons: Record<string, JSX.Element> = {
   '/admin/rules': (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
   ),
+  '/admin/quantity-fees': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+  ),
 };
 
 export default function Layout({ children }: LayoutProps) {
@@ -116,7 +119,7 @@ export default function Layout({ children }: LayoutProps) {
   ];
 
   const adminLinks: { href: string; label: string; activePaths?: string[] }[] = [
-    { href: '/admin/permit-types', label: 'Permit Setup', activePaths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees'] },
+    { href: '/admin/permit-types', label: 'Permit Setup', activePaths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees', '/admin/quantity-fees'] },
     { href: '/admin/enforcers', label: 'Enforcers' },
     { href: '/admin/users', label: 'Users' },
     { href: '/reports', label: 'Reports', activePaths: ['/reports', '/admin/reports', '/admin/templates', '/admin/report-templates'] },
@@ -126,12 +129,13 @@ export default function Layout({ children }: LayoutProps) {
   // Page groups: show SubNav tabs when on any page in a group
   const pageGroups = [
     {
-      paths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees'],
+      paths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees', '/admin/quantity-fees'],
       tabs: [
         { href: '/admin/permit-types', label: 'Permit Types' },
         { href: '/admin/attributes', label: 'Attributes' },
         { href: '/admin/rules', label: 'Assessment Rules' },
         { href: '/admin/fees', label: 'Fees' },
+        { href: '/admin/quantity-fees', label: 'Quantity Fees' },
       ],
     },
     {

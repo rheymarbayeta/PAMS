@@ -4,7 +4,7 @@
 -- Purpose: Add Treasurer role for payment recording
 -- This role should be assigned to staff responsible for recording payments
 
-INSERT INTO Roles (role_name) VALUES ('Treasurer')
+INSERT INTO Roles (role_id, role_name) VALUES (UUID(), 'Treasurer')
 ON DUPLICATE KEY UPDATE role_name = VALUES(role_name);
 
 -- Update payment endpoint to allow Treasurer role

@@ -4,8 +4,8 @@ services:
   # Backend API
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: pams-backend
     restart: unless-stopped
     environment:
@@ -24,6 +24,7 @@ services:
     volumes:
       - backend_uploads:/app/uploads
       - ./backend/assets:/app/assets:ro
+      - ./database/migrations:/app/database/migrations:ro
     networks:
       - pams-network
     healthcheck:

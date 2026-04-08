@@ -50,6 +50,7 @@ router.get('/:id', async (req, res) => {
       `SELECT 
         a.application_id,
         a.application_number,
+        a.permit_number,
         a.permit_type,
         a.status,
         a.validity_date,
