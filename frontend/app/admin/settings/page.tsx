@@ -177,6 +177,20 @@ export default function SettingsPage() {
                     <p className="text-sm text-gray-500 mt-1">Upload logos and customize header text on permit documents</p>
                   </div>
                 </Link>
+                <Link
+                  href="/admin/settings/assessment-header"
+                  className="group flex items-start gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-green-300 hover:bg-green-50/50 transition-all duration-200"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-green-700 transition-colors">Assessment Header</h3>
+                    <p className="text-sm text-gray-500 mt-1">Upload logos and customize header text on assessment documents</p>
+                  </div>
+                </Link>
               </div>
             </div>
 
