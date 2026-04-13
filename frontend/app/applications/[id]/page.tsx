@@ -94,6 +94,11 @@ export default function ApplicationDetailPage() {
     const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
     const attrName = (app.attribute_name || '').trim().toUpperCase();
     
+    // Check for Disco attribute
+    if (attrName === 'DISCO') {
+      return `/disco-permit.html?id=${app.application_id}${encodedToken}`;
+    }
+    
     // Check for Special Cockfight attribute
     if (attrName === 'SPECIAL COCKFIGHT') {
       return `/cockfight-permit.html?id=${app.application_id}${encodedToken}`;

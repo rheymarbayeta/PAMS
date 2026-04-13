@@ -191,6 +191,32 @@ export default function SettingsPage() {
                     <p className="text-sm text-gray-500 mt-1">Upload logos and customize header text on assessment documents</p>
                   </div>
                 </Link>
+                <Link
+                  href="/admin/settings/mahjong-template"
+                  className="group flex items-start gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-amber-300 hover:bg-amber-50/50 transition-all duration-200"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <span className="text-white font-bold text-lg">麻</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-amber-700 transition-colors">Mahjong Template</h3>
+                    <p className="text-sm text-gray-500 mt-1">Configure mahjong permit template attributes and signatories</p>
+                  </div>
+                </Link>
+                <Link
+                  href="/admin/settings/disco-template"
+                  className="group flex items-start gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-rose-300 hover:bg-rose-50/50 transition-all duration-200"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-rose-700 transition-colors">Disco Template</h3>
+                    <p className="text-sm text-gray-500 mt-1">Customize disco permit header text and formatting</p>
+                  </div>
+                </Link>
               </div>
             </div>
 

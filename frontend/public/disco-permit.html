@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+  @font-face {
+    font-family:"Cambria Math";
+    panose-1:2 4 5 3 5 4 6 3 2 4;
+  }
+  @font-face {
+    font-family:Calibri;
+    panose-1:2 15 5 2 2 2 4 3 2 4;
+  }
+  @font-face {
+    font-family:"Segoe UI";
+    panose-1:2 11 5 2 4 2 4 2 2 3;
+  }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    font-family: 'Cambria', 'Noto Serif', 'Georgia', serif;
+  }
+  #report-container {
+    max-width: 8.5in;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .loading {
+    padding: 40px;
+    text-align: center;
+    font-size: 18px;
+    color: #666;
+  }
+  .error {
+    padding: 20px;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    color: #856404;
+    margin: 20px;
+  }
+  .controls {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    text-align: right;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .btn {
+    padding: 8px 16px;
+    margin-left: 5px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .btn:hover {
+    background-color: #0056b3;
+  }
+  .btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+  }
+  .btn-print {
+    background-color: #28a745;
+  }
+  .btn-print:hover {
+    background-color: #1e7e34;
+  }
+  /* Report PDF Button */
+  .report-pdf-btn {
+    padding: 8px 16px;
+    margin-left: 5px;
+    background-color: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .report-pdf-btn:hover:not(:disabled) {
+    background-color: #4f46e5;
+  }
+  .report-pdf-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  .report-error {
+    padding: 12px;
+    background-color: #fee;
+    border: 1px solid #fcc;
+    border-radius: 4px;
+    color: #c33;
+    margin: 10px 15px;
+    font-size: 13px;
+    display: none;
+  }
+  .report-error.show {
+    display: block;
+  }
+  /* Page container for proper sizing — fixed height so footer is always at the bottom */
+  .page {
+    width: 8.5in;
+    height: 13in;
+    padding: 0.5in 1in 0.75in 1in;
+    margin: 0 auto 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
+    page-break-after: always;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .page:last-child {
+    page-break-after: avoid;
+  }
+  .page-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .page-footer {
+    position: absolute;
+    bottom: 0.35in;
+    left: 1in;
+    right: 1in;
+    padding-top: 6px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    font-size: 8px;
+    color: #666;
+  }
+  .hidden {
+    display: none;
+  }
+  /* Page break utilities */
+  .page-break-before {
+    page-break-before: always;
+  }
+  .page-break-after {
+    page-break-after: always;
+  }
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+  /* Continuation header for multi-page */
+  .continuation-header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ccc;
+  }
+  .continuation-header h3 {
+    font-size: 14px;
+    color: #666;
+  }
+  p.MsoNormal, li.MsoNormal, div.MsoNormal {
+    margin: 0;
+    font-size: 12.0pt;
+    font-family: "Arial", sans-serif;
+  }
+  .MsoChpDefault {
+    font-family: "Calibri", sans-serif;
+  }
+  .MsoPapDefault {
+    margin-bottom: 10.0pt;
+    line-height: 115%;
+  }
+  div.WordSection1 {
+    page: WordSection1;
+  }
+  @page {
+    size: 8.5in 13in portrait;
+    margin: 0;
+  }
+  @media print {
+    body {
+      background: white;
+      margin: 0;
+      padding: 0;
+    }
+    #report-container {
+      box-shadow: none;
+      margin: 0;
+      max-width: 100%;
+    }
+    .controls {
+      display: none !important;
+    }
+    .page {
+      box-shadow: none;
+      margin: 0;
+      width: 8.5in;
+      height: 13in;
+      page-break-after: always;
+      overflow: hidden;
+    }
+    .page:last-child {
+      page-break-after: avoid;
+    }
+  }
+</style>
+<title>Generated Disco Permit</title>
+</head>
+<body lang=EN-US style='word-wrap:break-word'>
+
+<div id="report-container">
+  <div class="controls">
+    <button class="btn btn-print" onclick="printReport()">🖨️ Print</button>
+    <button class="report-pdf-btn" id="reportPdfBtn" onclick="generateReportPDF()">📄 Download PDF</button>
+    <div id="reportError" class="report-error"></div>
+  </div>
+  
+  <div id="loading" class="loading">
+    <p>Loading disco permit...</p>
+  </div>
+  
+  <div id="error" class="error hidden"></div>
+  
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script>
+// Get application ID from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const applicationId = urlParams.get('id') || urlParams.get('applicationId');
+const authToken = urlParams.get('token') || localStorage.getItem('token') || '';
+
+// Determine API base URL
+let apiBaseUrl = '';
+if (typeof window !== 'undefined') {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    apiBaseUrl = 'http://localhost:5000';
+  } else {
+    const origin = window.location.origin;
+    if (origin.includes(':6070')) {
+      apiBaseUrl = origin.replace(':6070', ':5040');
+    } else if (origin.includes(':3000')) {
+      apiBaseUrl = origin.replace(':3000', ':5000');
+    } else {
+      apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+    }
+  }
+}
+
+console.log('App ID:', applicationId);
+console.log('API Base URL:', apiBaseUrl);
+console.log('Auth Token:', authToken ? 'Present' : 'Missing');
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (!applicationId) {
+    showError('No application ID provided. Please pass ?id=<applicationId> in the URL.');
+    return;
+  }
+  fetchPermitReport();
+});
+
+async function fetchPermitReport() {
+  try {
+    const applicationUrl = `${apiBaseUrl}/api/applications/${applicationId}`;
+    const settingsUrl = `${apiBaseUrl}/api/settings`;
+    
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    console.log('\n========== FETCH APPLICATION DATA ==========');
+    console.log('Fetching application from:', applicationUrl);
+    
+    const applicationResponse = await fetch(applicationUrl, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'include'
+    });
+    
+    if (!applicationResponse.ok) {
+      if (applicationResponse.status === 401) {
+        throw new Error('Unauthorized. Please login again.');
+      }
+      if (applicationResponse.status === 404) {
+        throw new Error('Application not found.');
+      }
+      throw new Error(`HTTP Error: ${applicationResponse.status} ${applicationResponse.statusText}`);
+    }
+    
+    const applicationData = await applicationResponse.json();
+    console.log('✅ Application data loaded successfully');
+    console.log('Full applicationData:', applicationData);
+    console.log('============================================\n');
+    
+    // Fetch settings
+    let settings = {};
+    try {
+      console.log('Fetching settings...');
+      const settingsResponse = await fetch(settingsUrl, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include'
+      });
+      if (settingsResponse.ok) {
+        settings = await settingsResponse.json();
+        console.log('✅ Settings loaded:', settings);
+      }
+    } catch (settingsError) {
+      console.warn('Could not fetch settings, using defaults:', settingsError);
+    }
+    
+    // Fetch payment data
+    let paymentData = {};
+    try {
+      const paymentUrl = `${apiBaseUrl}/api/applications/${applicationId}/payment`;
+      console.log('Fetching payment from:', paymentUrl);
+      
+      const paymentResponse = await fetch(paymentUrl, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include'
+      });
+      if (paymentResponse.ok) {
+        const payments = await paymentResponse.json();
+        if (payments && payments.length > 0) {
+          paymentData = payments[0];
+          console.log('✅ Payment data loaded:', paymentData);
+        }
+      } else {
+        console.warn('Payment fetch returned status:', paymentResponse.status);
+      }
+    } catch (paymentError) {
+      console.warn('Could not fetch payment data:', paymentError);
+    }
+    
+    // Fetch current user info for footer
+    let currentUserName = 'PAMS';
+    try {
+      const meResponse = await fetch(`${apiBaseUrl}/api/auth/me`, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include'
+      });
+      if (meResponse.ok) {
+        const meData = await meResponse.json();
+        if (meData.full_name) currentUserName = meData.full_name;
+      }
+    } catch (meError) {
+      console.warn('Could not fetch current user info:', meError);
+    }
+    
+    renderReport(applicationData, settings, paymentData, currentUserName);
+  } catch (error) {
+    console.error('Error fetching permit data:', error);
+    showError(`Failed to load permit report: ${error.message}`);
+  }
+}
+
+function renderReport(applicationData, settings, paymentData, currentUserName) {
+  console.log('\n========== RENDER REPORT ==========');
+  const reportHTML = generateReportHTML(applicationData, settings, paymentData, currentUserName);
+  
+  document.getElementById('report-content').innerHTML = reportHTML;
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('report-content').classList.remove('hidden');
+  
+  // Store metadata for PDF generation
+  window.permitReportMeta = {
+    businessName: applicationData.entity_name || 'Disco Permit',
+    issueDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  };
+  
+  setTimeout(() => {
+    updatePageNumbers();
+  }, 150);
+  
+  console.log('===================================\n');
+}
+
+function generateReportHTML(applicationData, settings, paymentData, currentUserName) {
+  const now = new Date();
+  
+  console.log('\n========== GENERATE REPORT HTML ==========');
+  console.log('Input Data:');
+  console.log('  - applicationData:', applicationData);
+  console.log('  - settings:', settings);
+  
+  // Extract parameters
+  const addressParameters = applicationData.parameters || [];
+  let sitio = '';
+  let barangay = 'Poblacion';
+  let municipality = 'Dalaguete';
+  let permitDate = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  
+  console.log('Step 1 - Extract Parameters:');
+  addressParameters.forEach(param => {
+    const paramName = (param.param_name || '').toLowerCase();
+    const paramValue = param.param_value || '';
+    
+    if (paramName.includes('sitio')) {
+      sitio = paramValue;
+      console.log('  - Found sitio:', sitio);
+    }
+    if (paramName.includes('barangay')) {
+      barangay = paramValue;
+      console.log('  - Found barangay:', barangay);
+    }
+    if (paramName.includes('municipality')) {
+      municipality = paramValue;
+      console.log('  - Found municipality:', municipality);
+    }
+    if (paramName.includes('date') && !paramName.includes('birth')) {
+      permitDate = paramValue;
+      console.log('  - Found permit date:', permitDate);
+    }
+  });
+  
+  // Format address: Sitio, Barangay, Municipality (if Sitio exists) or Barangay, Municipality
+  let businessAddress = '';
+  if (sitio && sitio.trim()) {
+    businessAddress = `${sitio}, ${barangay}, ${municipality}`;
+  } else {
+    businessAddress = `${barangay}, ${municipality}`;
+  }
+  console.log('  - Formatted address:', businessAddress);
+  
+  const businessName = (applicationData.entity_name || 'N/A').toUpperCase();
+  const applicationDate = new Date(applicationData.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  
+  const paidAmount = paymentData.amount ? '₱ ' + parseFloat(paymentData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+  const orNo = paymentData.official_receipt_no || 'N/A';
+  const paidDate = paymentData.payment_date ? new Date(paymentData.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  
+  const permitSignatory = settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA';
+  const permitPosition = settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR';
+  const pnpChiefName = settings.disco_pnp_chief_name?.value || 'P/C ROMMEL SABALBURO';
+  const pnpChiefRank = settings.disco_pnp_chief_rank?.value || '';
+  
+  // Get body font size
+  const bBodyPx = Math.max(10, Math.min(18, parseFloat(settings.disco_body_font_size?.value) || 15));
+  
+  // Get header settings
+  const getLogoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
+    return url;
+  };
+
+  const logoLeftUrl = getLogoUrl(settings.disco_header_logo_left?.value) || null;
+  const logoRightUrl = getLogoUrl(settings.disco_header_logo_right?.value) || null;
+  
+  // Logo height in px (20–120, default 60)
+  const hLogoH = Math.max(20, Math.min(120, parseFloat(settings.disco_header_logo_size?.value) || 60));
+  
+  const hLine1 = settings.disco_header_line_1?.value !== undefined ? settings.disco_header_line_1.value : 'REPUBLIC OF THE PHILIPPINES';
+  const hLine2 = settings.disco_header_line_2?.value !== undefined ? settings.disco_header_line_2.value : 'PROVINCE OF CEBU';
+  const hLine3 = settings.disco_header_line_3?.value !== undefined ? settings.disco_header_line_3.value : 'MUNICIPALITY OF DALAGUETE';
+  const hLine4 = settings.disco_header_line_4?.value !== undefined ? settings.disco_header_line_4.value : '';
+  const hLine5 = settings.disco_header_line_5?.value !== undefined ? settings.disco_header_line_5.value : '';
+  
+  // Base font size for header lines (px)
+  const hBasePx = Math.max(7, Math.min(20, parseFloat(settings.disco_header_font_size?.value) || 15));
+  
+  const headerTextLines = `
+    ${hLine1 ? `<div style="font-size: ${hBasePx}px; font-weight: bold;"><span style='font-family:"Cambria",serif'>${hLine1}</span></div>` : ''}
+    ${hLine2 ? `<div style="font-size: ${hBasePx}px; font-weight: bold;"><span style='font-family:"Cambria",serif'>${hLine2}</span></div>` : ''}
+    ${hLine3 ? `<div style="font-size: ${hBasePx}px; font-weight: bold;"><span style='font-family:"Cambria",serif'>${hLine3}</span></div>` : ''}
+    ${hLine4 ? `<div style="font-size: ${hBasePx}px; font-weight: bold; margin-top: 2px;"><span style='font-family:"Cambria",serif'>${hLine4}</span></div>` : ''}
+    ${hLine5 ? `<div style="font-size: ${hBasePx}px; font-weight: bold; margin-top: 2px;"><span style='font-family:"Cambria",serif'>${hLine5}</span></div>` : ''}
+  `;
+  
+  console.log('Step 2 - Extracted Values:');
+  console.log('  - businessName:', businessName);
+  console.log('  - businessAddress:', businessAddress);
+  console.log('  - permitDate:', permitDate);
+  console.log('  - permitSignatory:', permitSignatory);
+  console.log('  - permitPosition:', permitPosition);
+  console.log('  - pnpChiefName:', pnpChiefName);
+  console.log('  - paidAmount:', paidAmount);
+  console.log('=========================================\n');
+  
+  const reportHTML = `
+    <div class="page" id="page-1">
+      <div class="page-content">
+        <div class="avoid-break" style="text-align: left; margin-bottom: 6px; font-size: ${bBodyPx}px;">
+          <p class=MsoNormal style="margin-bottom: 2px;"><b><span style='font-family:"Cambria",serif'>${applicationDate}</span></b></p>
+          <p class=MsoNormal style="margin-bottom: 2px;"><b><span style='font-family:"Cambria",serif'>${permitSignatory}</span></b></p>
+          <p class=MsoNormal style="margin-bottom: 2px;"><span style='font-family:"Cambria",serif'>${permitPosition}</span></p>
+          <p class=MsoNormal style="margin-bottom: 2px;"><span style='font-family:"Cambria",serif'>Dalaguete, Cebu</span></p>
+          <p class=MsoNormal style="margin-bottom: 2px;"><span style='font-family:"Cambria",serif'>&nbsp;</span></p>
+          <p class=MsoNormal style="margin-bottom: 2px;"><b><span style='font-family:"Cambria",serif'>Ma'am,</span></b></p>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; text-indent: .5in; margin-bottom: 6px; font-size: ${bBodyPx}px; line-height: 1.5;">
+          <span style='font-family:"Cambria",serif'>In connection with the <b>ANNUAL FIESTA,</b> we would like to request for a permit to hold a <b>SOUND SHOW / DISCO</b> at <b>${businessAddress}</b> on <b>${permitDate}</b> the undersigned would like to request for a Policeman to be detailed at the said place on the date stipulated.</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; text-indent: .5in; margin-bottom: 6px; font-size: ${bBodyPx}px; line-height: 1.5;">
+          <span style='font-family:"Cambria",serif'>FURTHER, we are aware of the existing Municipal Ordinance No. 2002-73 of the Municipality of Dalaguete regarding the imposed curfew on minors starting from 12:00 in the evening up to 2:00 o'clock in the morning. We conform to the said Municipal Ordinance and we take responsibility of the public of the extent thereof.</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; margin-bottom: 3px; font-size: ${bBodyPx}px;">
+          <span style='font-family:"Cambria",serif'>Very respectfully yours,</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; margin-bottom: 6px;">
+          <span style='font-family:"Cambria",serif'>&nbsp;</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <b><span style='font-family:"Cambria",serif'>${businessName}</span></b>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 3px;">
+          <span style='font-family:"Cambria",serif'>&nbsp;</span>
+        </div>
+
+        <!-- Dynamic Header -->
+        <div class="avoid-break" style="text-align: center; margin-bottom: 15px; margin-top: 5px;">
+          <div style="display: flex; justify-content: center; align-items: center; gap: 12px;">
+            ${logoLeftUrl ? `<img src="${logoLeftUrl}" alt="Logo" style="height: ${hLogoH}px; width: auto; object-fit: contain;">` : ''}
+            <div style="text-align: center; line-height: 1.3;">
+              ${headerTextLines}
+            </div>
+            ${logoRightUrl ? `<img src="${logoRightUrl}" alt="Logo 2" style="height: ${hLogoH}px; width: auto; object-fit: contain;">` : ''}
+          </div>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; font-size: ${bBodyPx}px; margin-top: 6px; margin-bottom: 6px; line-height: 1.5;">
+          <p style="margin: 0 0 6px 0; text-indent: .5in;"><span style='font-family:"Cambria",serif'>PERMIT IS HEREBY GRANTED TO <b>${businessName}</b> to hold a <b>SOUND SHOW / DISCO</b> at <b>${businessAddress}</b> on <b>${permitDate}</b> provided that rules and regulations promulgated by the PNP for reservation of peace and order is strictly observed and illegal gambling is prohibited.</span></p>
+
+          <p style="margin: 0 0 6px 0; text-indent: .5in;"><span style='font-family:"Cambria",serif'>MOREOVER, this undertaking after 12:00 o'clock in the evening the sound must be lowered to its tolerable level and it should automatically end and stop at exactly 3:00 o'clock in the morning the following day.</span></p>
+
+          <p style="margin: 0 0 6px 0;">&nbsp;</p>
+
+          <p style="margin-bottom: 0;"><b><span style='font-family:"Cambria",serif'>${permitSignatory}</span></b></p>
+
+          <p style="margin: 0;"><span style='font-family:"Cambria",serif'>${permitPosition}</span></p>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 3px;">
+          <span style='font-family:"Cambria",serif'>&nbsp;</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: center; margin-top: 10px; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <b><span style='font-family:"Cambria",serif'>HEADQUARTERS</span></b>
+        </div>
+
+        <div class="avoid-break" style="text-align: center; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <b><span style='font-family:"Cambria",serif'>PHILIPPINE NATIONAL POLICE</span></b>
+        </div>
+
+        <div class="avoid-break" style="text-align: center; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <b><span style='font-family:"Cambria",serif'>DALAGUETE POLICE STATION</span></b>
+        </div>
+
+        <div class="avoid-break" style="text-align: center; margin-bottom: 6px; font-size: ${bBodyPx}px;">
+          <b><span style='font-family:"Cambria",serif'>Dalaguete Cebu</span></b>
+        </div>
+
+        <div class="avoid-break" style="text-align: justify; margin-bottom: 10px; font-size: ${bBodyPx}px; line-height: 1.5;">
+          <span style='font-family:"Cambria",serif'>Respectfully transmitted to the requesting party the herein permit to hold <b>DISCO</b> at the dates stipulated of the above-mentioned place duly approved.</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: right; margin-top: 10px; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <b><u><span style='font-family:"Cambria",serif'>${pnpChiefName}</span></u></b>
+        </div>
+
+        <div class="avoid-break" style="text-align: right; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <span style='font-family:"Cambria",serif'>${pnpChiefRank || 'OIC Dalaguete Police Station'}</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: right; margin-bottom: 6px; font-size: ${bBodyPx}px;">
+          <span style='font-family:"Cambria",serif'>Dalaguete, Cebu</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: left; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <span style='font-family:"Cambria",serif'><b>Paid:</b> ${paidAmount}</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: left; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <span style='font-family:"Cambria",serif'><b>O.R. No.:</b> ${orNo}</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: left; margin-bottom: 1px; font-size: ${bBodyPx}px;">
+          <span style='font-family:"Cambria",serif'><b>Date:</b> ${paidDate}</span>
+        </div>
+
+        <div class="avoid-break" style="text-align: left; font-size: ${bBodyPx}px;">
+          <span style='font-family:"Cambria",serif'>Dalaguete, Cebu</span>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="page-footer">
+        <div>Generated by: ${currentUserName} | Permit and Assessment Management System | Issued: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} | Page <span class="page-number">1</span> of <span class="total-pages">1</span></div>
+      </div>
+    </div>
+  `;
+  
+  return reportHTML;
+}
+
+/**
+ * Update page numbers in the document
+ */
+function updatePageNumbers() {
+  const pages = document.querySelectorAll('.page');
+  const totalPages = pages.length;
+  
+  pages.forEach((page, index) => {
+    const pageNumEl = page.querySelector('.page-number');
+    const totalPagesEl = page.querySelector('.total-pages');
+    
+    if (pageNumEl) pageNumEl.textContent = index + 1;
+    if (totalPagesEl) totalPagesEl.textContent = totalPages;
+  });
+}
+
+function printReport() {
+  window.print();
+}
+
+/**
+ * Generate PDF via Puppeteer (server-side)
+ */
+async function generateReportPDF() {
+  const reportPdfBtn = document.getElementById('reportPdfBtn');
+  const reportError = document.getElementById('reportError');
+
+  try {
+    const reportContent = document.getElementById('report-content');
+    if (!reportContent || reportContent.classList.contains('hidden')) {
+      throw new Error('Report not loaded yet. Wait for the permit to load first.');
+    }
+
+    reportPdfBtn.disabled = true;
+    reportPdfBtn.innerHTML = '⏳ Generating PDF...';
+    reportError.classList.remove('show');
+
+    // Collect all <style> blocks from the page for embedding
+    const styleText = Array.from(document.querySelectorAll('style'))
+      .map(s => s.innerHTML).join('\n');
+
+    // Build a self-contained HTML document for Puppeteer
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+${styleText}
+body { background: white; margin: 0; padding: 0; }
+.controls { display: none !important; }
+#report-container { box-shadow: none; margin: 0; max-width: 100%; }
+.page { box-shadow: none; margin: 0; }
+</style>
+</head>
+<body>
+<div id="report-container">
+${reportContent.innerHTML}
+</div>
+</body>
+</html>`;
+
+    const meta = window.permitReportMeta || {};
+    const businessName = (meta.businessName || 'Disco Permit').replace(/[^a-zA-Z0-9]/g, '_');
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `Disco_Permit_${businessName}_${date}.pdf`;
+
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      },
+      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal' })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Server error' }));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    reportPdfBtn.innerHTML = '✅ Downloaded!';
+    setTimeout(() => {
+      reportPdfBtn.innerHTML = '📄 Download PDF';
+      reportPdfBtn.disabled = false;
+    }, 2000);
+
+  } catch (error) {
+    reportError.textContent = `Error: ${error.message}`;
+    reportError.classList.add('show');
+    setTimeout(() => reportError.classList.remove('show'), 5000);
+    reportPdfBtn.innerHTML = '📄 Download PDF';
+    reportPdfBtn.disabled = false;
+  }
+}
+
+function showError(message) {
+  document.getElementById('error').textContent = message;
+  document.getElementById('error').classList.remove('hidden');
+  document.getElementById('loading').classList.add('hidden');
+}
+</script>
+
+</body>
+
+</html>
