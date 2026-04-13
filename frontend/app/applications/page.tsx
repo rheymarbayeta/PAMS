@@ -17,6 +17,7 @@ interface Application {
   attribute_name: string | null;
   status: string;
   permit_number: string | null;
+  validity_date: string | null;
   creator_name: string;
   assessor_name: string | null;
   approver_name: string | null;
@@ -139,6 +140,35 @@ export default function ApplicationsPage() {
         return 'bg-red-50 text-red-700 border-red-200';
       default:
         return 'bg-slate-50 text-slate-700 border-slate-200';
+    }
+  };
+
+  const getExpirationStatus = (validityDate: string | null, status: string) => {
+    // Only show expiration status for Issued and Released permits
+    if (!['Issued', 'Released'].includes(status) || !validityDate) {
+      return null;
+    }
+    
+    const expiryDate = new Date(validityDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (expiryDate < today) {
+      return {
+        label: 'Expired',
+        color: 'bg-red-50 text-red-700 border-red-200'
+      };
+    } else if (expiryDate.getTime() - today.getTime() < 30 * 24 * 60 * 60 * 1000) {
+      // Less than 30 days remaining
+      return {
+        label: 'Expiring Soon',
+        color: 'bg-amber-50 text-amber-700 border-amber-200'
+      };
+    } else {
+      return {
+        label: 'Active',
+        color: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      };
     }
   };
 
@@ -354,6 +384,11 @@ export default function ApplicationsPage() {
                           {app.permit_number && (
                             <span className="inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-xs font-medium border border-blue-200 bg-blue-50 text-blue-700">
                               {app.permit_number}
+                            </span>
+                          )}
+                          {getExpirationStatus(app.validity_date, app.status) && (
+                            <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-xs font-medium border ${getExpirationStatus(app.validity_date, app.status)?.color}`}>
+                              {getExpirationStatus(app.validity_date, app.status)?.label}
                             </span>
                           )}
                         </div>

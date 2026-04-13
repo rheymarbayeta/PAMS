@@ -260,6 +260,17 @@ export default function NewApplicationPage() {
 
   const getDefaultParameters = (attributeName: string) => {
     const isMahjong = (attributeName || '').trim().toLowerCase() === 'mahjong';
+    const isSpecialCockfight = (attributeName || '').trim().toLowerCase() === 'special cockfight';
+    
+    if (isSpecialCockfight) {
+      return [
+        { param_name: 'Date', param_value: '' },
+        { param_name: 'Conduct/engage in', param_value: 'Special Cockfight' },
+        { param_name: 'Valid Until', param_value: '' },
+        { param_name: 'SB Resolution No.', param_value: '' },
+      ];
+    }
+    
     return [
       { param_name: isMahjong ? 'Location' : 'Date', param_value: '' },
       { param_name: isMahjong ? 'Color' : 'Conduct/engage in', param_value: '' },
@@ -684,14 +695,13 @@ export default function NewApplicationPage() {
                 </div>
                 <div>
                   <label htmlFor="street" className="block text-sm font-medium text-gray-700 mb-2">
-                    Street / Sitio *
+                    Street / Sitio
                   </label>
                   <input
                     id="street"
                     type="text"
-                    required
                     className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                    placeholder="Street or Sitio"
+                    placeholder="Street or Sitio (Optional)"
                     value={formData.street}
                     onChange={(e) => setFormData({ ...formData, street: e.target.value })}
                     aria-label="Street or Sitio"

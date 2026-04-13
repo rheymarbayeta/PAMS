@@ -1735,7 +1735,7 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
     // Check current status and get permit type info for validity, also get renewal info
     const [apps] = await pool.execute(
       `SELECT a.status, a.application_number, a.permit_type_id, a.permit_type,
-              a.application_type, a.parent_application_id, a.renewal_count,
+              a.application_type, a.parent_application_id, a.renewal_count, a.validity_date,
               pt.validity_date as permit_type_validity_date,
               pt.validity_type as permit_type_validity_type,
               pt.permit_type_name
@@ -1754,13 +1754,12 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
     }
 
     // Determine validity date based on validity_type
-    let validityDate = null;
+    let validityDate = apps[0].validity_date || null; // Preserve existing validity_date from creation (convert undefined to null)
     let validityMsg = 'No validity date set';
     
     if (apps[0].permit_type_validity_type === 'custom') {
-      // For custom validity, do NOT store in validity_date column (it expects DATE format)
-      // Instead, keep it NULL - the custom date is stored in application_parameters with param_name='Date'
-      validityDate = null;
+      // For custom validity, preserve the validity_date from application creation
+      // The custom date text is stored in application_parameters with param_name='Date'
       
       const [dateParams] = await pool.execute(
         `SELECT param_value FROM application_parameters 
@@ -1775,8 +1774,10 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
         validityMsg = 'Custom validity (no Date parameter found)';
       }
     } else {
-      // For fixed validity, use the permit_type_validity_date
-      validityDate = apps[0].permit_type_validity_date || null;
+      // For fixed validity, use the permit_type_validity_date if available
+      if (apps[0].permit_type_validity_date) {
+        validityDate = apps[0].permit_type_validity_date;
+      }
       if (validityDate) {
         validityDate = new Date(validityDate).toISOString().split('T')[0];
         validityMsg = `Valid until ${validityDate}`;

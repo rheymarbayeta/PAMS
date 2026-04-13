@@ -93,6 +93,13 @@ export default function ApplicationDetailPage() {
   const getPermitTemplateUrl = (app: ApplicationDetail, token: string): string => {
     const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
     const attrName = (app.attribute_name || '').trim().toUpperCase();
+    
+    // Check for Special Cockfight attribute
+    if (attrName === 'SPECIAL COCKFIGHT') {
+      return `/cockfight-permit.html?id=${app.application_id}${encodedToken}`;
+    }
+    
+    // Check for Mahjong attributes
     const mahjongAttrs = (settings.permit_mahjong_template_attributes?.value || '')
       .split(',')
       .map((s: string) => s.trim().toUpperCase())
@@ -100,6 +107,8 @@ export default function ApplicationDetailPage() {
     if (mahjongAttrs.length > 0 && mahjongAttrs.includes(attrName)) {
       return `/mahjong-permit.html?id=${app.application_id}${encodedToken}`;
     }
+    
+    // Default to standard permit template
     return `/permit-report.html?id=${app.application_id}${encodedToken}`;
   };
 

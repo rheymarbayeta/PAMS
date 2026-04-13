@@ -230,7 +230,7 @@
     }
   }
 </style>
-<title>Generated Permit Report</title>
+<title>Generated Cockfight Permit Report</title>
 </head>
 <body>
 <div id="report-container">
@@ -1045,20 +1045,30 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
           <p class="avoid-break" style="margin: 32px 0 0 0; text-indent: 40px;">Given this <strong>${formatDateWithOrdinal(now)}</strong> at <strong>Municipal Hall, Dalaguete, Cebu, Philippines.</strong></p>
         </div>
         
-        <!-- Approval Section -->
-        <div class="avoid-break" style="margin-top: 60px; margin-left: 40px; margin-right: 40px; font-size: 18px; line-height: 1.8;">
-          ${settings.permit_by_signatory_enabled?.value !== 'false' ? `
-          <div style="margin-bottom: 20px;"><strong>BY:</strong></div>
-          <div style="margin-bottom: 5px; line-height: 1.2;">
-            <div style="font-weight: bold; text-transform: uppercase;">${settings.permit_by_signatory_name?.value || 'NAME'}</div>
-            <div style="text-transform: uppercase; font-size: 14px;">${settings.permit_by_signatory_title?.value || 'POSITION'}</div>
-          </div>
-          ` : ''}
-          <div style="margin-top: 30px; margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
-          <div style="margin-bottom: 5px; line-height: 1.2;">
-            <div style="font-weight: bold;">${settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA'}</div>
-            <div style="font-weight: normal; font-size: 14px;">${settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR'}</div>
-          </div>
+        <!-- SB Resolution Number Section -->
+        <div class="avoid-break" style="margin-top: 60px; margin-left: 40px; margin-right: 40px;">
+          ${(() => {
+            // Extract SB Resolution No. from parameters
+            let sbResolutionNo = 'N/A';
+            const sbParam = addressParameters.find(p => 
+              (p.param_name || '').toLowerCase().includes('sb') || 
+              (p.param_name || '').toLowerCase().includes('resolution') ||
+              (p.param_name || '').toLowerCase().includes('attachment')
+            );
+            if (sbParam && sbParam.param_value) {
+              sbResolutionNo = sbParam.param_value;
+            }
+            
+            return `
+              <div style="border: 2px solid #333; padding: 20px; text-align: center; background-color: #f9f9f9;">
+                <div style="font-size: 24px; font-weight: bold; color: #1a1a1a;">SB RESOLUTION NO. ${sbResolutionNo}</div>
+              </div>
+            `;
+          })()}
+        </div>
+
+        <!-- Payment Details Section -->
+        <div class="avoid-break" style="margin-top: 40px; margin-left: 40px; margin-right: 40px; font-size: 14px; line-height: 1.8;">
           <div style="margin-top: 20px; font-size: 14px; line-height: 1.2;">
             <div>PAID: ₱ ${paymentData.amount ? parseFloat(paymentData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '18,700.00'}</div>
             <div>O.R. NO: ${paymentData.official_receipt_no || '1238282'}</div>
