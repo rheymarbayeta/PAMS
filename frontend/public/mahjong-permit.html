@@ -358,19 +358,19 @@ function generateReportHTML(settings, applicationData, permitTypeData, paymentDa
         </div>
 
         <!-- Signatory Section: REVIEWED BY / APPROVED BY side-by-side -->
-        <div style="margin-top:40px;margin-left:40px;margin-right:40px;font-size:16px;">
+        <div style="margin-top:100px;margin-left:40px;margin-right:40px;font-size:16px;">
           <div style="display:flex;justify-content:space-between;gap:40px;">
             <!-- Left: REVIEWED BY -->
             <div style="flex:1;">
               ${bySignatoryEnabled ? `
-              <div style="margin-bottom:16px;font-weight:bold;">REVIEWED BY:</div>
+              <div style="margin-bottom:50px;font-weight:bold;">REVIEWED BY:</div>
               <div style="font-weight:bold;text-transform:uppercase;text-decoration:underline;">${byName}</div>
               <div style="font-size:13px;text-transform:uppercase;">${byTitle}</div>
               ` : ''}
             </div>
             <!-- Right: APPROVED BY -->
             <div style="flex:1;">
-              <div style="margin-bottom:16px;font-weight:bold;">APPROVED BY:</div>
+              <div style="margin-bottom:50px;font-weight:bold;">APPROVED BY:</div>
               <div style="font-weight:bold;text-transform:uppercase;text-decoration:underline;">${aprvName}</div>
               <div style="font-size:13px;text-transform:uppercase;">${aprvTitle}</div>
             </div>

@@ -28,6 +28,7 @@ const reportTemplateRoutes = require('./routes/reportTemplates');
 const citationRoutes = require('./routes/citations');
 const enforcerRoutes = require('./routes/enforcers');
 const quantityFeeRoutes = require('./routes/quantityFees');
+const rightsAndRentalsRoutes = require('./routes/rightsAndRentals');
 
 const app = express();
 const server = http.createServer(app);
@@ -111,6 +112,8 @@ app.use('/api/enforcers', enforcerRoutes);
 console.log('  ✓ /api/enforcers');
 app.use('/api/quantity-fees', quantityFeeRoutes);
 console.log('  ✓ /api/quantity-fees');
+app.use('/api/rights-and-rentals', rightsAndRentalsRoutes);
+console.log('  ✓ /api/rights-and-rentals');
 console.log('✅ All routes registered');
 
 // Health check
