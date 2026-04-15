@@ -68,6 +68,11 @@ export default function ApplicationDetailPage() {
   const reportsButtonRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   
+  // Report modal state
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportUrl, setReportUrl] = useState('');
+  const [reportTitle, setReportTitle] = useState('');
+  
   // Parameters edit state
   const [editingParameters, setEditingParameters] = useState(false);
   const [editedParameters, setEditedParameters] = useState<Array<{ param_name: string; param_value: string }>>([]);
@@ -121,6 +126,13 @@ export default function ApplicationDetailPage() {
     
     // Default to standard permit template
     return `/permit-report.html?id=${app.application_id}${encodedToken}`;
+  };
+
+  const openReportModal = (url: string, title: string) => {
+    setReportUrl(url);
+    setReportTitle(title);
+    setShowReportModal(true);
+    setShowReportsDropdown(false);
   };
 
   const fetchApplication = async () => {
@@ -319,10 +331,10 @@ export default function ApplicationDetailPage() {
       setIssuing(true);
       try {
         await api.put(`/api/applications/${application.application_id}/issue`);
-        // Open permit report in new tab (choose template based on attribute)
+        // Open permit report in modal (choose template based on attribute)
         const token = localStorage.getItem('token') || '';
         const url = getPermitTemplateUrl(application, token);
-        window.open(url, '_blank');
+        openReportModal(url, 'Print Permit');
         await fetchApplication();
       } catch (error: any) {
         showAlert(error.response?.data?.error || 'Error issuing permit', 'Error');
@@ -494,8 +506,7 @@ export default function ApplicationDetailPage() {
                                 onClick={() => {
                                   const token = localStorage.getItem('token') || '';
                                   const url = getPermitTemplateUrl(application, token);
-                                  window.open(url, '_blank');
-                                  setShowReportsDropdown(false);
+                                  openReportModal(url, 'Print Permit');
                                 }}
                                 className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors"
                               >
@@ -512,8 +523,7 @@ export default function ApplicationDetailPage() {
                                     const token = localStorage.getItem('token') || '';
                                     const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
                                     const url = `/endorsement-letter.html?id=${application.application_id}${encodedToken}`;
-                                    window.open(url, '_blank');
-                                    setShowReportsDropdown(false);
+                                    openReportModal(url, 'Endorsement Letter');
                                   }}
                                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 transition-colors"
                                 >
@@ -529,8 +539,7 @@ export default function ApplicationDetailPage() {
                                       const token = localStorage.getItem('token') || '';
                                       const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
                                       const url = `/assessment-report.html?id=${application.application_id}${encodedToken}`;
-                                      window.open(url, '_blank');
-                                      setShowReportsDropdown(false);
+                                      openReportModal(url, 'Print Assessment');
                                     }}
                                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                                   >
@@ -1121,6 +1130,53 @@ export default function ApplicationDetailPage() {
                     {assessingWithQuantity ? 'Processing...' : 'Assess'}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Report Modal */}
+        {showReportModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
+            <div className="bg-white rounded-lg shadow-2xl w-full h-full max-w-5xl max-h-[90vh] flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-900">{reportTitle}</h3>
+                <button
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportUrl('');
+                    setReportTitle('');
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Modal Body - iframe */}
+              <div className="flex-1 overflow-hidden">
+                <iframe
+                  src={reportUrl}
+                  className="w-full h-full border-0"
+                  title={reportTitle}
+                />
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 bg-gray-50">
+                <button
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setReportUrl('');
+                    setReportTitle('');
+                  }}
+                  className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
