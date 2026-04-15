@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, orientation=landscape">
     <title>Citation Ticket - Municipality of Dalaguete</title>
+    <script src="frontend/public/js/modal-dialog.js"></script>
     <style>
         @page {
             size: landscape;
@@ -1036,7 +1037,7 @@
             // Validate violations
             const violations = document.querySelectorAll('input[name="violations"]:checked');
             if (violations.length === 0) {
-                alert('Please select at least one violation.');
+                modalAlert('Please select at least one violation.');
                 return;
             }
 
@@ -1044,7 +1045,7 @@
             const othersCheckbox = document.getElementById('violation22');
             const othersSpecify = document.getElementById('othersSpecify');
             if (othersCheckbox.checked && !othersSpecify.value.trim()) {
-                alert('Please specify the other violation.');
+                modalAlert('Please specify the other violation.');
                 return;
             }
 
@@ -1110,12 +1111,12 @@
 
         // Generate new ticket on button click (optional feature)
         function newTicket() {
-            if (confirm('Generate a new ticket? Current data will be cleared.')) {
+            modalConfirm('Generate a new ticket? Current data will be cleared.', 'Confirm', () => {
                 document.getElementById('citationForm').reset();
                 document.getElementById('ticketNo').value = generateTicketNumber();
                 const today = new Date().toISOString().split('T')[0];
                 document.getElementById('dateIssued').value = today;
-            }
+            });
         }
 
         // Show Report Function
@@ -1123,7 +1124,7 @@
             const citations = JSON.parse(localStorage.getItem('citations')) || [];
             
             if (citations.length === 0) {
-                alert('No citations saved yet.');
+                modalAlert('No citations saved yet.');
                 return;
             }
 
@@ -1215,7 +1216,7 @@
             const citations = JSON.parse(localStorage.getItem('completedCitations')) || [];
             
             if (citations.length === 0) {
-                alert('No completed citations saved yet.');
+                modalAlert('No completed citations saved yet.');
                 return;
             }
 
@@ -1304,7 +1305,7 @@
             const citations = JSON.parse(localStorage.getItem('citations')) || [];
             
             if (citations.length === 0) {
-                alert('No citations to export.');
+                modalAlert('No citations to export.');
                 return;
             }
 
@@ -1324,7 +1325,7 @@
             element.click();
             document.body.removeChild(element);
 
-            alert('Report exported successfully!');
+            modalAlert('Report exported successfully!');
         }
 
         // Close modal when clicking outside of it

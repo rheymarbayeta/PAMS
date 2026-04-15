@@ -340,6 +340,7 @@
 </div>
 
 <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+<script src="js/modal-dialog.js"></script>
 <script>
 // Get application ID from URL parameters
 const urlParams = new URLSearchParams(window.location.search);
@@ -839,7 +840,7 @@ async function saveCustomization() {
     }
 
     const result = await response.json();
-    alert('Report changes saved successfully!');
+    modalAlert('Report changes saved successfully!');
 
     // Exit edit mode
     editMode = true;
@@ -852,36 +853,33 @@ async function saveCustomization() {
     fetchAssessmentReport();
   } catch (error) {
     console.error('Save customization error:', error);
-    alert('Error saving changes: ' + error.message);
+    modalAlert('Error saving changes: ' + error.message);
   }
 }
 
 async function revertToOriginal() {
-  if (!confirm('Are you sure you want to discard all edits and restore the original report?')) {
-    return;
-  }
+  modalConfirm('Are you sure you want to discard all edits and restore the original report?', 'Confirm', async () => {
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/applications/${applicationId}/report-customization/${currentReportType}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          credentials: 'include'
+        }
+      );
 
-  try {
-    const response = await fetch(
-      `${apiBaseUrl}/api/applications/${applicationId}/report-customization/${currentReportType}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        credentials: 'include'
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to revert');
       }
-    );
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to revert');
-    }
+      modalAlert('Report reverted to original content');
 
-    alert('Report reverted to original content');
-
-    // Clear customization data
+      // Clear customization data
     customizationData = null;
 
     // Exit edit mode
@@ -890,10 +888,11 @@ async function revertToOriginal() {
 
     // Re-render with original data
     fetchAssessmentReport();
-  } catch (error) {
-    console.error('Revert error:', error);
-    alert('Error reverting changes: ' + error.message);
-  }
+    } catch (error) {
+      console.error('Revert error:', error);
+      modalAlert('Error reverting changes: ' + error.message);
+    }
+  });
 }
 
 function showError(message) {
@@ -907,7 +906,7 @@ function printReport() {
 }
 
 function downloadPDF() {
-  alert('To save as PDF, use the Print dialog and select "Save as PDF" as the destination.');
+  modalAlert('To save as PDF, use the Print dialog and select "Save as PDF" as the destination.');
   window.print();
 }
 

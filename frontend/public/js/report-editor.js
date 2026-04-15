@@ -2,6 +2,7 @@
  * Shared utilities for editable report templates
  * Place this file at: frontend/public/js/report-editor.js
  * Usage: Include this script before your report HTML rendering scripts
+ * Note: Include js/modal-dialog.js before this file for modal dialogs
  */
 
 class ReportEditor {
@@ -94,7 +95,7 @@ class ReportEditor {
    */
   toggleEditMode() {
     if (!this.userCanEdit) {
-      alert('You do not have permission to edit this report');
+      modalAlert('You do not have permission to edit this report');
       return;
     }
 
@@ -249,7 +250,7 @@ class ReportEditor {
         throw new Error(errorData.error || 'Failed to save customization');
       }
 
-      alert('Report changes saved successfully!');
+      modalAlert('Report changes saved successfully!');
 
       // Exit edit mode
       this.editMode = true;

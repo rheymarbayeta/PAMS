@@ -87,6 +87,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [permitCategories, setPermitCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [cockfightPermittedDates, setCockfightPermittedDates] = useState<Map<string, any[]>>(new Map());
+  const [dayApplications, setDayApplications] = useState<any[]>([]);
 
   useEffect(() => {
     fetchPermitCategories();
@@ -95,6 +99,10 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchFullStats();
   }, [selectedCategory]);
+
+  useEffect(() => {
+    fetchCockfightPermittedDates();
+  }, []);
 
   const fetchPermitCategories = async () => {
     try {
@@ -118,6 +126,60 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchCockfightPermittedDates = async () => {
+    try {
+      // First, fetch all applications
+      const response = await api.get('/api/applications?limit=1000');
+      console.log('All applications response:', response.data);
+      
+      const dateMap = new Map<string, any[]>();
+      
+      // Filter for Special Cockfight applications
+      const cockfightApps = response.data.filter((app: any) => {
+        const isCockfight = app.attribute_name?.trim().toUpperCase() === 'SPECIAL COCKFIGHT' ||
+                           app.permit_type?.includes('Special Cockfight');
+        console.log('Checking app:', app.application_id, 'attribute:', app.attribute_name, 'permit_type:', app.permit_type, 'is cockfight:', isCockfight);
+        return isCockfight;
+      });
+      
+      console.log('Found cockfight applications:', cockfightApps.length, cockfightApps);
+      
+      // For each cockfight app, fetch detailed data including parameters
+      for (const app of cockfightApps) {
+        try {
+          const detailResponse = await api.get(`/api/applications/${app.application_id}`);
+          console.log('Detail response for app', app.application_id, ':', detailResponse.data);
+          
+          const permittedDatesParam = detailResponse.data.parameters?.find((p: any) => p.param_name === 'permitted_dates');
+          console.log('Permitted dates param for app', app.application_id, ':', permittedDatesParam);
+          
+          if (permittedDatesParam && permittedDatesParam.param_value) {
+            try {
+              const dates = JSON.parse(permittedDatesParam.param_value);
+              console.log('Parsed dates:', dates);
+              
+              dates.forEach((dateStr: string) => {
+                if (!dateMap.has(dateStr)) {
+                  dateMap.set(dateStr, []);
+                }
+                dateMap.get(dateStr)!.push(detailResponse.data);
+              });
+            } catch (e) {
+              console.error('Error parsing permitted_dates:', e);
+            }
+          }
+        } catch (detailError) {
+          console.error('Error fetching detail for app', app.application_id, ':', detailError);
+        }
+      }
+      
+      console.log('Final dateMap:', Array.from(dateMap.entries()));
+      setCockfightPermittedDates(dateMap);
+    } catch (error) {
+      console.error('Error fetching cockflight dates:', error);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value);
   };
@@ -129,6 +191,36 @@ export default function DashboardPage() {
   const daysUntil = (dateStr: string) => {
     const diff = new Date(dateStr).getTime() - Date.now();
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const getDaysInMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  };
+
+  const formatDateKey = (day: number, month: number, year: number) => {
+    return `${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}-${year}`;
+  };
+
+  const handlePrevMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+    setSelectedDate(null);
+    setDayApplications([]);
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+    setSelectedDate(null);
+    setDayApplications([]);
+  };
+
+  const handleDayClick = (day: number) => {
+    const dateKey = formatDateKey(day, currentMonth.getMonth(), currentMonth.getFullYear());
+    setSelectedDate(dateKey);
+    setDayApplications(cockfightPermittedDates.get(dateKey) || []);
   };
 
   if (loading || !data) {
@@ -147,7 +239,6 @@ export default function DashboardPage() {
     );
   }
 
-  const maxMonthly = Math.max(...(data.permits.monthlyTrend.map(m => m.count)), 1);
   const totalByCategory = data.permits.byCategory.reduce((s, c) => s + c.count, 0) || 1;
 
   // Build conic gradient for donut chart
@@ -227,21 +318,119 @@ export default function DashboardPage() {
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-            {/* Bar Chart - Monthly Trend */}
+            {/* Interactive Calendar - Special Cockfight Permitted Dates */}
             <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">Monthly Applications (Last 6 Months)</h3>
-              {data.permits.monthlyTrend.length > 0 ? (
-                <div className="flex items-end gap-2 sm:gap-4 h-48">
-                  {data.permits.monthlyTrend.map((m) => (
-                    <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                      <span className="text-xs font-medium text-slate-600">{m.count}</span>
-                      <div className="w-full rounded-t-md bg-teal-500 transition-all hover:bg-teal-600" style={{ height: `${(m.count / maxMonthly) * 100}%`, minHeight: m.count > 0 ? '8px' : '2px' }}></div>
-                      <span className="text-xs text-slate-500">{m.month_label}</span>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-slate-700">Special Cockfight Permitted Dates</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrevMonth}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                  <span className="text-sm font-medium text-slate-700 min-w-[140px] text-center">
+                    {currentMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    onClick={handleNextMonth}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="mb-4">
+                {/* Day headers */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="text-center text-xs font-semibold text-slate-500 py-2">
+                      {day}
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-sm text-slate-400">No data for this period</div>
+
+                {/* Calendar days */}
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({ length: getDaysInMonth(currentMonth) + getFirstDayOfMonth(currentMonth) }).map(
+                    (_, index) => {
+                      const day = index - getFirstDayOfMonth(currentMonth) + 1;
+                      if (day < 1 || day > getDaysInMonth(currentMonth)) {
+                        return (
+                          <div key={`empty-${index}`} className="bg-slate-50 border border-slate-100 h-16 rounded-lg" />
+                        );
+                      }
+
+                      const dateKey = formatDateKey(day, currentMonth.getMonth(), currentMonth.getFullYear());
+                      const hasApplications = cockfightPermittedDates.has(dateKey);
+                      const count = cockfightPermittedDates.get(dateKey)?.length || 0;
+                      const isSelected = selectedDate === dateKey;
+
+                      return (
+                        <div
+                          key={day}
+                          onClick={() => handleDayClick(day)}
+                          className={`border rounded-lg p-2 h-16 cursor-pointer transition-all flex flex-col justify-between ${
+                            hasApplications
+                              ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100'
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
+                          } ${isSelected ? 'ring-2 ring-teal-500 ring-inset' : ''}`}
+                        >
+                          <div className="text-sm font-semibold text-slate-700">{day}</div>
+                          {hasApplications && (
+                            <div className="text-xs font-medium text-emerald-600">{count} permitted</div>
+                          )}
+                        </div>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+
+              {/* Selected day applications */}
+              {selectedDate && (
+                <div className="border-t border-slate-200 pt-4">
+                  <h4 className="text-xs font-semibold text-slate-700 mb-3">
+                    Applications for {new Date(selectedDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </h4>
+                  {dayApplications.length > 0 ? (
+                    <div className="space-y-2 max-h-56 overflow-y-auto">
+                      {dayApplications.map((app) => {
+                        const sbResolution = app.parameters?.find((p: any) => p.param_name === 'SB Resolution No.')?.param_value || 'N/A';
+                        
+                        // Construct address from parameters
+                        const sitio = app.parameters?.find((p: any) => p.param_name === 'Sitio')?.param_value || '';
+                        const barangay = app.parameters?.find((p: any) => p.param_name === 'Barangay')?.param_value || '';
+                        const municipality = app.parameters?.find((p: any) => p.param_name === 'Municipality')?.param_value || '';
+                        const province = app.parameters?.find((p: any) => p.param_name === 'Province')?.param_value || '';
+                        
+                        const addressParts = [sitio, barangay, municipality, province].filter(part => part);
+                        const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'N/A';
+                        
+                        return (
+                          <div
+                            key={app.application_id}
+                            onClick={() => router.push(`/applications/${app.application_id}`)}
+                            className="p-2.5 bg-slate-50 rounded border border-slate-200 hover:border-teal-300 hover:bg-teal-50 cursor-pointer transition-all text-xs space-y-1"
+                          >
+                            <p className="text-slate-700">
+                              <span className="font-medium">Permit No.:</span><span className="font-semibold">{app.permit_number || 'Pending'}</span>
+                              <span className="ml-4 font-medium">SB Resolution No.:</span><span className="font-semibold">{sbResolution}</span>
+                            </p>
+                            <p className="text-slate-700">
+                              <span className="font-medium">Permitee:</span><span className="font-semibold">{app.entity_name}</span>
+                              <span className="ml-4 font-medium">Address:</span><span className="font-semibold">{fullAddress}</span>
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">No applications for this date</p>
+                  )}
+                </div>
               )}
             </div>
 

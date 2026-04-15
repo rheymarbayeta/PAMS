@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -43,6 +44,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <Script src="/js/modal-dialog.js" strategy="beforeInteractive" />
+      </head>
       <body className={`${inter.className} antialiased`}>
         <AuthProvider>{children}</AuthProvider>
       </body>

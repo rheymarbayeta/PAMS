@@ -7,6 +7,7 @@ import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBarangaysByMunicipality, BARANGAYS_BY_MUNICIPALITY } from '@/utils/barangays';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Entity {
   entity_id: string;
@@ -39,6 +40,20 @@ export default function NewApplicationPage() {
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
   const [assessmentRules, setAssessmentRules] = useState<AssessmentRuleOption[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showNewEntityModal, setShowNewEntityModal] = useState(false);
+  const [creatingEntity, setCreatingEntity] = useState(false);
+  const [newEntityForm, setNewEntityForm] = useState({
+    entity_name: '',
+    first_name: '',
+    middle_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+  });
+
+  const capitalizeInput = (value: string): string => {
+    return value.replace(/\b\w/g, (char) => char.toUpperCase());
+  };
   const [availableMunicipalities] = useState<string[]>(Object.keys(BARANGAYS_BY_MUNICIPALITY));
   const [availableBarangays, setAvailableBarangays] = useState<string[]>([]);
   const [formData, setFormData] = useState({
@@ -92,6 +107,60 @@ export default function NewApplicationPage() {
     if (!value) {
       setSelectedEntity(null);
       setFormData({ ...formData, entity_id: '' });
+    }
+  };
+
+  const handleCreateNewEntity = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newEntityForm.entity_name.trim()) {
+      showAlert('Please enter entity name');
+      return;
+    }
+
+    setCreatingEntity(true);
+
+    try {
+      const contact_person = [
+        newEntityForm.first_name.trim(),
+        newEntityForm.middle_name.trim(),
+        newEntityForm.last_name.trim(),
+      ]
+        .filter((name) => name.length > 0)
+        .join(' ');
+
+      const response = await api.post('/api/entities', {
+        entity_name: newEntityForm.entity_name.trim(),
+        contact_person: contact_person || null,
+        email: newEntityForm.email.trim() || null,
+        phone: newEntityForm.phone.trim() || null,
+      });
+
+      const newEntity = response.data;
+      
+      // Update entities list
+      setEntities([...entities, newEntity]);
+      setFilteredEntities([...filteredEntities, newEntity]);
+      
+      // Select the newly created entity
+      handleEntitySelect(newEntity);
+      
+      // Close modal and reset form
+      setShowNewEntityModal(false);
+      setNewEntityForm({
+        entity_name: '',
+        first_name: '',
+        middle_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+      });
+      
+      showAlert('Entity created successfully!');
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || 'Error creating entity');
+    } finally {
+      setCreatingEntity(false);
     }
   };
 
@@ -190,13 +259,13 @@ export default function NewApplicationPage() {
     
     // Validate entity is selected
     if (!formData.entity_id || !selectedEntity) {
-      alert('Please select an entity (applicant) from the search results');
+      showAlert('Please select an entity (applicant) from the search results');
       return;
     }
 
     // Validate rule is selected
     if (!formData.rule_id) {
-      alert('Please select a permit type');
+      showAlert('Please select a permit type');
       return;
     }
 
@@ -244,10 +313,10 @@ export default function NewApplicationPage() {
         parameters: parameters,
       });
 
-      alert('Application created successfully!');
+      showAlert('Application created successfully!');
       router.push(`/applications/${response.data.application_id}`);
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error creating application');
+      showAlert(error.response?.data?.error || 'Error creating application');
     } finally {
       setLoading(false);
     }
@@ -261,6 +330,8 @@ export default function NewApplicationPage() {
   const getDefaultParameters = (attributeName: string) => {
     const isMahjong = (attributeName || '').trim().toLowerCase() === 'mahjong';
     const isSpecialCockfight = (attributeName || '').trim().toLowerCase() === 'special cockfight';
+    const isMotorcade = (attributeName || '').trim().toLowerCase() === 'motorcade';
+    const isDisco = (attributeName || '').trim().toLowerCase() === 'disco';
     
     if (isSpecialCockfight) {
       return [
@@ -268,6 +339,25 @@ export default function NewApplicationPage() {
         { param_name: 'Conduct/engage in', param_value: 'Special Cockfight' },
         { param_name: 'Valid Until', param_value: '' },
         { param_name: 'SB Resolution No.', param_value: '' },
+      ];
+    }
+    
+    if (isMotorcade) {
+      return [
+        { param_name: 'Date', param_value: '' },
+        { param_name: 'Conduct/engage in', param_value: 'Motorcade' },
+        { param_name: 'Valid Until', param_value: '' },
+        { param_name: 'Route', param_value: '' },
+      ];
+    }
+    
+    if (isDisco) {
+      return [
+        { param_name: 'Date', param_value: '' },
+        { param_name: 'Conduct/engage in', param_value: 'Disco' },
+        { param_name: 'Valid Until', param_value: '' },
+        { param_name: 'Purpose', param_value: '' },
+        { param_name: 'Attachment', param_value: '' },
       ];
     }
     
@@ -437,9 +527,50 @@ export default function NewApplicationPage() {
     if (dateParamIdx !== -1 && formattedDate) {
       const newParameters = [...formData.parameters];
       newParameters[dateParamIdx].param_value = formattedDate;
+      
+      // For Special Cockfight, also store individual dates as JSON array for calendar feature
+      const isSpecialCockfight = selectedRule?.attribute_name?.trim().toUpperCase() === 'SPECIAL COCKFIGHT';
+      if (isSpecialCockfight) {
+        let individualDates: Date[] = [];
+        
+        if (dateMode === 'range' && rangeStart && rangeEnd) {
+          // Generate all dates in the range
+          const currentDate = new Date(rangeStart);
+          while (currentDate <= rangeEnd) {
+            individualDates.push(new Date(currentDate));
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+        } else if (dateMode === 'multiple') {
+          // Use selected dates
+          individualDates = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
+        }
+        
+        // Store individual dates as JSON array in a new parameter
+        if (individualDates.length > 0) {
+          const dateStrings = individualDates.map(date => {
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${month}-${day}-${year}`;
+          });
+          
+          // Remove existing permitted_dates parameter if it exists
+          const permittedDatesIdx = newParameters.findIndex(p => p.param_name === 'permitted_dates');
+          if (permittedDatesIdx !== -1) {
+            newParameters.splice(permittedDatesIdx, 1);
+          }
+          
+          // Add new permitted_dates parameter with JSON array
+          newParameters.push({
+            param_name: 'permitted_dates',
+            param_value: JSON.stringify(dateStrings)
+          });
+        }
+      }
+      
       setFormData({ ...formData, parameters: newParameters });
     }
-  }, [selectedDates, rangeStart, rangeEnd, dateMode]);
+  }, [selectedDates, rangeStart, rangeEnd, dateMode, selectedRule]);
 
   if (!canCreate) {
     return (
@@ -543,13 +674,26 @@ export default function NewApplicationPage() {
                   </div>
                 )}
                 {showEntityDropdown && entitySearch && filteredEntities.length === 0 && (
-                  <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-sm text-gray-500">
-                    <div className="flex items-center gap-2">
+                  <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4">
+                    <div className="text-sm text-gray-500 flex items-center gap-2 mb-3">
                       <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      No entities found. Create a new entity in the Entities management page.
+                      No entities found matching "{entitySearch}"
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewEntityModal(true);
+                        setNewEntityForm({ ...newEntityForm, entity_name: entitySearch });
+                      }}
+                      className="w-full px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-indigo-700 font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create New Entity
+                    </button>
                   </div>
                 )}
               </div>
@@ -1034,6 +1178,151 @@ export default function NewApplicationPage() {
               </button>
             </div>
           </form>
+
+          {/* New Entity Modal */}
+          {showNewEntityModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m0 0h6M6 12H0m12 0H6" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Create New Entity</h2>
+                    <p className="text-sm text-gray-500">Add a new entity (applicant) to the system</p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleCreateNewEntity} className="space-y-4">
+                  <div>
+                    <label htmlFor="new_entity_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Entity Name *
+                    </label>
+                    <input
+                      id="new_entity_name"
+                      type="text"
+                      required
+                      placeholder="Enter entity name"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                      value={newEntityForm.entity_name}
+                      onChange={(e) => setNewEntityForm({ ...newEntityForm, entity_name: capitalizeInput(e.target.value) })}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label htmlFor="new_first_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                        First Name
+                      </label>
+                      <input
+                        id="new_first_name"
+                        type="text"
+                        placeholder="First name"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                        value={newEntityForm.first_name}
+                        onChange={(e) => setNewEntityForm({ ...newEntityForm, first_name: capitalizeInput(e.target.value) })}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="new_middle_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Middle Name
+                      </label>
+                      <input
+                        id="new_middle_name"
+                        type="text"
+                        placeholder="Middle name"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                        value={newEntityForm.middle_name}
+                        onChange={(e) => setNewEntityForm({ ...newEntityForm, middle_name: capitalizeInput(e.target.value) })}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="new_last_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Last Name
+                      </label>
+                      <input
+                        id="new_last_name"
+                        type="text"
+                        placeholder="Last name"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                        value={newEntityForm.last_name}
+                        onChange={(e) => setNewEntityForm({ ...newEntityForm, last_name: capitalizeInput(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="new_email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Email
+                    </label>
+                    <input
+                      id="new_email"
+                      type="email"
+                      placeholder="Email address"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                      value={newEntityForm.email}
+                      onChange={(e) => setNewEntityForm({ ...newEntityForm, email: e.target.value.toLowerCase() })}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="new_phone" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Phone
+                    </label>
+                    <input
+                      id="new_phone"
+                      type="tel"
+                      placeholder="Phone number"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                      value={newEntityForm.phone}
+                      onChange={(e) => setNewEntityForm({ ...newEntityForm, phone: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewEntityModal(false);
+                        setNewEntityForm({
+                          entity_name: '',
+                          first_name: '',
+                          middle_name: '',
+                          last_name: '',
+                          email: '',
+                          phone: '',
+                        });
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={creatingEntity}
+                      className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all duration-200 disabled:opacity-50 font-medium inline-flex items-center justify-center gap-2"
+                    >
+                      {creatingEntity ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Create
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       </Layout>
     </ProtectedRoute>

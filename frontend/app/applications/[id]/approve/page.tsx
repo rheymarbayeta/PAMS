@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface AssessedFee {
   assessed_fee_id: string;
@@ -63,38 +64,40 @@ export default function ApproveApplicationPage() {
       setEditAmount('');
       fetchApplication();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error updating fee');
+      showAlert(error.response?.data?.error || 'Error updating fee');
     }
   };
 
   const handleApprove = async () => {
-    if (!confirm('Approve this application?')) return;
-
-    setSubmitting(true);
-    try {
-      await api.put(`/api/applications/${params.id}/approve`);
-      alert('Application approved successfully!');
-      router.push(`/applications/${params.id}`);
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error approving application');
-    } finally {
-      setSubmitting(false);
-    }
+    showConfirm('Approve this application?', 'Confirm', async () => {
+      setSubmitting(true);
+      try {
+        await api.put(`/api/applications/${params.id}/approve`);
+        showAlert('Application approved successfully!', 'Success', () => {
+          router.push(`/applications/${params.id}`);
+        });
+      } catch (error: any) {
+        showAlert(error.response?.data?.error || 'Error approving application');
+      } finally {
+        setSubmitting(false);
+      }
+    });
   };
 
   const handleReject = async () => {
     if (!rejectReason.trim()) {
-      alert('Please provide a reason for rejection');
+      showAlert('Please provide a reason for rejection', 'Validation Error');
       return;
     }
 
     setSubmitting(true);
     try {
       await api.put(`/api/applications/${params.id}/reject`, { reason: rejectReason });
-      alert('Application rejected');
-      router.push(`/applications/${params.id}`);
+      showAlert('Application rejected', 'Success', () => {
+        router.push(`/applications/${params.id}`);
+      });
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error rejecting application');
+      showAlert(error.response?.data?.error || 'Error rejecting application');
     } finally {
       setSubmitting(false);
       setShowRejectModal(false);

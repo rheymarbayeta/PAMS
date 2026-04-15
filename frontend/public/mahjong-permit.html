@@ -221,9 +221,9 @@ function generateReportHTML(settings, applicationData, permitTypeData, paymentDa
     if (name.includes('date') && !name.includes('birth')) permitStartDate = value;
   });
 
-  // Complete address: Sitio/Street, Barangay, Municipality
-  const addressParts = [street, barangay, municipality].filter(Boolean);
-  const businessAddress = addressParts.length > 0 ? addressParts.join(', ') : `${barangay}, ${municipality}`;
+  // Complete address: Sitio/Street, Barangay, Municipality, Province
+  const addressParts = [street, barangay, municipality, province].filter(Boolean);
+  const businessAddress = addressParts.length > 0 ? addressParts.join(', ') : `${barangay}, ${municipality}, ${province}`;
 
   // ── Mahjong table count from assessed fees ────────────────────────────────
   const businessName = applicationData.entity_name || 'N/A';

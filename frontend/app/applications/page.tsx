@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Application {
   application_id: number;
@@ -85,17 +86,21 @@ export default function ApplicationsPage() {
   const handleDeleteApplication = async (e: React.MouseEvent, applicationId: number) => {
     e.stopPropagation();
     
-    if (!confirm('Are you sure you want to delete this application? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      await api.delete(`/api/applications/${applicationId}`);
-      alert('Application deleted successfully');
-      fetchApplications();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting application');
-    }
+    showConfirm(
+      'Are you sure you want to delete this application? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/applications/${applicationId}`);
+          showAlert('Application deleted successfully');
+          fetchApplications();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting application');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const filteredApplications = (statusFilter === 'all'

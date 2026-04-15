@@ -249,6 +249,7 @@
   <div id="report-content" class="hidden"></div>
 </div>
 
+<script src="js/modal-dialog.js"></script>
 <script>
 // Get application ID from URL parameters
 const urlParams = new URLSearchParams(window.location.search);
@@ -654,7 +655,7 @@ function getPermitActivitiesDisplayMode(settings, permitTypeData, assessmentFees
 /**
  * Generate HTML for permit activities based on display mode
  */
-function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentFees, formattedAddress, startDateParam, endDateParam, isCustomDate = false) {
+function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentFees, formattedAddress, startDateParam, endDateParam, isCustomDate = false, applicationData = {}) {
   const dateOptions = { year: 'numeric', month: 'long', day: 'numeric' };
   
   let formattedDateRange = '';
@@ -700,6 +701,23 @@ function generatePermitActivitiesHTML(displayInfo, permitActivities, assessmentF
     console.log('  - startDate (formatted):', startDate);
     console.log('  - endDate (formatted):', endDate);
     console.log('  - formattedDateRange:', formattedDateRange);
+  }
+  
+  // Check if this is a Motorcade permit
+  const isMotorcade = applicationData?.attribute_name?.trim().toUpperCase() === 'MOTORCADE';
+  
+  if (isMotorcade) {
+    // For Motorcade permits, use special format: "To conduct/engage in operating {conduct/engage_parameter} from {route_parameter} on {date} only."
+    const conductParam = applicationData?.parameters?.find((p) => p.param_name === 'Conduct/engage in')?.param_value || 'Motorcade';
+    const routeParam = applicationData?.parameters?.find((p) => p.param_name === 'Route')?.param_value || 'N/A';
+    
+    console.log('Motorcade permit detected - using special format');
+    console.log('  - conductParam:', conductParam);
+    console.log('  - routeParam:', routeParam);
+    
+    return `
+      <p style="margin: 0; text-indent: 40px;">To conduct/engage in operating <strong>${conductParam}</strong> from <strong>${routeParam}</strong> on <strong>${formattedDateRange}</strong> only.</p>
+    `;
   }
   
   if (displayInfo.mode === 'table_with_quantity' && assessmentFees.length > 0) {
@@ -841,7 +859,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
       permitActivities = paramValue;
       console.log('  - Found permit activities (Conduct/engage in):', permitActivities);
     }
-    if (paramName.includes('date') && !paramName.includes('birth')) {
+    if (paramName === 'date' && !paramName.includes('permitted')) {
       permitStartDate = paramValue;
       console.log('  - Found permit date:', permitStartDate);
     }
@@ -855,12 +873,12 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - permitActivities:', permitActivities);
   console.log('  - permitStartDate:', permitStartDate);
   
-  // Format address: Sitio, Barangay, Municipality (if Sitio exists) or Barangay, Municipality
+  // Format address: Sitio, Barangay, Municipality, Province (if Sitio exists) or Barangay, Municipality, Province
   let formattedAddress = '';
   if (sitio && sitio.trim()) {
-    formattedAddress = `${sitio}, ${barangay}, ${municipality}`;
+    formattedAddress = `${sitio}, ${barangay}, ${municipality}, ${province}`;
   } else {
-    formattedAddress = `${barangay}, ${municipality}`;
+    formattedAddress = `${barangay}, ${municipality}, ${province}`;
   }
   console.log('  - formattedAddress:', formattedAddress);
   
@@ -955,7 +973,8 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
     formattedAddress,
     permitDateTextForDisplay,  // Pass the original text for custom dates
     reportEndDate,
-    isCustomDateValidity  // Pass flag to indicate if this is custom date text
+    isCustomDateValidity,  // Pass flag to indicate if this is custom date text
+    applicationData  // Pass applicationData for Motorcade detection
   );
 
   // Store metadata for pagination
@@ -1198,7 +1217,7 @@ async function downloadPDF() {
     
   } catch (error) {
     console.error('❌ Error generating PDF:', error);
-    alert('Error generating PDF: ' + error.message);
+    modalAlert('Error generating PDF: ' + error.message);
     pdfBtn.innerHTML = originalText;
     pdfBtn.disabled = false;
   }

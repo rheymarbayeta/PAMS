@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Fee {
   fee_id: string;
@@ -220,13 +221,13 @@ export default function AssessApplicationPage() {
 
   const handleAddFee = async () => {
     if (!selectedFee || !assessedAmount || !quantity) {
-      alert('Please select a fee, enter an amount, and quantity');
+      showAlert('Please select a fee, enter an amount, and quantity', 'Validation Error');
       return;
     }
 
     const quantityNum = parseFloat(quantity);
     if (quantityNum <= 0) {
-      alert('Quantity must be greater than 0');
+      showAlert('Quantity must be greater than 0', 'Validation Error');
       return;
     }
 
@@ -246,23 +247,24 @@ export default function AssessApplicationPage() {
       setFeeSearchQuery('');
       fetchData();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error adding fee');
+      showAlert(error.response?.data?.error || 'Error adding fee');
     }
   };
 
   const handleSubmitAssessment = async () => {
-    if (!confirm('Submit this assessment for approval?')) return;
-
-    setSubmitting(true);
-    try {
-      await api.put(`/api/applications/${params.id}/assess`);
-      alert('Assessment submitted successfully!');
-      router.push(`/applications/${params.id}`);
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error submitting assessment');
-    } finally {
-      setSubmitting(false);
-    }
+    showConfirm('Submit this assessment for approval?', 'Confirm', async () => {
+      setSubmitting(true);
+      try {
+        await api.put(`/api/applications/${params.id}/assess`);
+        showAlert('Assessment submitted successfully!', 'Success', () => {
+          router.push(`/applications/${params.id}`);
+        });
+      } catch (error: any) {
+        showAlert(error.response?.data?.error || 'Error submitting assessment');
+      } finally {
+        setSubmitting(false);
+      }
+    });
   };
 
   const canAssess = user && hasRole(['SuperAdmin', 'Admin', 'Assessor']);

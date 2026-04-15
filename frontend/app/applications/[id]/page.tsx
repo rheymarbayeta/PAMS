@@ -8,6 +8,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface ApplicationDetail {
   application_id: string;
@@ -67,6 +68,11 @@ export default function ApplicationDetailPage() {
   const reportsButtonRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   
+  // Parameters edit state
+  const [editingParameters, setEditingParameters] = useState(false);
+  const [editedParameters, setEditedParameters] = useState<Array<{ param_name: string; param_value: string }>>([]);
+  const [savingParameters, setSavingParameters] = useState(false);
+  
   // Quantity-based fee assessment state
   const [showQuantityModal, setShowQuantityModal] = useState(false);
   const [quantityInput, setQuantityInput] = useState('');
@@ -123,11 +129,50 @@ export default function ApplicationDetailPage() {
       setApplication(response.data);
     } catch (error: any) {
       if (error.response?.status === 404) {
-        alert('Application not found');
-        router.push('/applications');
+        showAlert('Application not found', 'Error', () => {
+          router.push('/applications');
+        });
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditParameters = () => {
+    if (application) {
+      setEditedParameters(JSON.parse(JSON.stringify(application.parameters)));
+      setEditingParameters(true);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingParameters(false);
+    setEditedParameters([]);
+  };
+
+  const handleParameterChange = (index: number, field: 'param_name' | 'param_value', value: string) => {
+    const updated = [...editedParameters];
+    updated[index][field] = value;
+    setEditedParameters(updated);
+  };
+
+  const handleSaveParameters = async () => {
+    if (!application) return;
+    
+    setSavingParameters(true);
+    try {
+      await api.put(`/api/applications/${application.application_id}`, {
+        parameters: editedParameters
+      });
+      
+      showAlert('Parameters updated successfully!', 'Success');
+      setEditingParameters(false);
+      setEditedParameters([]);
+      await fetchApplication();
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || 'Error updating parameters', 'Error');
+    } finally {
+      setSavingParameters(false);
     }
   };
 
@@ -185,7 +230,7 @@ export default function ApplicationDetailPage() {
       if (error.response?.status === 404) {
         router.push(`/applications/${application?.application_id}/assess`);
       } else {
-        alert('Error loading assessment configuration');
+        showAlert('Error loading assessment configuration', 'Error');
       }
     }
   };
@@ -230,7 +275,7 @@ export default function ApplicationDetailPage() {
 
     const qty = parseFloat(quantityInput);
     if (isNaN(qty) || qty <= 0) {
-      alert('Please enter a valid quantity');
+      showAlert('Please enter a valid quantity', 'Validation Error');
       return;
     }
 
@@ -240,16 +285,15 @@ export default function ApplicationDetailPage() {
         quantity_entered: qty
       });
       
-      alert('Assessment completed successfully!');
-      setShowQuantityModal(false);
-      setQuantityInput('');
-      setQuantityFeeConfig(null);
-      setQuantityPreview(null);
-      
-      // Refresh application data
-      await fetchApplication();
+      showAlert('Assessment completed successfully!', 'Success', () => {
+        setShowQuantityModal(false);
+        setQuantityInput('');
+        setQuantityFeeConfig(null);
+        setQuantityPreview(null);
+        fetchApplication();
+      });
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error processing assessment');
+      showAlert(error.response?.data?.error || 'Error processing assessment', 'Error');
     } finally {
       setAssessingWithQuantity(false);
     }
@@ -271,48 +315,52 @@ export default function ApplicationDetailPage() {
 
   const handleIssuePermit = async () => {
     if (!application) return;
-    if (!confirm('Issue this permit? This will change the status to Issued.')) return;
-    setIssuing(true);
-    try {
-      await api.put(`/api/applications/${application.application_id}/issue`);
-      // Open permit report in new tab (choose template based on attribute)
-      const token = localStorage.getItem('token') || '';
-      const url = getPermitTemplateUrl(application, token);
-      window.open(url, '_blank');
-      fetchApplication();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error issuing permit');
-    } finally {
-      setIssuing(false);
-    }
+    showConfirm('Issue this permit? This will change the status to Issued.', 'Confirm Issue Permit', async () => {
+      setIssuing(true);
+      try {
+        await api.put(`/api/applications/${application.application_id}/issue`);
+        // Open permit report in new tab (choose template based on attribute)
+        const token = localStorage.getItem('token') || '';
+        const url = getPermitTemplateUrl(application, token);
+        window.open(url, '_blank');
+        await fetchApplication();
+      } catch (error: any) {
+        showAlert(error.response?.data?.error || 'Error issuing permit', 'Error');
+      } finally {
+        setIssuing(false);
+      }
+    });
   };
 
   const handleReassessPermit = async () => {
     if (!application) return;
-    if (!confirm('Re-assess this application? This will change the status back to Assessed.')) return;
-    try {
-      await api.put(`/api/applications/${application.application_id}/reassess`);
-      alert('Application re-assessed successfully!');
-      fetchApplication();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error re-assessing application');
-    }
+    showConfirm('Re-assess this application? This will change the status back to Assessed.', 'Confirm Reassess', async () => {
+      try {
+        await api.put(`/api/applications/${application.application_id}/reassess`);
+        showAlert('Application re-assessed successfully!', 'Success', () => {
+          fetchApplication();
+        });
+      } catch (error: any) {
+        showAlert(error.response?.data?.error || 'Error re-assessing application');
+      }
+    });
   };
 
   const handleReleasePermit = async () => {
     if (!releaseData.released_by.trim() || !releaseData.received_by.trim()) {
-      alert('Please fill in both fields');
+      showAlert('Please fill in both fields', 'Validation Error');
       return;
     }
     setReleasing(true);
     try {
       await api.put(`/api/applications/${application?.application_id}/release`, releaseData);
-      alert('Permit released successfully!');
-      setShowReleaseModal(false);
-      setReleaseData({ released_by: '', received_by: '' });
-      fetchApplication();
+      showAlert('Permit released successfully!', 'Success', () => {
+        setShowReleaseModal(false);
+        setReleaseData({ released_by: '', received_by: '' });
+        fetchApplication();
+      });
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error releasing permit');
+      showAlert(error.response?.data?.error || 'Error releasing permit', 'Error');
     } finally {
       setReleasing(false);
     }
@@ -323,14 +371,16 @@ export default function ApplicationDetailPage() {
     const message = hasRole('SuperAdmin') 
       ? 'Are you sure you want to delete this application? This action cannot be undone.'
       : 'Are you sure you want to delete this pending application? This action cannot be undone.';
-    if (!confirm(message)) return;
-    try {
-      await api.delete(`/api/applications/${application.application_id}`);
-      alert('Application deleted successfully');
-      router.push('/applications');
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting application');
-    }
+    showConfirm(message, 'Confirm Delete', async () => {
+      try {
+        await api.delete(`/api/applications/${application.application_id}`);
+        showAlert('Application deleted successfully', 'Success', () => {
+          router.push('/applications');
+        });
+      } catch (error: any) {
+        showAlert(error.response?.data?.error || 'Error deleting application', 'Error');
+      }
+    }, undefined, { isDangerous: true });
   };
 
   if (loading) {
@@ -545,14 +595,16 @@ export default function ApplicationDetailPage() {
                   {canRenew && (
                     <button
                       onClick={async () => {
-                        if (!confirm('Renew this application? This will create a new application based on this one.')) return;
-                        try {
-                          const response = await api.post(`/api/applications/${application.application_id}/renew`);
-                          alert('Application renewed successfully!');
-                          router.push(`/applications/${response.data.application_id}`);
-                        } catch (error: any) {
-                          alert(error.response?.data?.error || 'Error renewing application');
-                        }
+                        showConfirm('Renew this application? This will create a new application based on this one.', 'Confirm Renew', async () => {
+                          try {
+                            const response = await api.post(`/api/applications/${application.application_id}/renew`);
+                            showAlert('Application renewed successfully!', 'Success', () => {
+                              router.push(`/applications/${response.data.application_id}`);
+                            });
+                          } catch (error: any) {
+                            showAlert(error.response?.data?.error || 'Error renewing application', 'Error');
+                          }
+                        });
                       }}
                       className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:scale-105 transition-all duration-200 text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
                     >
@@ -682,28 +734,93 @@ export default function ApplicationDetailPage() {
 
                 {/* Parameters */}
                 <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-5">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                    </svg>
-                    Parameters
-                  </h2>
-                  {application.parameters.length === 0 ? (
-                    <div className="text-center py-6">
-                      <svg className="w-10 h-10 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                       </svg>
-                      <p className="text-xs text-gray-500">No parameters</p>
-                    </div>
-                  ) : (
-                    <dl className="space-y-2">
-                      {application.parameters.map((param, index) => (
-                        <div key={index} className="flex items-start">
-                          <dt className="w-28 text-xs font-medium text-gray-500 flex-shrink-0">{param.param_name}</dt>
-                          <dd className="text-xs text-gray-900">{param.param_value || '-'}</dd>
+                      Parameters
+                    </h2>
+                    {!editingParameters && (
+                      <button
+                        onClick={handleEditParameters}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  
+                  {!editingParameters ? (
+                    <>
+                      {application.parameters.length === 0 ? (
+                        <div className="text-center py-6">
+                          <svg className="w-10 h-10 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                          </svg>
+                          <p className="text-xs text-gray-500">No parameters</p>
                         </div>
-                      ))}
-                    </dl>
+                      ) : (
+                        <dl className="space-y-2">
+                          {application.parameters.map((param, index) => (
+                            <div key={index} className="flex items-start">
+                              <dt className="w-28 text-xs font-medium text-gray-500 flex-shrink-0">{param.param_name}</dt>
+                              <dd className="text-xs text-gray-900">{param.param_value || '-'}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-3 mb-4">
+                        {editedParameters.map((param, index) => (
+                          <div key={index}>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              {param.param_name}
+                            </label>
+                            <input
+                              type="text"
+                              value={param.param_value}
+                              onChange={(e) => handleParameterChange(index, 'param_value', e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                              placeholder={`Enter ${param.param_name.toLowerCase()}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="flex gap-2 pt-3 border-t border-gray-100">
+                        <button
+                          onClick={handleCancelEdit}
+                          className="flex-1 px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveParameters}
+                          disabled={savingParameters}
+                          className="flex-1 px-3 py-2 text-xs font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1"
+                        >
+                          {savingParameters ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Save Changes
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
