@@ -101,6 +101,13 @@ export default function ReportsPage() {
   const [generatingFormat, setGeneratingFormat] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Financial summary
+  const [totalAmountDue, setTotalAmountDue] = useState<number>(0);
+
   useEffect(() => {
     fetchPermitCategories();
   }, []);
@@ -108,6 +115,11 @@ export default function ReportsPage() {
   useEffect(() => {
     fetchData();
   }, [selectedCategory]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilters, permitTypeFilter, creatorFilter, assessorFilter, approverFilter, dateRangeStart, dateRangeEnd, searchTerm]);
 
   const fetchPermitCategories = async () => {
     try {
@@ -125,6 +137,18 @@ export default function ReportsPage() {
       const response = await api.get(`/api/applications${params}`);
       const apps = response.data;
       setApplications(apps);
+
+      // Fetch financial summary
+      try {
+        const summaryParams = new URLSearchParams();
+        if (selectedCategory) summaryParams.set('permitCategory', selectedCategory);
+        const summaryRes = await api.get(`/api/reports/summary`);
+        if (summaryRes.data?.summary?.totalAmount != null) {
+          setTotalAmountDue(summaryRes.data.summary.totalAmount);
+        }
+      } catch {
+        // Summary is optional, don't block rendering
+      }
 
       // Extract unique values for filters
       const permitTypeSet = new Set<string>(apps.map((app: Application) => app.permit_type_name));
@@ -299,7 +323,9 @@ export default function ReportsPage() {
       const response = await api.post('/reports/generate', {
         templateName: 'applications',
         format: format,
-        statusFilter: statusFilters.length > 0 ? statusFilters[0] : undefined
+        statusFilter: statusFilters.length > 0 ? statusFilters[0] : undefined,
+        startDate: dateRangeStart || undefined,
+        endDate: dateRangeEnd || undefined,
       }, {
         responseType: 'blob'
       });
@@ -359,6 +385,11 @@ export default function ReportsPage() {
     searchTerm;
 
   const filteredApplications = getFilteredApplications();
+  const totalPages = Math.ceil(filteredApplications.length / pageSize);
+  const paginatedApplications = filteredApplications.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -422,9 +453,119 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* Stats Summary Cards */}
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 sm:gap-3 mb-6 sm:mb-8">
+            {[
+              { label: 'Total', value: stats.total, bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-800', sub: 'text-slate-500' },
+              { label: 'Pending', value: stats.pending, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', sub: 'text-amber-500' },
+              { label: 'Assessed', value: stats.assessed, bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-800', sub: 'text-sky-500' },
+              { label: 'Pend. Approval', value: stats.pendingApproval, bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-800', sub: 'text-orange-500' },
+              { label: 'Approved', value: stats.approved, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', sub: 'text-green-500' },
+              { label: 'Paid', value: stats.paid, bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-800', sub: 'text-teal-500' },
+              { label: 'Issued', value: stats.issued, bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-800', sub: 'text-indigo-500' },
+              { label: 'Released', value: stats.released, bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-800', sub: 'text-emerald-500' },
+              { label: 'Rejected', value: stats.rejected, bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', sub: 'text-red-500' },
+            ].map(stat => (
+              <button
+                key={stat.label}
+                onClick={() => {
+                  if (stat.label === 'Total') {
+                    setStatusFilters([]);
+                  } else {
+                    const statusMap: Record<string, string> = {
+                      'Pending': 'Pending', 'Assessed': 'Assessed',
+                      'Pend. Approval': 'Pending Approval', 'Approved': 'Approved',
+                      'Paid': 'Paid', 'Issued': 'Issued', 'Released': 'Released', 'Rejected': 'Rejected',
+                    };
+                    const s = statusMap[stat.label];
+                    if (s) setStatusFilters((prev: string[]) => prev.includes(s) ? prev.filter((x: string) => x !== s) : [...prev, s]);
+                  }
+                }}
+                className={`rounded-xl border p-2 sm:p-3 text-left transition-all duration-150 hover:shadow-sm ${stat.bg} ${stat.border} ${
+                  stat.label !== 'Total' && statusFilters.includes(
+                    ({ 'Pending': 'Pending', 'Assessed': 'Assessed', 'Pend. Approval': 'Pending Approval',
+                       'Approved': 'Approved', 'Paid': 'Paid', 'Issued': 'Issued',
+                       'Released': 'Released', 'Rejected': 'Rejected' } as Record<string, string>)[stat.label] || ''
+                  ) ? 'ring-2 ring-offset-1 ring-current' : ''
+                }`}
+              >
+                <div className={`text-xl sm:text-2xl font-bold ${stat.text}`}>{stat.value}</div>
+                <div className={`text-[10px] sm:text-xs font-medium mt-0.5 ${stat.sub}`}>{stat.label}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Status Distribution Bar Chart */}
+          {stats.total > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 mb-6 sm:mb-8">
+              <h3 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">Status Distribution</h3>
+              <div className="space-y-2">
+                {[
+                  { label: 'Pending', value: stats.pending, color: 'bg-amber-400' },
+                  { label: 'Assessed', value: stats.assessed, color: 'bg-sky-400' },
+                  { label: 'Pending Approval', value: stats.pendingApproval, color: 'bg-orange-400' },
+                  { label: 'Approved', value: stats.approved, color: 'bg-green-400' },
+                  { label: 'Paid', value: stats.paid, color: 'bg-teal-400' },
+                  { label: 'Issued', value: stats.issued, color: 'bg-indigo-400' },
+                  { label: 'Released', value: stats.released, color: 'bg-emerald-400' },
+                  { label: 'Rejected', value: stats.rejected, color: 'bg-red-400' },
+                ].filter(s => s.value > 0).map(s => (
+                  <div key={s.label} className="flex items-center gap-3">
+                    <div className="w-24 sm:w-32 text-xs text-slate-600 text-right shrink-0">{s.label}</div>
+                    <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                      <div
+                        className={`${s.color} h-full rounded-full flex items-center justify-end pr-2 transition-all duration-500`}
+                        style={{ width: `${Math.max((s.value / stats.total) * 100, 2)}%` }}
+                      >
+                        <span className="text-[10px] font-semibold text-white drop-shadow">{s.value}</span>
+                      </div>
+                    </div>
+                    <div className="w-10 text-xs text-slate-500 text-right shrink-0">
+                      {stats.total > 0 ? `${Math.round((s.value / stats.total) * 100)}%` : '0%'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {totalAmountDue > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Amount Due</span>
+                  <span className="text-sm font-bold text-teal-700">
+                    ₱{totalAmountDue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Toolbar */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 mb-6 sm:mb-8">
             <div className="flex flex-col gap-4">
+              {/* Category Filter Row */}
+              {permitCategories.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Category:</span>
+                  <button
+                    onClick={() => setSelectedCategory('')}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all duration-150 ${
+                      selectedCategory === '' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {permitCategories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat === selectedCategory ? '' : cat)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-all duration-150 ${
+                        selectedCategory === cat ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Top Row - Search and Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <div className="relative flex-1">
@@ -688,9 +829,26 @@ export default function ReportsPage() {
           </div>
 
           {/* Results Summary */}
-          <div className="text-sm text-slate-600 mb-4">
-            Showing <span className="font-semibold text-slate-800">{filteredApplications.length}</span> of <span className="font-semibold text-slate-800">{applications.length}</span> applications
-            {hasActiveFilters && <span className="text-teal-600 ml-2">(filtered)</span>}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <div className="text-sm text-slate-600">
+              Showing <span className="font-semibold text-slate-800">
+                {filteredApplications.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredApplications.length)}
+              </span> of <span className="font-semibold text-slate-800">{filteredApplications.length}</span> results
+              {applications.length !== filteredApplications.length && (
+                <span className="text-teal-600 ml-2">(filtered from {applications.length})</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="page-size" className="text-xs text-slate-500">Per page:</label>
+              <select
+                id="page-size"
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                className="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700 bg-white focus:border-teal-500 outline-none"
+              >
+                {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
           </div>
 
           {/* Table */}
@@ -735,7 +893,7 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredApplications.map((app, index) => (
+                    {paginatedApplications.map((app, index) => (
                       <tr
                         key={app.application_id}
                         className="hover:bg-slate-50/50 transition-colors duration-150 group"
@@ -776,9 +934,75 @@ export default function ReportsPage() {
             )}
           </div>
 
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-1">
+              <div className="text-xs text-slate-500">
+                Page {currentPage} of {totalPages}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1.5 text-xs rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="First page"
+                >
+                  «
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ‹ Prev
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let page: number;
+                  if (totalPages <= 5) {
+                    page = i + 1;
+                  } else if (currentPage <= 3) {
+                    page = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    page = totalPages - 4 + i;
+                  } else {
+                    page = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all duration-150 ${
+                        currentPage === page
+                          ? 'bg-slate-800 text-white border-slate-800 font-semibold'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next ›
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-1.5 text-xs rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Last page"
+                >
+                  »
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Footer Info */}
           <div className="mt-4 text-xs text-slate-500 text-center">
-            <p>Click column headers to sort. Use filters and column selector to customize your view.</p>
+            <p>Click stat cards to filter by status. Click column headers to sort. Use filters and column selector to customize your view.</p>
           </div>
         </div>
       </Layout>
