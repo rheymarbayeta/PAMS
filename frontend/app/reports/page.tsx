@@ -9,9 +9,11 @@ import { useAuth } from '@/contexts/AuthContext';
 interface Application {
   application_id: number;
   application_number: string | null;
+  permit_number: string | null;
   entity_name: string;
   permit_type: string;
   permit_type_name: string;
+  attribute_name: string;
   status: string;
   creator_name: string;
   assessor_name: string | null;
@@ -33,12 +35,12 @@ interface ReportStats {
   rejected: number;
 }
 
-type ColumnKey = 'application_number' | 'entity_name' | 'permit_type_name' | 'status' | 'creator_name' | 'assessor_name' | 'approver_name' | 'created_at' | 'assessed_at' | 'approved_at';
+type ColumnKey = 'permit_number' | 'entity_name' | 'permit_type_name' | 'status' | 'creator_name' | 'assessor_name' | 'approver_name' | 'created_at' | 'assessed_at' | 'approved_at';
 
 const AVAILABLE_COLUMNS: { key: ColumnKey; label: string }[] = [
-  { key: 'application_number', label: 'Application #' },
-  { key: 'entity_name', label: 'Entity Name' },
-  { key: 'permit_type_name', label: 'Permit Type' },
+  { key: 'permit_number', label: 'Permit Number' },
+  { key: 'entity_name', label: 'Permittee' },
+  { key: 'permit_type_name', label: 'Permit' },
   { key: 'status', label: 'Status' },
   { key: 'creator_name', label: 'Creator' },
   { key: 'assessor_name', label: 'Assessor' },
@@ -75,13 +77,9 @@ export default function ReportsPage() {
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Column selection
-  const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>([
-    'application_number',
-    'entity_name',
-    'permit_type_name',
-    'status',
-    'created_at',
-  ]);
+  const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(
+    ['permit_number', 'entity_name', 'permit_type_name', 'status', 'created_at']
+  );
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<ColumnKey>('created_at');
@@ -151,7 +149,7 @@ export default function ReportsPage() {
       }
 
       // Extract unique values for filters
-      const permitTypeSet = new Set<string>(apps.map((app: Application) => app.permit_type_name));
+      const permitTypeSet = new Set<string>(apps.map((app: Application) => app.attribute_name || app.permit_type_name).filter(Boolean));
       const creatorSet = new Set<string>(apps.map((app: Application) => app.creator_name));
       const assessorSet = new Set<string>(apps.map((app: Application) => app.assessor_name).filter(Boolean) as string[]);
       const approverSet = new Set<string>(apps.map((app: Application) => app.approver_name).filter(Boolean) as string[]);
@@ -193,7 +191,7 @@ export default function ReportsPage() {
           return false;
         }
         // Permit type filter
-        if (permitTypeFilter !== 'all' && app.permit_type_name !== permitTypeFilter) {
+        if (permitTypeFilter !== 'all' && (app.attribute_name || app.permit_type_name) !== permitTypeFilter) {
           return false;
         }
         // Creator filter
@@ -224,7 +222,7 @@ export default function ReportsPage() {
         if (searchTerm) {
           const term = searchTerm.toLowerCase();
           return (
-            (app.application_number?.toLowerCase().includes(term) ?? false) ||
+            (app.permit_number?.toLowerCase().includes(term) ?? false) ||
             app.entity_name.toLowerCase().includes(term) ||
             app.permit_type_name.toLowerCase().includes(term)
           );
@@ -571,7 +569,7 @@ export default function ReportsPage() {
                 <div className="relative flex-1">
                   <input
                     type="text"
-                    placeholder="Search by application number, entity name, or permit type..."
+                    placeholder="Search by permit number, permittee name, or permit type..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 pl-10 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none"
@@ -912,6 +910,8 @@ export default function ReportsPage() {
                             cellContent = dateValue ? new Date(dateValue as string).toLocaleDateString() : '-';
                           } else if (col.key === 'assessor_name' || col.key === 'approver_name') {
                             cellContent = app[col.key] || '-';
+                          } else if (col.key === 'permit_type_name') {
+                            cellContent = app.attribute_name || app.permit_type_name || '-';
                           } else {
                             cellContent = app[col.key];
                           }
