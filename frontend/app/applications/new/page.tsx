@@ -333,6 +333,17 @@ export default function NewApplicationPage() {
     const isMotorcade = (attributeName || '').trim().toLowerCase() === 'motorcade';
     const isDisco = (attributeName || '').trim().toLowerCase() === 'disco';
     
+    // Calculate last day of current year for Mahjong autofill
+    let mahjongValidUntil = '';
+    if (isMahjong) {
+      const currentYear = new Date().getFullYear();
+      const yearEnd = new Date(currentYear, 11, 31);
+      const month = String(yearEnd.getMonth() + 1).padStart(2, '0');
+      const day = String(yearEnd.getDate()).padStart(2, '0');
+      const year = yearEnd.getFullYear();
+      mahjongValidUntil = `${month}-${day}-${year}`;
+    }
+    
     if (isSpecialCockfight) {
       return [
         { param_name: 'Date', param_value: '' },
@@ -364,7 +375,7 @@ export default function NewApplicationPage() {
     return [
       { param_name: isMahjong ? 'Location' : 'Date', param_value: '' },
       { param_name: isMahjong ? 'Color' : 'Conduct/engage in', param_value: '' },
-      { param_name: 'Valid Until', param_value: '' },
+      { param_name: 'Valid Until', param_value: mahjongValidUntil },
       { param_name: 'Attachment', param_value: '' },
     ];
   };
@@ -721,11 +732,22 @@ export default function NewApplicationPage() {
                 value={formData.rule_id}
                 onChange={(e) => {
                   const selectedRule = assessmentRules.find(r => r.rule_id === e.target.value);
+                  const defaultParams = getDefaultParameters(selectedRule?.attribute_name || '');
+                  
+                  // If Mahjong, set the validUntilDate state as well
+                  const isMahjong = (selectedRule?.attribute_name || '').trim().toLowerCase() === 'mahjong';
+                  if (isMahjong) {
+                    const currentYear = new Date().getFullYear();
+                    setValidUntilDate(new Date(currentYear, 11, 31));
+                  } else {
+                    setValidUntilDate(null);
+                  }
+                  
                   setFormData({ 
                     ...formData, 
                     rule_id: e.target.value,
                     permit_type: selectedRule ? selectedRule.rule_name : '',
-                    parameters: getDefaultParameters(selectedRule?.attribute_name || ''),
+                    parameters: defaultParams,
                   });
                 }}
                 aria-label="Select permit type"
