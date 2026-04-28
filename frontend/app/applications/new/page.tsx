@@ -76,6 +76,7 @@ export default function NewApplicationPage() {
   const [showValidUntilPicker, setShowValidUntilPicker] = useState(false);
   const [validUntilDate, setValidUntilDate] = useState<Date | null>(null);
   const [validUntilMonth, setValidUntilMonth] = useState(new Date());
+  const [sameAsAddressChecked, setSameAsAddressChecked] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     fetchEntities();
@@ -350,6 +351,7 @@ export default function NewApplicationPage() {
         { param_name: 'Conduct/engage in', param_value: 'Special Cockfight' },
         { param_name: 'Valid Until', param_value: '' },
         { param_name: 'SB Resolution No.', param_value: '' },
+        { param_name: 'Location', param_value: '' },
       ];
     }
     
@@ -359,6 +361,7 @@ export default function NewApplicationPage() {
         { param_name: 'Conduct/engage in', param_value: 'Motorcade' },
         { param_name: 'Valid Until', param_value: '' },
         { param_name: 'Route', param_value: '' },
+        { param_name: 'Location', param_value: '' },
       ];
     }
     
@@ -369,6 +372,7 @@ export default function NewApplicationPage() {
         { param_name: 'Valid Until', param_value: '' },
         { param_name: 'Purpose', param_value: '' },
         { param_name: 'Attachment', param_value: '' },
+        { param_name: 'Location', param_value: '' },
       ];
     }
     
@@ -377,7 +381,8 @@ export default function NewApplicationPage() {
       { param_name: isMahjong ? 'Color' : 'Conduct/engage in', param_value: '' },
       { param_name: 'Valid Until', param_value: mahjongValidUntil },
       { param_name: 'Attachment', param_value: '' },
-    ];
+      { param_name: isMahjong ? '' : 'Location', param_value: '' },
+    ].filter((p) => p.param_name !== '');
   };
 
   // Format date to MM-DD-YYYY
@@ -582,6 +587,31 @@ export default function NewApplicationPage() {
       setFormData({ ...formData, parameters: newParameters });
     }
   }, [selectedDates, rangeStart, rangeEnd, dateMode, selectedRule]);
+
+  // Update Location parameter when address changes and "Same as Address" is checked
+  useEffect(() => {
+    const locationParamIdx = formData.parameters.findIndex(p => p.param_name === 'Location');
+    if (locationParamIdx === -1) return;
+
+    const isLocationSameAsAddress = sameAsAddressChecked[locationParamIdx];
+    if (!isLocationSameAsAddress) return;
+
+    // Build complete address
+    const addressParts = [
+      formData.street,
+      formData.barangay,
+      formData.municipality,
+      formData.province,
+      formData.country,
+    ].filter((part) => part && part.trim());
+
+    const completeAddress = addressParts.join(', ');
+
+    // Update Location parameter
+    const newParameters = [...formData.parameters];
+    newParameters[locationParamIdx].param_value = completeAddress;
+    setFormData({ ...formData, parameters: newParameters });
+  }, [formData.street, formData.barangay, formData.municipality, formData.province, formData.country, sameAsAddressChecked]);
 
   if (!canCreate) {
     return (
@@ -899,17 +929,47 @@ export default function NewApplicationPage() {
               <div className="space-y-3">
                 {formData.parameters.map((param, index) => (
                   <div key={index}>
-                    <div className="flex gap-3 items-center p-4 bg-gray-50/50 border border-gray-200 rounded-xl">
+                    <div className="flex gap-3 items-center p-4 bg-gray-50/50 border border-gray-200 rounded-xl flex-wrap">
                       <input
                         type="text"
                         placeholder="Parameter name"
-                        className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-4 py-2.5 text-gray-700 cursor-not-allowed disabled:opacity-70"
+                        className="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-4 py-2.5 text-gray-700 cursor-not-allowed disabled:opacity-70 min-w-[120px]"
                         value={param.param_name}
                         disabled
                         readOnly
                       />
+                      {param.param_name === 'Location' && (
+                        <label className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={sameAsAddressChecked[index] || false}
+                            onChange={(e) => {
+                              setSameAsAddressChecked({
+                                ...sameAsAddressChecked,
+                                [index]: e.target.checked,
+                              });
+                              // If checked, populate with current address
+                              if (e.target.checked) {
+                                const addressParts = [
+                                  formData.street,
+                                  formData.barangay,
+                                  formData.municipality,
+                                  formData.province,
+                                  formData.country,
+                                ].filter((part) => part && part.trim());
+                                const completeAddress = addressParts.join(', ');
+                                const newParameters = [...formData.parameters];
+                                newParameters[index].param_value = completeAddress;
+                                setFormData({ ...formData, parameters: newParameters });
+                              }
+                            }}
+                            className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                          />
+                          <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Same as Address</span>
+                        </label>
+                      )}
                       {param.param_name === 'Date' ? (
-                        <div className="flex-1 relative">
+                        <div className="flex-1 relative min-w-[200px]">
                           <input
                             type="text"
                             placeholder="Select dates..."
@@ -1055,7 +1115,7 @@ export default function NewApplicationPage() {
                           )}
                         </div>
                       ) : param.param_name === 'Valid Until' ? (
-                        <div className="flex-1 relative">
+                        <div className="flex-1 relative min-w-[200px]">
                           <input
                             type="text"
                             placeholder="Select validity date..."
@@ -1149,9 +1209,15 @@ export default function NewApplicationPage() {
                         <input
                           type="text"
                           placeholder="Value"
-                          className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                          className={`flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2.5 transition-all duration-200 ${
+                            param.param_name === 'Location' && sameAsAddressChecked[index]
+                              ? 'bg-gray-100 cursor-not-allowed'
+                              : 'focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
+                          }`}
                           value={param.param_value}
                           onChange={(e) => handleParameterChange(index, e.target.value)}
+                          disabled={param.param_name === 'Location' && sameAsAddressChecked[index]}
+                          readOnly={param.param_name === 'Location' && sameAsAddressChecked[index]}
                         />
                       )}
                       <button

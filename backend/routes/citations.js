@@ -10,6 +10,17 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Helper function to parse dates from ISO format to DATE format (YYYY-MM-DD)
+function parseDate(dateValue) {
+  if (!dateValue) return null;
+  // If it's an ISO datetime string, extract just the date part
+  if (typeof dateValue === 'string' && dateValue.includes('T')) {
+    return dateValue.split('T')[0];
+  }
+  // If it's already in YYYY-MM-DD format, return as is
+  return dateValue;
+}
+
 // Generate ticket number
 function generateTicketNumber() {
   const prefix = 'DG-' + new Date().getFullYear();
@@ -277,7 +288,7 @@ router.post('/', async (req, res) => {
         driverAddress || null,
         driverContact || null,
         licenseNumber || null,
-        licenseExpiry || null,
+        parseDate(licenseExpiry),
         vehicleType || null,
         vehicleColor || null,
         plateNumber || null,
@@ -290,7 +301,7 @@ router.post('/', async (req, res) => {
         otherViolations || null,
         violationLocation || null,
         violationTime || null,
-        violationDate || null,
+        parseDate(violationDate),
         remarks || null,
         fineAmount || 0,
         paymentStatus || 'Pending',
@@ -400,7 +411,7 @@ router.put('/:id', async (req, res) => {
     }
     if (licenseExpiry !== undefined) {
       updateFields.push('license_expiry = ?');
-      updateParams.push(licenseExpiry || null);
+      updateParams.push(parseDate(licenseExpiry));
     }
     if (vehicleType !== undefined) {
       updateFields.push('vehicle_type = ?');
@@ -444,7 +455,7 @@ router.put('/:id', async (req, res) => {
     }
     if (violationDate !== undefined) {
       updateFields.push('violation_date = ?');
-      updateParams.push(violationDate);
+      updateParams.push(parseDate(violationDate));
     }
     if (remarks !== undefined) {
       updateFields.push('remarks = ?');
