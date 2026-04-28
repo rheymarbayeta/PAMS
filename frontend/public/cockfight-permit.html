@@ -835,6 +835,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - addressParameters:', addressParameters);
   
   // Try to get address components, permit activities, and dates from parameters
+  let locationParam = '';
   addressParameters.forEach(param => {
     const paramName = (param.param_name || '').toLowerCase();
     const paramValue = param.param_value || '';
@@ -859,6 +860,10 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
       permitActivities = paramValue;
       console.log('  - Found permit activities (Conduct/engage in):', permitActivities);
     }
+    if (paramName.includes('location')) {
+      locationParam = paramValue;
+      console.log('  - Found location parameter:', locationParam);
+    }
     if (paramName === 'date' && !paramName.includes('permitted')) {
       permitStartDate = paramValue;
       console.log('  - Found permit date:', permitStartDate);
@@ -870,16 +875,32 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - barangay:', barangay);
   console.log('  - municipality:', municipality);
   console.log('  - province:', province);
+  console.log('  - locationParam:', locationParam);
   console.log('  - permitActivities:', permitActivities);
   console.log('  - permitStartDate:', permitStartDate);
   
-  // Format address: Sitio, Barangay, Municipality, Province (if Sitio exists) or Barangay, Municipality, Province
-  let formattedAddress = '';
+  // Always construct address from components for the ADDRESS section
+  let constructedAddress = '';
   if (sitio && sitio.trim()) {
-    formattedAddress = `${sitio}, ${barangay}, ${municipality}, ${province}`;
+    constructedAddress = `${sitio}, ${barangay}, ${municipality}, ${province}`;
   } else {
-    formattedAddress = `${barangay}, ${municipality}, ${province}`;
+    constructedAddress = `${barangay}, ${municipality}, ${province}`;
   }
+  console.log('  - constructedAddress (for ADDRESS section):', constructedAddress);
+  
+  // For permit activities, use Location parameter if available, otherwise use constructed address
+  let addressForActivities = '';
+  if (locationParam && locationParam.trim()) {
+    addressForActivities = locationParam;
+    console.log('  - Using Location parameter for permit activities');
+  } else {
+    addressForActivities = constructedAddress;
+    console.log('  - Using constructed address for permit activities');
+  }
+  console.log('  - addressForActivities:', addressForActivities);
+  
+  // For backward compatibility, keep formattedAddress as the constructed address
+  let formattedAddress = constructedAddress;
   console.log('  - formattedAddress:', formattedAddress);
   
   // Calculate permit end date (December 31 of current year) if start date is provided
@@ -970,7 +991,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
     displayInfo, 
     permitActivities, 
     assessmentFees, 
-    formattedAddress,
+    addressForActivities,
     permitDateTextForDisplay,  // Pass the original text for custom dates
     reportEndDate,
     isCustomDateValidity,  // Pass flag to indicate if this is custom date text
