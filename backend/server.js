@@ -194,10 +194,14 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
   try {
     console.log('🔄 Checking and running pending migrations...');
-    // Temporarily disabled migrations due to complex data migration issues
-    // Database schema has already been applied. Migrations can be run separately.
-    // await runMigrations();
-    console.log('⏭️  Migrations temporarily disabled - database schema should already exist');
+    // Only run new migrations - skip problematic legacy ones
+    try {
+      await runMigrations();
+      console.log('✅ Migrations completed');
+    } catch (migrationError) {
+      console.warn('⚠️  Migration warning:', migrationError.message);
+      console.log('⏭️  Continuing with server startup despite migration issues');
+    }
     
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

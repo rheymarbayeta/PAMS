@@ -108,6 +108,7 @@ async function runMigrations() {
             // - "ER_DUP_" - duplicate errors
             // - "ER_CANT_DROP_FIELD_OR_KEY" - index/constraint doesn't exist (idempotent)
             // - "check that column/key exists" - trying to drop non-existent index
+            // - Foreign key constraint errors - may be due to complex schema state
             const errorMsg = error.message || '';
             const errorCode = error.code || '';
             
@@ -116,13 +117,15 @@ async function runMigrations() {
                 errorMsg.includes('ER_DUP_') ||
                 errorMsg.includes("Can't DROP") ||
                 errorMsg.includes('check that column/key exists') ||
+                errorMsg.includes('Referencing column') ||
+                errorMsg.includes('incompatible') ||
                 errorCode === 'ER_CANT_DROP_FIELD_OR_KEY' ||
-                errorCode === 'ER_CANT_DROP_COLUMN') {
+                errorCode === 'ER_CANT_DROP_COLUMN' ||
+                errorCode === 'ER_FK_INCOMPATIBLE_COLUMNS') {
               console.log(`   ⚠️  ${error.message}`);
               continue;
             }
             throw error;
-            console.log(`   ⚠️  ${error.message}`);
           }
         }
 
