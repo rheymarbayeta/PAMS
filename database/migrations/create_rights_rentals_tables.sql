@@ -11,12 +11,12 @@ CREATE TABLE IF NOT EXISTS `lessees` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(255) NOT NULL,
   `contact_number` VARCHAR(50),
-  `email` VARCHAR(255),
+  `email` VARCHAR(100),
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_name (name),
+  INDEX idx_name (name(100)),
   INDEX idx_email (email)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ============================================
 -- PROPERTIES TABLE
@@ -24,14 +24,14 @@ CREATE TABLE IF NOT EXISTS `lessees` (
 CREATE TABLE IF NOT EXISTS `properties` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `property_name` VARCHAR(255) NOT NULL,
-  `property_code` VARCHAR(255) NOT NULL,
+  `property_code` VARCHAR(100) NOT NULL,
   `address` VARCHAR(500),
   `description` TEXT,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_property_name (property_name),
+  INDEX idx_property_name (property_name(100)),
   INDEX idx_property_code (property_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ============================================
 -- LEASE CONTRACTS TABLE
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS `lease_contracts` (
   INDEX idx_lessee_id (lessee_id),
   INDEX idx_property_id (property_id),
   INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ============================================
 -- PROPERTY UNITS TABLE (for multi-unit properties)
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS `property_units` (
   INDEX idx_property_id (property_id),
   INDEX idx_status (status),
   UNIQUE KEY unique_property_unit (property_id, unit_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ============================================
 -- PAYMENT HISTORY - RIGHTS TABLE
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS `payment_history_rights` (
   FOREIGN KEY (lease_contract_id) REFERENCES lease_contracts(id) ON DELETE CASCADE,
   INDEX idx_lease_contract_id (lease_contract_id),
   INDEX idx_payment_date (payment_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ============================================
 -- PAYMENT HISTORY - RENTAL TABLE
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS `payment_history_rental` (
   FOREIGN KEY (lease_contract_id) REFERENCES lease_contracts(id) ON DELETE CASCADE,
   INDEX idx_lease_contract_id (lease_contract_id),
   INDEX idx_payment_date (payment_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ============================================
 -- ACCOUNT BALANCES TABLE
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS `account_balances` (
   `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (lease_contract_id) REFERENCES lease_contracts(id) ON DELETE CASCADE,
   INDEX idx_lease_contract_id (lease_contract_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ============================================
 -- ACCOUNT STATEMENTS TABLE
@@ -140,4 +140,4 @@ CREATE TABLE IF NOT EXISTS `account_statements` (
   FOREIGN KEY (lease_contract_id) REFERENCES lease_contracts(id) ON DELETE CASCADE,
   INDEX idx_lease_contract_id (lease_contract_id),
   INDEX idx_statement_date (statement_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;

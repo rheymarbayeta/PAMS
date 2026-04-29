@@ -839,6 +839,221 @@ router.get('/lessees/:lesseeId/lease-contracts', async (req, res) => {
   }
 });
 
+// ========== PAYMENT MANAGEMENT ==========
+
+// Get account balance for a lease contract
+router.get('/lease-contracts/:contract_id/balance', async (req, res) => {
+  try {
+    const { contract_id } = req.params;
+    const connection = await pool.getConnection();
+    try {
+      // Get account balance
+      const [balance] = await connection.query(`
+        SELECT 
+          id,
+          lease_contract_id,
+          principal_balance,
+          rights_balance,
+          rental_balance,
+          total_balance,
+          last_updated
+        FROM account_balances
+        WHERE lease_contract_id = ?
+      `, [contract_id]);
+
+      if (balance && balance.length > 0) {
+        return res.json(balance[0]);
+      }
+
+      // If no balance record exists, calculate from contract and payments
+      const [contract] = await connection.query(`
+        SELECT principal_amount, monthly_rights_amount, monthly_rental_amount, downpayment
+        FROM lease_contracts
+        WHERE id = ?
+      `, [contract_id]);
+
+      if (!contract || contract.length === 0) {
+        return res.status(404).json({ error: 'Lease contract not found' });
+      }
+
+      const [rightsPayments] = await connection.query(`
+        SELECT COALESCE(SUM(amount_paid), 0) as total_paid
+        FROM payment_history_rights
+        WHERE lease_contract_id = ?
+      `, [contract_id]);
+
+      const [rentalPayments] = await connection.query(`
+        SELECT COALESCE(SUM(amount_paid), 0) as total_paid
+        FROM payment_history_rental
+        WHERE lease_contract_id = ?
+      `, [contract_id]);
+
+      const princ = parseFloat(contract[0].principal_amount) || 0;
+      const rights = parseFloat(contract[0].monthly_rights_amount) || 0;
+      const rental = parseFloat(contract[0].monthly_rental_amount) || 0;
+      const downpay = parseFloat(contract[0].downpayment) || 0;
+
+      const principalBal = princ - downpay;
+      const rightsBal = rights - (parseFloat(rightsPayments[0].total_paid) || 0);
+      const rentalBal = rental - (parseFloat(rentalPayments[0].total_paid) || 0);
+      const totalBal = principalBal + rightsBal + rentalBal;
+
+      res.json({
+        principal_balance: principalBal,
+        rights_balance: rightsBal,
+        rental_balance: rentalBal,
+        total_balance: totalBal
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get account balance error:', error.message || error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// Get payment history for a lease contract
+router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
+  try {
+    const { contract_id } = req.params;
+    const connection = await pool.getConnection();
+    try {
+      // Get rights payments
+      const [rightsPayments] = await connection.query(`
+        SELECT 
+          id,
+          lease_contract_id,
+          period_month,
+          period_year,
+          or_number,
+          payment_date,
+          amount_paid,
+          collectible,
+          delinquent,
+          'rights' as payment_type
+        FROM payment_history_rights
+        WHERE lease_contract_id = ?
+        ORDER BY payment_date DESC
+      `, [contract_id]);
+
+      // Get rental payments
+      const [rentalPayments] = await connection.query(`
+        SELECT 
+          id,
+          lease_contract_id,
+          period_month,
+          period_year,
+          or_number,
+          payment_date,
+          amount_paid,
+          collectible,
+          delinquent,
+          'rental' as payment_type
+        FROM payment_history_rental
+        WHERE lease_contract_id = ?
+        ORDER BY payment_date DESC
+      `, [contract_id]);
+
+      // Combine and sort by date
+      const allPayments = [...rightsPayments, ...rentalPayments].sort((a, b) => 
+        new Date(b.payment_date) - new Date(a.payment_date)
+      );
+
+      res.json(allPayments);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get payment history error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Record a new payment for rights and/or rental
+router.post('/lease-contracts/:contract_id/payments/record', async (req, res) => {
+  try {
+    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+      const { contract_id } = req.params;
+      const { payment_date, rights_amount, rental_amount, reference_no } = req.body;
+
+      if (!payment_date || (!rights_amount && !rental_amount)) {
+        return res.status(400).json({ error: 'Payment date and at least one payment amount are required' });
+      }
+
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+
+        // Record rights payment if amount provided
+        if (rights_amount && parseFloat(rights_amount) > 0) {
+          // Get current balance
+          const [balance] = await connection.query(`
+            SELECT COALESCE(SUM(amount_paid), 0) as total_paid
+            FROM payment_history_rights
+            WHERE lease_contract_id = ?
+          `, [contract_id]);
+
+          const [contract] = await connection.query(`
+            SELECT monthly_rights_amount FROM lease_contracts WHERE id = ?
+          `, [contract_id]);
+
+          const currentBalance = parseFloat(contract[0].monthly_rights_amount) - parseFloat(balance[0].total_paid);
+          const newBalance = currentBalance - parseFloat(rights_amount);
+
+          await connection.query(`
+            INSERT INTO payment_history_rights (lease_contract_id, payment_date, amount_paid, balance, reference_no)
+            VALUES (?, ?, ?, ?, ?)
+          `, [contract_id, payment_date, rights_amount, newBalance, reference_no || null]);
+        }
+
+        // Record rental payment if amount provided
+        if (rental_amount && parseFloat(rental_amount) > 0) {
+          // Get current balance
+          const [balance] = await connection.query(`
+            SELECT COALESCE(SUM(amount_paid), 0) as total_paid
+            FROM payment_history_rental
+            WHERE lease_contract_id = ?
+          `, [contract_id]);
+
+          const [contract] = await connection.query(`
+            SELECT monthly_rental_amount FROM lease_contracts WHERE id = ?
+          `, [contract_id]);
+
+          const currentBalance = parseFloat(contract[0].monthly_rental_amount) - parseFloat(balance[0].total_paid);
+          const newBalance = currentBalance - parseFloat(rental_amount);
+
+          await connection.query(`
+            INSERT INTO payment_history_rental (lease_contract_id, payment_date, amount_paid, balance, reference_no)
+            VALUES (?, ?, ?, ?, ?)
+          `, [contract_id, payment_date, rental_amount, newBalance, reference_no || null]);
+        }
+
+        // Log the action
+        await logAction(req.user.user_id, 'CREATE', 'payments', contract_id, 
+          `Recorded payment - Rights: ${rights_amount || 0}, Rental: ${rental_amount || 0}`);
+
+        await connection.commit();
+
+        res.status(201).json({ 
+          message: 'Payment recorded successfully',
+          rights_amount,
+          rental_amount,
+          reference_no
+        });
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Record payment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get all rights and rentals
 router.get('/', async (req, res) => {
   try {

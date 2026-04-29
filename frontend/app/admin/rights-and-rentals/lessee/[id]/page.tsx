@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import LesseePaymentDetails, { LeaseContractType } from '@/components/LesseePaymentDetails';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -16,17 +17,7 @@ interface Lessee {
   created_at: string;
 }
 
-interface LeaseContract {
-  contract_id: number;
-  contract_effective_date: string;
-  contract_termination_date: string;
-  principal_amount: number;
-  monthly_rights_amount: number;
-  monthly_rental_amount: number;
-  downpayment: number;
-  contract_status: string;
-  property_name: string;
-}
+type LeaseContract = LeaseContractType;
 
 export default function ViewLesseePage() {
   const params = useParams();
@@ -34,7 +25,7 @@ export default function ViewLesseePage() {
   const { user } = useAuth();
 
   const [lessee, setLessee] = useState<Lessee | null>(null);
-  const [leaseContract, setLeaseContract] = useState<LeaseContract | null>(null);
+  const [leaseContracts, setLeaseContracts] = useState<LeaseContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
@@ -45,6 +36,7 @@ export default function ViewLesseePage() {
   const fetchLesseDetails = async () => {
     try {
       const response = await api.get(`/api/rights-and-rentals/lessees/${lesseeId}`);
+      
       setLessee({
         id: response.data.id,
         name: response.data.name,
@@ -53,8 +45,29 @@ export default function ViewLesseePage() {
         created_at: response.data.created_at
       });
       
-      if (response.data.contract_id) {
-        setLeaseContract({
+      // Fetch all lease contracts for this lessee
+      const contractsResponse = await api.get(`/api/rights-and-rentals/lessees/${lesseeId}/lease-contracts`);
+      
+      if (Array.isArray(contractsResponse.data) && contractsResponse.data.length > 0) {
+        const formattedContracts = contractsResponse.data.map((contract: any) => ({
+          id: contract.id,
+          contract_id: contract.id,
+          contract_effective_date: contract.contract_effective_date,
+          contract_termination_date: contract.contract_termination_date,
+          principal_amount: contract.principal_amount,
+          monthly_rights_amount: contract.monthly_rights_amount,
+          monthly_rental_amount: contract.monthly_rental_amount,
+          downpayment: contract.downpayment,
+          contract_status: contract.status,
+          property_id: contract.property_id,
+          property_name: contract.property_name,
+          status: contract.status
+        }));
+        setLeaseContracts(formattedContracts);
+      } else if (response.data.contract_id) {
+        // Fallback for single contract
+        setLeaseContracts([{
+          id: response.data.contract_id,
           contract_id: response.data.contract_id,
           contract_effective_date: response.data.contract_effective_date,
           contract_termination_date: response.data.contract_termination_date,
@@ -63,8 +76,10 @@ export default function ViewLesseePage() {
           monthly_rental_amount: response.data.monthly_rental_amount,
           downpayment: response.data.downpayment,
           contract_status: response.data.contract_status,
-          property_name: response.data.property_name
-        });
+          property_id: response.data.property_id,
+          property_name: response.data.property_name,
+          status: response.data.contract_status
+        }]);
       }
     } catch (error: any) {
       setError(error.response?.data?.error || 'Error loading lessee details');
@@ -211,7 +226,7 @@ export default function ViewLesseePage() {
           </div>
 
           {/* Lease Contract Information */}
-          {leaseContract && (
+          {leaseContracts.length > 0 && (
             <div className="bg-white shadow-lg rounded-2xl border border-gray-100 p-6 mb-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <svg className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -224,22 +239,22 @@ export default function ViewLesseePage() {
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Contract Status</p>
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                    leaseContract.contract_status === 'active'
+                    leaseContracts[0].contract_status === 'active'
                       ? 'bg-green-100 text-green-800'
-                      : leaseContract.contract_status === 'terminated'
+                      : leaseContracts[0].contract_status === 'terminated'
                       ? 'bg-red-100 text-red-800'
                       : 'bg-yellow-100 text-yellow-800'
                   }`}>
-                    {leaseContract.contract_status.charAt(0).toUpperCase() + leaseContract.contract_status.slice(1)}
+                    {leaseContracts[0].contract_status.charAt(0).toUpperCase() + leaseContracts[0].contract_status.slice(1)}
                   </span>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Contract Effective Date</p>
-                  <p className="text-gray-900 font-medium">{formatDate(leaseContract.contract_effective_date)}</p>
+                  <p className="text-gray-900 font-medium">{formatDate(leaseContracts[0].contract_effective_date)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Contract Termination Date</p>
-                  <p className="text-gray-900 font-medium">{formatDate(leaseContract.contract_termination_date)}</p>
+                  <p className="text-gray-900 font-medium">{formatDate(leaseContracts[0].contract_termination_date)}</p>
                 </div>
               </div>
 
@@ -249,7 +264,7 @@ export default function ViewLesseePage() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
                     <p className="text-xs text-gray-600 mb-1">Property/Building</p>
-                    <p className="text-sm font-medium text-gray-900">{leaseContract.property_name || '-'}</p>
+                    <p className="text-sm font-medium text-gray-900">{leaseContracts[0].property_name || '-'}</p>
                   </div>
                 </div>
               </div>
@@ -260,23 +275,32 @@ export default function ViewLesseePage() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
                     <p className="text-xs text-gray-600 mb-1">Principal Amount</p>
-                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContract.principal_amount)}</p>
+                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContracts[0].principal_amount)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 mb-1">Downpayment</p>
-                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContract.downpayment)}</p>
+                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContracts[0].downpayment)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 mb-1">Monthly Rights</p>
-                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContract.monthly_rights_amount)}</p>
+                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContracts[0].monthly_rights_amount)}</p>
                   </div>
                   <div className="col-span-2 md:col-span-1">
                     <p className="text-xs text-gray-600 mb-1">Monthly Rental</p>
-                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContract.monthly_rental_amount)}</p>
+                    <p className="text-sm font-bold text-gray-900">{formatCurrency(leaseContracts[0].monthly_rental_amount)}</p>
                   </div>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Payment Management Component */}
+          {leaseContracts.length > 0 && (
+            <LesseePaymentDetails
+              lesseeId={parseInt(lesseeId)}
+              lesseeName={lessee?.name || ''}
+              leaseContracts={leaseContracts}
+            />
           )}
 
           {/* Back Button */}
