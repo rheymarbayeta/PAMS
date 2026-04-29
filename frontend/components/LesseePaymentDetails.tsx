@@ -9,7 +9,7 @@ interface PaymentRecord {
   payment_date: string;
   amount_paid: string;
   balance: string;
-  reference_no: string;
+  or_number: string;
   payment_type: 'rights' | 'rental';
   created_at: string;
 }
@@ -62,7 +62,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
     payment_date: new Date().toISOString().split('T')[0],
     rights_amount: '',
     rental_amount: '',
-    reference_no: '',
+    or_number: '',
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,15 +79,24 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
     try {
       // Fetch payments
       const paymentsRes = await api.get(`/api/rights-and-rentals/lease-contracts/${contractId}/payments`);
-      setPayments(paymentsRes.data);
+      setPayments(paymentsRes.data.payments || []);
       
-      // Set default balance (will be calculated server-side)
-      setBalance({
-        principal_balance: 0,
-        rights_balance: 0,
-        rental_balance: 0,
-        total_balance: 0
-      });
+      // Set balance from response
+      if (paymentsRes.data.current_balance) {
+        setBalance({
+          principal_balance: paymentsRes.data.current_balance.initial || 0,
+          rights_balance: paymentsRes.data.current_balance.rights || 0,
+          rental_balance: paymentsRes.data.current_balance.rental || 0,
+          total_balance: paymentsRes.data.current_balance.total || 0
+        });
+      } else {
+        setBalance({
+          principal_balance: 0,
+          rights_balance: 0,
+          rental_balance: 0,
+          total_balance: 0
+        });
+      }
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'An error occurred');
     } finally {
@@ -125,7 +134,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
         payment_date: formData.payment_date,
         rights_amount: rightsAmt > 0 ? rightsAmt : null,
         rental_amount: rentalAmt > 0 ? rentalAmt : null,
-        reference_no: formData.reference_no || null,
+        or_number: formData.or_number || null,
       });
 
       // Reset form and refresh data
@@ -133,7 +142,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
         payment_date: new Date().toISOString().split('T')[0],
         rights_amount: '',
         rental_amount: '',
-        reference_no: '',
+        or_number: '',
       });
       setShowPaymentForm(false);
       await fetchBalanceAndPayments(selectedContractId);
@@ -241,12 +250,12 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Reference No.
+                          Official Receipt (OR) Number
                         </label>
                         <input
                           type="text"
-                          name="reference_no"
-                          value={formData.reference_no}
+                          name="or_number"
+                          value={formData.or_number}
                           onChange={handleInputChange}
                           placeholder="e.g., OR-2026-0001"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -332,7 +341,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                             Balance
                           </th>
                           <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
-                            Reference
+                            OR Number
                           </th>
                         </tr>
                       </thead>
@@ -363,7 +372,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                               ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td className="px-4 py-2 text-sm text-gray-600">
-                              {payment.reference_no || '—'}
+                              {payment.or_number || '—'}
                             </td>
                           </tr>
                         ))}
