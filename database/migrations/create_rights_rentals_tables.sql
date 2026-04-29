@@ -23,16 +23,14 @@ CREATE TABLE IF NOT EXISTS `lessees` (
 -- ============================================
 CREATE TABLE IF NOT EXISTS `properties` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `location` VARCHAR(255) NOT NULL,
-  `stall_number` VARCHAR(50),
-  `floor_level` VARCHAR(50),
-  `area_sqm` DECIMAL(10,2),
+  `property_name` VARCHAR(255) NOT NULL,
+  `property_code` VARCHAR(255) NOT NULL,
   `address` VARCHAR(500),
   `description` TEXT,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_location (location),
-  INDEX idx_stall_number (stall_number)
+  INDEX idx_property_name (property_name),
+  INDEX idx_property_code (property_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================

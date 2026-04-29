@@ -9,10 +9,7 @@ import api from '@/services/api';
 
 interface Property {
   id: number;
-  location: string;
-  stall_number: string;
-  floor_level: string | null;
-  area_sqm: number | null;
+  property_name: string;
   address: string | null;
   description: string | null;
 }
@@ -26,7 +23,8 @@ export default function EditPropertyPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
   const [formData, setFormData] = useState({
-    location: '',
+    property_name: '',
+    property_code: '',
     address: '',
     description: ''
   });
@@ -39,7 +37,8 @@ export default function EditPropertyPage() {
     try {
       const response = await api.get(`/api/rights-and-rentals/properties/${propertyId}`);
       setFormData({
-        location: response.data.location,
+        property_name: response.data.property_name,
+        property_code: response.data.property_code || '',
         address: response.data.address || '',
         description: response.data.description || ''
       });
@@ -65,13 +64,19 @@ export default function EditPropertyPage() {
     setSaving(true);
 
     try {
-      if (!formData.location.trim()) {
+      if (!formData.property_name.trim()) {
         setError('Property/Building is required');
         return;
       }
 
+      if (!formData.property_code.trim()) {
+        setError('Property Code is required');
+        return;
+      }
+
       await api.put(`/api/rights-and-rentals/properties/${propertyId}`, {
-        location: formData.location.trim(),
+        property_name: formData.property_name.trim(),
+        property_code: formData.property_code.trim(),
         address: formData.address.trim() || null,
         description: formData.description.trim() || null
       });
@@ -131,16 +136,33 @@ export default function EditPropertyPage() {
 
               {/* Property/Building */}
               <div className="mb-6">
-                <label htmlFor="location" className="block text-sm font-semibold text-gray-900 mb-2">
+                <label htmlFor="property_name" className="block text-sm font-semibold text-gray-900 mb-2">
                   Property/Building <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  id="location"
-                  name="location"
-                  value={formData.location}
+                  id="property_name"
+                  name="property_name"
+                  value={formData.property_name}
                   onChange={handleInputChange}
                   placeholder="e.g., Dalaguete Commercial Center"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all duration-200 outline-none"
+                  required
+                />
+              </div>
+
+              {/* Property Code */}
+              <div className="mb-6">
+                <label htmlFor="property_code" className="block text-sm font-semibold text-gray-900 mb-2">
+                  Property Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="property_code"
+                  name="property_code"
+                  value={formData.property_code}
+                  onChange={handleInputChange}
+                  placeholder="e.g., PROP-001"
                   className="w-full px-4 py-3 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all duration-200 outline-none"
                   required
                 />

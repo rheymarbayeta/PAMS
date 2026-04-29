@@ -5,8 +5,22 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import PropertyUnitsSection from '@/components/PropertyUnitsSection';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+
+interface PropertyUnit {
+  id: number;
+  property_id: number;
+  stall_number: string;
+  floor_level: string | null;
+  unit_descriptionel: string | null;
+  unit_description: string | null;
+  area_sqm: number | null;
+  status: 'available' | 'occupied' | 'maintenance' | 'reserved';
+  created_at: string;
+  updated_at: string;
+}
 
 interface PropertyLease {
   id: number;
@@ -20,16 +34,15 @@ interface PropertyLease {
 
 interface Property {
   id: number;
-  location: string;
-  stall_number: string;
-  floor_level: string | null;
-  area_sqm: number | null;
+  property_name: string;
+  property_code: string;
   address: string | null;
   description: string | null;
   created_at: string;
   total_leases: number;
   active_leases: number;
   leases: PropertyLease[];
+  units: PropertyUnit[];
 }
 
 export default function ViewPropertyPage() {
@@ -119,11 +132,11 @@ export default function ViewPropertyPage() {
                 Properties
               </Link>
               <span>/</span>
-              <span className="text-gray-900 font-medium">{property.location}</span>
+              <span className="text-gray-900 font-medium">{property.property_name}</span>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{property.location}</h1>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{property.property_name}</h1>
                 <p className="text-gray-600">Property/Building Information</p>
               </div>
               {canEdit && (
@@ -153,7 +166,11 @@ export default function ViewPropertyPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Property/Building</p>
-                  <p className="text-gray-900 font-medium">{property.location}</p>
+                  <p className="text-gray-900 font-medium">{property.property_name}</p>
+                </div>
+                <div className="pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-600 mb-1">Property Code</p>
+                  <p className="text-gray-900 font-medium">{property.property_code}</p>
                 </div>
                 {property.address && (
                   <div className="pt-4 border-t border-gray-200">
@@ -189,6 +206,14 @@ export default function ViewPropertyPage() {
               </div>
             </div>
           </div>
+
+          {/* Property Units Section */}
+          <PropertyUnitsSection
+            propertyId={property.id}
+            units={property.units || []}
+            canEdit={canEdit}
+            onUnitsUpdated={fetchPropertyDetails}
+          />
 
           {/* Lease Contracts */}
           {property.leases && property.leases.length > 0 && (

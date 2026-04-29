@@ -25,10 +25,7 @@ interface LeaseContract {
   monthly_rental_amount: number;
   downpayment: number;
   contract_status: string;
-  location: string;
-  stall_number: string;
-  floor_level: string;
-  area_sqm: number;
+  property_name: string;
 }
 
 export default function ViewLesseePage() {
@@ -66,10 +63,7 @@ export default function ViewLesseePage() {
           monthly_rental_amount: response.data.monthly_rental_amount,
           downpayment: response.data.downpayment,
           contract_status: response.data.contract_status,
-          location: response.data.location,
-          stall_number: response.data.stall_number,
-          floor_level: response.data.floor_level,
-          area_sqm: response.data.area_sqm
+          property_name: response.data.property_name
         });
       }
     } catch (error: any) {
@@ -254,20 +248,8 @@ export default function ViewLesseePage() {
                 <h3 className="font-semibold text-gray-900 mb-3">Property Information</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <p className="text-xs text-gray-600 mb-1">Location</p>
-                    <p className="text-sm font-medium text-gray-900">{leaseContract.location || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 mb-1">Stall Number</p>
-                    <p className="text-sm font-medium text-gray-900">{leaseContract.stall_number || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 mb-1">Floor Level</p>
-                    <p className="text-sm font-medium text-gray-900">{leaseContract.floor_level || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 mb-1">Area (Sq.M.)</p>
-                    <p className="text-sm font-medium text-gray-900">{leaseContract.area_sqm || '-'}</p>
+                    <p className="text-xs text-gray-600 mb-1">Property/Building</p>
+                    <p className="text-sm font-medium text-gray-900">{leaseContract.property_name || '-'}</p>
                   </div>
                 </div>
               </div>

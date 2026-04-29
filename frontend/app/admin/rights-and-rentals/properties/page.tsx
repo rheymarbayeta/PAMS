@@ -9,7 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 
 interface Property {
   id: number;
-  location: string;
+  property_name: string;
+  property_code: string;
   address: string | null;
   description: string | null;
 }
@@ -57,7 +58,7 @@ export default function PropertiesPage() {
 
   // Filter properties by search term
   const filteredProperties = properties.filter(p => 
-    p.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.property_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.address?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
     (p.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
   );
@@ -169,8 +170,8 @@ export default function PropertiesPage() {
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
                     <tr>
                       <th className="px-4 sm:px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Property/Building</th>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Code</th>
                       <th className="px-4 sm:px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Address</th>
-                      <th className="px-4 sm:px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Description</th>
                       <th className="px-4 sm:px-6 py-3 text-right text-xs sm:text-sm font-semibold text-gray-700">Actions</th>
                     </tr>
                   </thead>
@@ -180,9 +181,9 @@ export default function PropertiesPage() {
                         key={property.id}
                         className="hover:bg-orange-50/50 transition-colors duration-150"
                       >
-                        <td className="px-4 sm:px-6 py-3 text-sm font-medium text-gray-900">{property.location}</td>
+                        <td className="px-4 sm:px-6 py-3 text-sm font-medium text-gray-900">{property.property_name}</td>
+                        <td className="px-4 sm:px-6 py-3 text-sm text-gray-600">{property.property_code}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-gray-600">{property.address || '-'}</td>
-                        <td className="px-4 sm:px-6 py-3 text-sm text-gray-600">{property.description || '-'}</td>
                         <td className="px-4 sm:px-6 py-3 text-right">
                           <div className="flex justify-end gap-2">
                             <Link
