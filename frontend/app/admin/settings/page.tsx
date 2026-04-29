@@ -217,6 +217,20 @@ export default function SettingsPage() {
                     <p className="text-sm text-gray-500 mt-1">Customize disco permit header text and formatting</p>
                   </div>
                 </Link>
+                <Link
+                  href="/admin/settings/role-permissions"
+                  className="group flex items-start gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all duration-200"
+                >
+                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors">Role Permissions</h3>
+                    <p className="text-sm text-gray-500 mt-1">Configure permissions and access levels for user roles</p>
+                  </div>
+                </Link>
               </div>
             </div>
 

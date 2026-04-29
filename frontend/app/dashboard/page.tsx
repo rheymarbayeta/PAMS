@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 
 interface MonthlyTrend {
@@ -83,6 +84,7 @@ const donutColors = ['#0d9488', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6', '#ec
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [data, setData] = useState<FullStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [permitCategories, setPermitCategories] = useState<string[]>([]);
@@ -91,6 +93,13 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [cockfightPermittedDates, setCockfightPermittedDates] = useState<Map<string, any[]>>(new Map());
   const [dayApplications, setDayApplications] = useState<any[]>([]);
+
+  // Synchronously redirect Rights and Rentals Manager before component renders
+  useLayoutEffect(() => {
+    if (!authLoading && user?.roles?.includes('Rights and Rentals Manager')) {
+      router.replace('/admin/rights-and-rentals');
+    }
+  }, [authLoading, user?.roles, router]);
 
   useEffect(() => {
     fetchPermitCategories();

@@ -114,12 +114,13 @@ export default function Layout({ children }: LayoutProps) {
   }, [sidebarOpen]);
 
   const navLinks = [
-    { href: '/dashboard', label: 'Dashboard', show: true },
-    { href: '/applications', label: 'Applications', show: true },
-    { href: '/admin/entities', label: 'Entities', show: true },
-    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) },
-    { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin']) },
-    { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) },
+    { href: '/dashboard', label: 'Dashboard', show: !canAccess(['Rights and Rentals Manager']) },
+    { href: '/admin/rights-and-rentals', label: 'Dashboard', show: canAccess(['Rights and Rentals Manager']) },
+    { href: '/applications', label: 'Applications', show: !canAccess(['Rights and Rentals Manager']) },
+    { href: '/admin/entities', label: 'Entities', show: !canAccess(['Rights and Rentals Manager']) },
+    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) && !canAccess(['Rights and Rentals Manager']) },
+    { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin', 'Rights and Rentals Manager']) },
+    { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && !canAccess(['Rights and Rentals Manager']) },
   ];
 
   const adminLinks: { href: string; label: string; activePaths?: string[] }[] = [
@@ -152,10 +153,11 @@ export default function Layout({ children }: LayoutProps) {
       ],
     },
     {
-      paths: ['/admin/settings'],
+      paths: ['/admin/settings', '/admin/settings/role-permissions'],
       tabs: [
         { href: '/admin/settings', label: 'General' },
         { href: '/admin/settings/permit-display', label: 'Permit Display' },
+        { href: '/admin/settings/role-permissions', label: 'Role Permissions' },
       ],
     },
   ];
@@ -206,7 +208,7 @@ export default function Layout({ children }: LayoutProps) {
           </Link>
         ))}
 
-        {canAccess(['SuperAdmin', 'Admin']) && (
+        {canAccess(['SuperAdmin', 'Admin']) && !canAccess(['Rights and Rentals Manager']) && (
           <>
             <div className="pt-4">
               <p className={`px-3 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider ${!mobile ? 'hidden lg:block' : ''}`}>Admin</p>
