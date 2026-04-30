@@ -133,6 +133,41 @@ router.get('/full-stats', async (req, res) => {
     // Entity count
     const [entityCount] = await pool.execute('SELECT COUNT(*) as count FROM entities');
 
+    // Rights & Rentals stats
+    const [rrContractStats] = await pool.execute(
+      `SELECT
+        COUNT(*) as totalContracts,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as activeContracts,
+        COUNT(CASE WHEN status = 'expired' THEN 1 END) as expiredContracts
+       FROM lease_contracts`
+    );
+    const [rrLesseeCount] = await pool.execute('SELECT COUNT(*) as count FROM lessees');
+    const [rrPropertyCount] = await pool.execute('SELECT COUNT(*) as count FROM properties');
+    const [rrRightsCollected] = await pool.execute(
+      `SELECT COALESCE(SUM(amount_paid), 0) as total FROM payment_history_rights`
+    );
+    const [rrRentalCollected] = await pool.execute(
+      `SELECT COALESCE(SUM(amount_paid), 0) as total FROM payment_history_rental`
+    );
+    const [rrRecentPayments] = await pool.execute(
+      `SELECT 
+        'rights' as payment_type, phr.id, phr.amount_paid, phr.payment_date, phr.or_number,
+        l.name as lessee_name, p.property_name
+       FROM payment_history_rights phr
+       JOIN lease_contracts lc ON phr.lease_contract_id = lc.id
+       JOIN lessees l ON lc.lessee_id = l.id
+       JOIN properties p ON lc.property_id = p.id
+       UNION ALL
+       SELECT 
+        'rental' as payment_type, phrt.id, phrt.amount_paid, phrt.payment_date, phrt.or_number,
+        l.name as lessee_name, p.property_name
+       FROM payment_history_rental phrt
+       JOIN lease_contracts lc ON phrt.lease_contract_id = lc.id
+       JOIN lessees l ON lc.lessee_id = l.id
+       JOIN properties p ON lc.property_id = p.id
+       ORDER BY payment_date DESC LIMIT 5`
+    );
+
     res.json({
       permits: {
         ...statusCounts[0],
@@ -147,7 +182,17 @@ router.get('/full-stats', async (req, res) => {
       entities: entityCount[0].count,
       recentApplications,
       recentCitations,
-      expiringPermits
+      expiringPermits,
+      rightsAndRentals: {
+        totalContracts: rrContractStats[0].totalContracts,
+        activeContracts: rrContractStats[0].activeContracts,
+        expiredContracts: rrContractStats[0].expiredContracts,
+        totalLessees: rrLesseeCount[0].count,
+        totalProperties: rrPropertyCount[0].count,
+        rightsCollected: Number(rrRightsCollected[0].total) || 0,
+        rentalCollected: Number(rrRentalCollected[0].total) || 0,
+        recentPayments: rrRecentPayments,
+      }
     });
   } catch (error) {
     console.error('Full dashboard stats error:', error);

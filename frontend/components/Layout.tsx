@@ -114,8 +114,7 @@ export default function Layout({ children }: LayoutProps) {
   }, [sidebarOpen]);
 
   const navLinks = [
-    { href: '/dashboard', label: 'Dashboard', show: !canAccess(['Rights and Rentals Manager']) },
-    { href: '/admin/rights-and-rentals', label: 'Dashboard', show: canAccess(['Rights and Rentals Manager']) },
+    { href: '/dashboard', label: 'Dashboard', show: true },
     { href: '/applications', label: 'Applications', show: !canAccess(['Rights and Rentals Manager']) },
     { href: '/admin/entities', label: 'Entities', show: !canAccess(['Rights and Rentals Manager']) },
     { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) && !canAccess(['Rights and Rentals Manager']) },
