@@ -936,9 +936,13 @@ router.get('/lease-contracts/:contract_id/balance', async (req, res) => {
       const downpay = parseFloat(contract[0].downpayment) || 0;
 
       const principalBal = princ - downpay;
-      const rightsBal = rights - (parseFloat(rightsPayments[0].total_paid) || 0);
-      const rentalBal = rental - (parseFloat(rentalPayments[0].total_paid) || 0);
-      const totalBal = principalBal + rightsBal + rentalBal;
+      const totalRightsPaid = parseFloat(rightsPayments[0].total_paid) || 0;
+      const totalRentalPaid = parseFloat(rentalPayments[0].total_paid) || 0;
+      // Rights: remaining balance after deducting payments from principal
+      const rightsBal = principalBal - totalRightsPaid;
+      // Rental: cumulative total of rental payments collected
+      const rentalBal = totalRentalPaid;
+      const totalBal = rightsBal + rentalBal;
 
       res.json({
         principal_balance: principalBal,
@@ -1021,8 +1025,10 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
       const totalRightsPaid = rightsPayments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0);
       const totalRentalPaid = rentalPayments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0);
 
+      // Rights: remaining balance (initial minus payments deducted)
       const currentRightsBalance = initialBalance - totalRightsPaid;
-      const currentRentalBalance = initialBalance - totalRentalPaid;
+      // Rental: cumulative total of all rental payments collected
+      const currentRentalBalance = totalRentalPaid;
 
       res.json({
         payments: allPayments,
@@ -1084,6 +1090,7 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
         `, [contract_id]);
 
         const totalRightsPaid = parseFloat(rightsPaid[0].total_paid) || 0;
+        // Rights balance = initial minus all rights payments deducted
         let currentRightsBalance = initialBalance - totalRightsPaid;
 
         // Get sum of all previous rental payments
@@ -1094,7 +1101,8 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
         `, [contract_id]);
 
         const totalRentalPaid = parseFloat(rentalPaid[0].total_paid) || 0;
-        let currentRentalBalance = initialBalance - totalRentalPaid;
+        // Rental balance = cumulative total of all rental payments collected
+        let currentRentalBalance = totalRentalPaid;
 
         // Record rights payment if amount provided
         if (rights_amount && parseFloat(rights_amount) > 0) {
@@ -1113,7 +1121,8 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
         // Record rental payment if amount provided
         if (rental_amount && parseFloat(rental_amount) > 0) {
           const rentalPaymentAmount = parseFloat(rental_amount);
-          const newRentalBalance = currentRentalBalance - rentalPaymentAmount;
+          // Rental balance is cumulative: add this payment to the running total
+          const newRentalBalance = currentRentalBalance + rentalPaymentAmount;
 
           await connection.query(`
             INSERT INTO payment_history_rental 

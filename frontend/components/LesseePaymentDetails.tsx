@@ -338,7 +338,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                             Amount Paid
                           </th>
                           <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">
-                            Balance
+                            Balance / Total Collected
                           </th>
                           <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
                             OR Number
@@ -369,7 +369,9 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                               ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td className="px-4 py-2 text-right text-sm text-gray-700">
-                              ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <span title={payment.payment_type === 'rental' ? 'Cumulative total collected' : 'Remaining balance'}>
+                                ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
                             </td>
                             <td className="px-4 py-2 text-sm text-gray-600">
                               {payment.or_number || '—'}
