@@ -86,7 +86,7 @@ router.get('/lessees/:id', async (req, res) => {
 // Create a new lessee
 router.post('/lessees', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { name, contact_number, email } = req.body;
 
       if (!name) {
@@ -115,7 +115,7 @@ router.post('/lessees', async (req, res) => {
 // Update a lessee
 router.put('/lessees/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
       const { name, contact_number, email } = req.body;
 
@@ -141,7 +141,7 @@ router.put('/lessees/:id', async (req, res) => {
 // Delete a lessee
 router.delete('/lessees/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
 
       const connection = await pool.getConnection();
@@ -256,7 +256,7 @@ router.get('/properties/:id', async (req, res) => {
 // Create a new property
 router.post('/properties', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { property_name, property_code, address, description } = req.body;
 
       if (!property_name) {
@@ -295,7 +295,7 @@ router.post('/properties', async (req, res) => {
 // Update a property
 router.put('/properties/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
       const { property_name, property_code, address, description } = req.body;
 
@@ -329,7 +329,7 @@ router.put('/properties/:id', async (req, res) => {
 // Delete a property
 router.delete('/properties/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
 
       const connection = await pool.getConnection();
@@ -418,7 +418,7 @@ router.get('/properties/:property_id/units', async (req, res) => {
 router.post('/properties/:property_id/units', async (req, res) => {
   try {
     console.log('[Units] POST /properties/:property_id/units called');
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       try {
         console.log('[Units] Authorization passed, req.user:', req.user.username);
         const { property_id } = req.params;
@@ -483,7 +483,7 @@ router.post('/properties/:property_id/units', async (req, res) => {
 // Update a property unit
 router.put('/units/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
       const { stall_number, floor_level, unit_description, area_sqm, status } = req.body;
 
@@ -513,7 +513,7 @@ router.put('/units/:id', async (req, res) => {
 // Delete a property unit
 router.delete('/units/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
 
       const connection = await pool.getConnection();
@@ -609,10 +609,11 @@ router.get('/lease-contracts/:id', async (req, res) => {
 // Create a new lease contract
 router.post('/lease-contracts', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const {
         lessee_id,
         property_id,
+        property_unit_id,
         contract_effective_date,
         contract_termination_date,
         principal_amount,
@@ -653,6 +654,7 @@ router.post('/lease-contracts', async (req, res) => {
         const [result] = await connection.query(`
           INSERT INTO lease_contracts (
             lessee_id,
+            property_unit_id,
             property_id,
             contract_effective_date,
             contract_termination_date,
@@ -661,9 +663,10 @@ router.post('/lease-contracts', async (req, res) => {
             monthly_rental_amount,
             downpayment,
             status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           lessee_id,
+          property_unit_id || null,
           property_id,
           contract_effective_date,
           contract_termination_date || null,
@@ -673,6 +676,14 @@ router.post('/lease-contracts', async (req, res) => {
           downpayment || 0,
           status
         ]);
+
+        // Update unit status to occupied if a unit is linked and contract is active
+        if (property_unit_id && status === 'active') {
+          await connection.query(
+            'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
+            ['occupied', lessee_id, property_unit_id]
+          );
+        }
 
         // Get the created contract with details
         const [createdContract] = await connection.query(`
@@ -708,7 +719,7 @@ router.post('/lease-contracts', async (req, res) => {
 // Update a lease contract
 router.put('/lease-contracts/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
       const {
         contract_effective_date,
@@ -722,6 +733,12 @@ router.put('/lease-contracts/:id', async (req, res) => {
 
       const connection = await pool.getConnection();
       try {
+        // Get current contract to know the unit before update
+        const [currentContract] = await connection.query(
+          'SELECT property_unit_id, lessee_id, status FROM lease_contracts WHERE id = ?',
+          [id]
+        );
+
         await connection.query(`
           UPDATE lease_contracts SET
             contract_effective_date = COALESCE(?, contract_effective_date),
@@ -742,6 +759,23 @@ router.put('/lease-contracts/:id', async (req, res) => {
           status,
           id
         ]);
+
+        // Sync unit status based on contract status change
+        const unitId = currentContract[0]?.property_unit_id;
+        const newStatus = status || currentContract[0]?.status;
+        if (unitId) {
+          if (newStatus === 'active') {
+            await connection.query(
+              'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
+              ['occupied', currentContract[0].lessee_id, unitId]
+            );
+          } else {
+            await connection.query(
+              'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+              ['available', unitId]
+            );
+          }
+        }
 
         // Get updated contract
         const [updatedContract] = await connection.query(`
@@ -777,18 +811,26 @@ router.put('/lease-contracts/:id', async (req, res) => {
 // Delete a lease contract
 router.delete('/lease-contracts/:id', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
 
       const connection = await pool.getConnection();
       try {
         const [contract] = await connection.query(
-          'SELECT lessee_id, property_id FROM lease_contracts WHERE id = ?',
+          'SELECT lessee_id, property_id, property_unit_id FROM lease_contracts WHERE id = ?',
           [id]
         );
 
         if (contract.length === 0) {
           return res.status(404).json({ error: 'Lease contract not found' });
+        }
+
+        // Reset unit status to available when contract is deleted
+        if (contract[0].property_unit_id) {
+          await connection.query(
+            'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+            ['available', contract[0].property_unit_id]
+          );
         }
 
         await connection.query('DELETE FROM lease_contracts WHERE id = ?', [id]);
@@ -1003,7 +1045,7 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
 // Record a new payment for rights and/or rental
 router.post('/lease-contracts/:contract_id/payments/record', async (req, res) => {
   try {
-    authorize('SuperAdmin', 'Admin')(req, res, async () => {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { contract_id } = req.params;
       const { payment_date, rights_amount, rental_amount, or_number } = req.body;
 
