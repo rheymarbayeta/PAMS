@@ -52,7 +52,7 @@ export default function AddLesseePage() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Rights and Rentals Manager']}>
       <Layout>
         <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-3xl mx-auto">
           {/* Page Header */}

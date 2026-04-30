@@ -106,7 +106,7 @@ export default function LeaseContractsPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Assessor']}>
+      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Assessor', 'Rights and Rentals Manager']}>
         <Layout>
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
             <div className="flex flex-col items-center justify-center py-20">
@@ -123,7 +123,7 @@ export default function LeaseContractsPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Assessor']}>
+    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Assessor', 'Rights and Rentals Manager']}>
       <Layout>
         <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
           {/* Header */}

@@ -48,7 +48,7 @@ export default function EditLeaseContractPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Rights and Rentals Manager']}>
         <Layout>
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto">
             <div className="flex flex-col items-center justify-center py-20">
@@ -66,7 +66,7 @@ export default function EditLeaseContractPage() {
 
   if (error || !contract) {
     return (
-      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Rights and Rentals Manager']}>
         <Layout>
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto">
             <div className="bg-red-50 border border-red-200 rounded-lg p-6 flex items-center gap-4">
@@ -87,7 +87,7 @@ export default function EditLeaseContractPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Rights and Rentals Manager']}>
       <Layout>
         <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto">
           {/* Header */}

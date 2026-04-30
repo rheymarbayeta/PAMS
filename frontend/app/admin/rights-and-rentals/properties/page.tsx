@@ -75,7 +75,7 @@ export default function PropertiesPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Rights and Rentals Manager']}>
         <Layout>
           <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
             <div className="flex flex-col items-center justify-center py-20">
@@ -92,7 +92,7 @@ export default function PropertiesPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
+    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Rights and Rentals Manager']}>
       <Layout>
         <div className="px-2 py-4 sm:px-4 sm:py-8 max-w-7xl mx-auto">
           {/* Page Header */}
