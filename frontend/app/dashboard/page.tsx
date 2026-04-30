@@ -113,6 +113,10 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [cockfightPermittedDates, setCockfightPermittedDates] = useState<Map<string, any[]>>(new Map());
   const [dayApplications, setDayApplications] = useState<any[]>([]);
+  const [discoCurrentMonth, setDiscoCurrentMonth] = useState(new Date());
+  const [discoSelectedDate, setDiscoSelectedDate] = useState<string | null>(null);
+  const [discoPermittedDates, setDiscoPermittedDates] = useState<Map<string, any[]>>(new Map());
+  const [discoDayApplications, setDiscoDayApplications] = useState<any[]>([]);
 
   const userRoles: string[] = user?.roles || (user?.role_name ? [user.role_name] : []);
   const isRRManager = userRoles.includes('Rights and Rentals Manager');
@@ -143,6 +147,10 @@ export default function DashboardPage() {
     if (showCockfightCalendar) fetchCockfightPermittedDates();
   }, [showCockfightCalendar]);
 
+  useEffect(() => {
+    if (showCockfightCalendar) fetchDiscoPermittedDates();
+  }, [showCockfightCalendar]);
+
   const fetchPermitCategories = async () => {
     try {
       const response = await api.get('/api/dashboard/permit-categories');
@@ -162,6 +170,57 @@ export default function DashboardPage() {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Parses Disco "Date" param values into MM-DD-YYYY keys.
+  // Handles: "May 2, 2026" / "April 30, 2026" and "4, 9, 13 May 2026" / "15, 16 May 2026"
+  const parseDiscoDateParam = (dateStr: string): string[] => {
+    const results: string[] = [];
+    const str = dateStr.trim();
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const startsWithMonth = monthNames.some(m => str.startsWith(m));
+    if (startsWithMonth) {
+      // Single date like "May 2, 2026"
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) results.push(formatDateKey(d.getDate(), d.getMonth(), d.getFullYear()));
+    } else {
+      // Multiple days at start: "4, 9, 13 May 2026"
+      const multiMatch = str.match(/^([\d,\s]+)\s+([A-Za-z]+)\s+(\d{4})$/);
+      if (multiMatch) {
+        const days = multiMatch[1].split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+        const month = monthNames.findIndex(m => m === multiMatch[2]);
+        const year = parseInt(multiMatch[3]);
+        if (month >= 0 && year) days.forEach(day => results.push(formatDateKey(day, month, year)));
+      }
+    }
+    return results;
+  };
+
+  const fetchDiscoPermittedDates = async () => {
+    try {
+      const response = await api.get('/api/applications?limit=1000');
+      const dateMap = new Map<string, any[]>();
+      const discoApps = response.data.filter((app: any) =>
+        app.attribute_name?.trim().toUpperCase() === 'DISCO' ||
+        app.permit_type?.toLowerCase().includes('- disco')
+      );
+      for (const app of discoApps) {
+        try {
+          const detailResponse = await api.get(`/api/applications/${app.application_id}`);
+          const dateParam = detailResponse.data.parameters?.find((p: any) => p.param_name === 'Date');
+          if (dateParam?.param_value) {
+            const keys = parseDiscoDateParam(dateParam.param_value);
+            keys.forEach((key: string) => {
+              if (!dateMap.has(key)) dateMap.set(key, []);
+              dateMap.get(key)!.push(detailResponse.data);
+            });
+          }
+        } catch { /* ignore detail errors */ }
+      }
+      setDiscoPermittedDates(dateMap);
+    } catch (error) {
+      console.error('Error fetching disco dates:', error);
     }
   };
 
@@ -218,6 +277,14 @@ export default function DashboardPage() {
     const dateKey = formatDateKey(day, currentMonth.getMonth(), currentMonth.getFullYear());
     setSelectedDate(dateKey);
     setDayApplications(cockfightPermittedDates.get(dateKey) || []);
+  };
+
+  const handleDiscoPrevMonth = () => { setDiscoCurrentMonth(new Date(discoCurrentMonth.getFullYear(), discoCurrentMonth.getMonth() - 1)); setDiscoSelectedDate(null); setDiscoDayApplications([]); };
+  const handleDiscoNextMonth = () => { setDiscoCurrentMonth(new Date(discoCurrentMonth.getFullYear(), discoCurrentMonth.getMonth() + 1)); setDiscoSelectedDate(null); setDiscoDayApplications([]); };
+  const handleDiscoDayClick = (day: number) => {
+    const dateKey = formatDateKey(day, discoCurrentMonth.getMonth(), discoCurrentMonth.getFullYear());
+    setDiscoSelectedDate(dateKey);
+    setDiscoDayApplications(discoPermittedDates.get(dateKey) || []);
   };
 
   if (loading || !data || authLoading) {
@@ -295,8 +362,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Calendar + Donut */}
+      {/* Calendars + Donut */}
       {showCalendar && (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-4">
@@ -375,6 +443,68 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Disco Calendar */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-purple-50 flex items-center justify-center"><svg className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg></div>
+              <h3 className="text-sm font-semibold text-slate-700">Disco Permitted Dates</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={handleDiscoPrevMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"><svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
+              <span className="text-sm font-medium text-slate-700 min-w-[140px] text-center">{discoCurrentMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}</span>
+              <button onClick={handleDiscoNextMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"><svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
+            </div>
+          </div>
+          <div className="mb-4">
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div key={day} className="text-center text-xs font-semibold text-slate-500 py-2">{day}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: getDaysInMonth(discoCurrentMonth) + getFirstDayOfMonth(discoCurrentMonth) }).map((_, index) => {
+                const day = index - getFirstDayOfMonth(discoCurrentMonth) + 1;
+                if (day < 1 || day > getDaysInMonth(discoCurrentMonth)) return <div key={`empty-${index}`} className="bg-slate-50 border border-slate-100 h-16 rounded-lg" />;
+                const dateKey = formatDateKey(day, discoCurrentMonth.getMonth(), discoCurrentMonth.getFullYear());
+                const hasApplications = discoPermittedDates.has(dateKey);
+                const count = discoPermittedDates.get(dateKey)?.length || 0;
+                const isSelected = discoSelectedDate === dateKey;
+                return (
+                  <div key={day} onClick={() => handleDiscoDayClick(day)} className={`border rounded-lg p-2 h-16 cursor-pointer transition-all flex flex-col justify-between ${hasApplications ? 'border-purple-300 bg-purple-50 hover:bg-purple-100' : 'border-slate-200 bg-white hover:bg-slate-50'} ${isSelected ? 'ring-2 ring-purple-500 ring-inset' : ''}`}>
+                    <div className="text-sm font-semibold text-slate-700">{day}</div>
+                    {hasApplications && <div className="text-xs font-medium text-purple-600">{count} permitted</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {discoSelectedDate && (
+            <div className="border-t border-slate-200 pt-4">
+              <h4 className="text-xs font-semibold text-slate-700 mb-3">Applications for {new Date(discoSelectedDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</h4>
+              {discoDayApplications.length > 0 ? (
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {discoDayApplications.map((app) => {
+                    const dateParam = app.parameters?.find((p: any) => p.param_name === 'Date')?.param_value || 'N/A';
+                    const location = app.parameters?.find((p: any) => p.param_name === 'Location')?.param_value || '';
+                    const addressParts = ['Street/Sitio', 'Barangay', 'Municipality', 'Province'].map(k => app.parameters?.find((p: any) => p.param_name === k)?.param_value || '').filter(Boolean);
+                    const displayAddress = location || addressParts.join(', ') || 'N/A';
+                    return (
+                      <div key={app.application_id} onClick={() => router.push(`/applications/${app.application_id}`)} className="p-2.5 bg-slate-50 rounded border border-slate-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-all text-xs space-y-1">
+                        <p className="text-slate-700"><span className="font-medium">Permit No.:</span> <span className="font-semibold">{app.permit_number || 'Pending'}</span><span className="ml-4 font-medium">Date:</span> <span className="font-semibold">{dateParam}</span></p>
+                        <p className="text-slate-700"><span className="font-medium">Permitee:</span> <span className="font-semibold">{app.entity_name}</span><span className="ml-4 font-medium">Address:</span> <span className="font-semibold">{displayAddress}</span></p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">No applications for this date</p>
+              )}
+            </div>
+          )}
+        </div>
+        </>
       )}
 
       {/* Recent Applications + Expiring Permits */}
