@@ -599,8 +599,23 @@ router.get('/lease-contracts/:id', async (req, res) => {
       if (contract.length === 0) {
         return res.status(404).json({ error: 'Lease contract not found' });
       }
-      
-      res.json(contract[0]);
+
+      // Fetch associated property units from junction table
+      let property_units = [];
+      try {
+        const [unitRows] = await connection.query(`
+          SELECT pu.id, pu.stall_number, pu.floor_level, pu.unit_description, pu.area_sqm, pu.status
+          FROM lease_contract_units lcu
+          JOIN property_units pu ON lcu.property_unit_id = pu.id
+          WHERE lcu.lease_contract_id = ?
+          ORDER BY pu.stall_number ASC
+        `, [id]);
+        property_units = unitRows;
+      } catch (e) {
+        // Junction table may not exist yet during migration
+      }
+
+      res.json({ ...contract[0], property_units });
     } finally {
       connection.release();
     }
@@ -617,6 +632,7 @@ router.post('/lease-contracts', async (req, res) => {
       const {
         lessee_id,
         property_id,
+        property_unit_ids,
         property_unit_id,
         contract_effective_date,
         contract_termination_date,
@@ -626,6 +642,11 @@ router.post('/lease-contracts', async (req, res) => {
         downpayment,
         status = 'active'
       } = req.body;
+
+      // Normalise unit IDs: accept array (new) or single id (legacy)
+      const unitIds = Array.isArray(property_unit_ids) && property_unit_ids.length > 0
+        ? property_unit_ids.map(Number).filter(Boolean)
+        : property_unit_id ? [Number(property_unit_id)] : [];
 
       // Validation
       if (!lessee_id || !property_id || !contract_effective_date) {
@@ -654,7 +675,7 @@ router.post('/lease-contracts', async (req, res) => {
           return res.status(400).json({ error: 'Property not found' });
         }
 
-        // Insert lease contract
+        // Insert lease contract (property_unit_id = first unit for backwards compat)
         const [result] = await connection.query(`
           INSERT INTO lease_contracts (
             lessee_id,
@@ -670,7 +691,7 @@ router.post('/lease-contracts', async (req, res) => {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           lessee_id,
-          property_unit_id || null,
+          unitIds[0] || null,
           property_id,
           contract_effective_date,
           contract_termination_date || null,
@@ -681,12 +702,18 @@ router.post('/lease-contracts', async (req, res) => {
           status
         ]);
 
-        // Update unit status to occupied if a unit is linked and contract is active
-        if (property_unit_id && status === 'active') {
+        // Insert all units into junction table and mark them occupied if active
+        for (const unitId of unitIds) {
           await connection.query(
-            'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
-            ['occupied', lessee_id, property_unit_id]
+            'INSERT IGNORE INTO lease_contract_units (lease_contract_id, property_unit_id) VALUES (?, ?)',
+            [result.insertId, unitId]
           );
+          if (status === 'active') {
+            await connection.query(
+              'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
+              ['occupied', lessee_id, unitId]
+            );
+          }
         }
 
         // Get the created contract with details
@@ -726,6 +753,7 @@ router.put('/lease-contracts/:id', async (req, res) => {
     authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
       const { id } = req.params;
       const {
+        property_unit_ids,
         contract_effective_date,
         contract_termination_date,
         principal_amount,
@@ -735,13 +763,20 @@ router.put('/lease-contracts/:id', async (req, res) => {
         status
       } = req.body;
 
+      // Normalise incoming unit IDs (may be undefined if not changed)
+      const newUnitIds = Array.isArray(property_unit_ids)
+        ? property_unit_ids.map(Number).filter(Boolean)
+        : undefined;
+
       const connection = await pool.getConnection();
       try {
-        // Get current contract to know the unit before update
+        // Get current contract
         const [currentContract] = await connection.query(
           'SELECT property_unit_id, lessee_id, status FROM lease_contracts WHERE id = ?',
           [id]
         );
+
+        const newStatus = status || currentContract[0]?.status;
 
         await connection.query(`
           UPDATE lease_contracts SET
@@ -764,20 +799,72 @@ router.put('/lease-contracts/:id', async (req, res) => {
           id
         ]);
 
-        // Sync unit status based on contract status change
-        const unitId = currentContract[0]?.property_unit_id;
-        const newStatus = status || currentContract[0]?.status;
-        if (unitId) {
-          if (newStatus === 'active') {
-            await connection.query(
-              'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
-              ['occupied', currentContract[0].lessee_id, unitId]
+        if (newUnitIds !== undefined) {
+          // Fetch current units from junction table
+          let currentUnitIds = [];
+          try {
+            const [currentUnits] = await connection.query(
+              'SELECT property_unit_id FROM lease_contract_units WHERE lease_contract_id = ?',
+              [id]
             );
-          } else {
+            currentUnitIds = currentUnits.map(u => u.property_unit_id);
+          } catch (e) { /* junction table may not exist yet */ }
+
+          // Reset units that are being removed
+          for (const oldId of currentUnitIds) {
+            if (!newUnitIds.includes(oldId)) {
+              await connection.query(
+                'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+                ['available', oldId]
+              );
+            }
+          }
+
+          // Replace junction table entries
+          try {
             await connection.query(
-              'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
-              ['available', unitId]
+              'DELETE FROM lease_contract_units WHERE lease_contract_id = ?',
+              [id]
             );
+            for (const unitId of newUnitIds) {
+              await connection.query(
+                'INSERT IGNORE INTO lease_contract_units (lease_contract_id, property_unit_id) VALUES (?, ?)',
+                [id, unitId]
+              );
+              if (newStatus === 'active') {
+                await connection.query(
+                  'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
+                  ['occupied', currentContract[0].lessee_id, unitId]
+                );
+              } else {
+                await connection.query(
+                  'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+                  ['available', unitId]
+                );
+              }
+            }
+          } catch (e) { /* junction table may not exist yet */ }
+
+          // Keep property_unit_id in sync with first unit
+          await connection.query(
+            'UPDATE lease_contracts SET property_unit_id = ? WHERE id = ?',
+            [newUnitIds[0] || null, id]
+          );
+        } else {
+          // No unit changes – just sync status on the legacy single unit if any
+          const unitId = currentContract[0]?.property_unit_id;
+          if (unitId) {
+            if (newStatus === 'active') {
+              await connection.query(
+                'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
+                ['occupied', currentContract[0].lessee_id, unitId]
+              );
+            } else {
+              await connection.query(
+                'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+                ['available', unitId]
+              );
+            }
           }
         }
 
@@ -829,12 +916,29 @@ router.delete('/lease-contracts/:id', async (req, res) => {
           return res.status(404).json({ error: 'Lease contract not found' });
         }
 
-        // Reset unit status to available when contract is deleted
-        if (contract[0].property_unit_id) {
-          await connection.query(
-            'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
-            ['available', contract[0].property_unit_id]
+        // Reset all linked units to available when contract is deleted
+        try {
+          const [contractUnits] = await connection.query(
+            'SELECT property_unit_id FROM lease_contract_units WHERE lease_contract_id = ?',
+            [id]
           );
+          const resetIds = new Set(contractUnits.map(u => u.property_unit_id));
+          // Also include legacy property_unit_id in case it wasn't migrated
+          if (contract[0].property_unit_id) resetIds.add(contract[0].property_unit_id);
+          for (const unitId of resetIds) {
+            await connection.query(
+              'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+              ['available', unitId]
+            );
+          }
+        } catch (e) {
+          // Fallback for legacy single unit
+          if (contract[0].property_unit_id) {
+            await connection.query(
+              'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+              ['available', contract[0].property_unit_id]
+            );
+          }
         }
 
         await connection.query('DELETE FROM lease_contracts WHERE id = ?', [id]);

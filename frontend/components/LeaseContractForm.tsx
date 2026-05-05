@@ -42,7 +42,6 @@ export default function LeaseContractForm({
   const [formData, setFormData] = useState({
     lessee_id: '',
     property_id: '',
-    property_unit_id: '',
     contract_effective_date: '',
     contract_termination_date: '',
     principal_amount: '',
@@ -51,6 +50,7 @@ export default function LeaseContractForm({
     downpayment: '',
     status: 'active'
   });
+  const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -63,7 +63,6 @@ export default function LeaseContractForm({
       setFormData({
         lessee_id: initialData.lessee_id || '',
         property_id: initialData.property_id || '',
-        property_unit_id: initialData.property_unit_id || '',
         contract_effective_date: initialData.contract_effective_date?.split('T')[0] || '',
         contract_termination_date: initialData.contract_termination_date?.split('T')[0] || '',
         principal_amount: initialData.principal_amount?.toString() || '',
@@ -72,6 +71,14 @@ export default function LeaseContractForm({
         downpayment: initialData.downpayment?.toString() || '',
         status: initialData.status || 'active'
       });
+      // Initialise selected units from property_units array (new) or legacy property_unit_id
+      if (Array.isArray(initialData.property_units) && initialData.property_units.length > 0) {
+        setSelectedUnitIds(initialData.property_units.map((u: any) => Number(u.id)));
+      } else if (initialData.property_unit_id) {
+        setSelectedUnitIds([Number(initialData.property_unit_id)]);
+      } else {
+        setSelectedUnitIds([]);
+      }
     }
   }, [initialData]);
 
@@ -81,7 +88,7 @@ export default function LeaseContractForm({
       fetchPropertyUnits(formData.property_id);
     } else {
       setPropertyUnits([]);
-      setFormData(prev => ({ ...prev, property_unit_id: '' }));
+      setSelectedUnitIds([]);
     }
   }, [formData.property_id]);
 
@@ -136,7 +143,7 @@ export default function LeaseContractForm({
         ...formData,
         lessee_id: parseInt(formData.lessee_id),
         property_id: parseInt(formData.property_id),
-        property_unit_id: formData.property_unit_id ? parseInt(formData.property_unit_id) : null,
+        property_unit_ids: selectedUnitIds,
         principal_amount: formData.principal_amount ? parseFloat(formData.principal_amount) : 0,
         monthly_rights_amount: formData.monthly_rights_amount ? parseFloat(formData.monthly_rights_amount) : 0,
         monthly_rental_amount: formData.monthly_rental_amount ? parseFloat(formData.monthly_rental_amount) : 0,
@@ -212,31 +219,69 @@ export default function LeaseContractForm({
           </select>
         </div>
 
-        {/* Property Unit */}
+        {/* Property Units – multi-select */}
         {formData.property_id && (
-          <div>
+          <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Property Unit {propertyUnits.length === 0 && !unitsLoading ? '(No units available)' : ''}
+              Property Units
+              {selectedUnitIds.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-indigo-600">
+                  {selectedUnitIds.length} selected
+                </span>
+              )}
             </label>
             {unitsLoading ? (
               <div className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
                 Loading units...
               </div>
+            ) : propertyUnits.length === 0 ? (
+              <div className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm">
+                No units available for this property
+              </div>
             ) : (
-              <select
-                name="property_unit_id"
-                value={formData.property_unit_id}
-                onChange={handleChange}
-                disabled={propertyUnits.length === 0}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              >
-                <option value="">-- Select a unit (Optional) --</option>
-                {propertyUnits.map(unit => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.stall_number} - {unit.unit_description} ({unit.status})
-                  </option>
-                ))}
-              </select>
+              (() => {
+                // Show available units + any already-selected units (edit mode)
+                const visibleUnits = propertyUnits.filter(
+                  u => u.status === 'available' || selectedUnitIds.includes(u.id)
+                );
+                return visibleUnits.length === 0 ? (
+                  <div className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm">
+                    No available units for this property
+                  </div>
+                ) : (
+                  <div className="border border-gray-300 rounded-lg divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                    {visibleUnits.map(unit => {
+                      const isSelected = selectedUnitIds.includes(unit.id);
+                      return (
+                        <label
+                          key={unit.id}
+                          className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                            isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              setSelectedUnitIds(prev =>
+                                prev.includes(unit.id)
+                                  ? prev.filter(id => id !== unit.id)
+                                  : [...prev, unit.id]
+                              );
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="flex-1 text-sm text-gray-800">
+                            <span className="font-medium">{unit.stall_number}</span>
+                            {unit.unit_description ? ` – ${unit.unit_description}` : ''}
+                            {unit.floor_level ? ` (${unit.floor_level})` : ''}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             )}
           </div>
         )}

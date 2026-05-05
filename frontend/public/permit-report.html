@@ -828,6 +828,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   let barangay = 'Poblacion';
   let municipality = 'Dalaguete';
   let province = 'Cebu';
+  let locationParam = ''; // single Location parameter (e.g. Caravan Sale)
   let permitActivities = 'Permit to conduct business activities as specified by the local government unit.';
   let permitStartDate = null;
   
@@ -842,6 +843,10 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
     if (paramName.includes('sitio')) {
       sitio = paramValue;
       console.log('  - Found sitio:', sitio);
+    }
+    if (paramName === 'location' || paramName.trim() === 'location') {
+      locationParam = paramValue;
+      console.log('  - Found location:', locationParam);
     }
     if (paramName.includes('barangay')) {
       barangay = paramValue;
@@ -873,9 +878,11 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   console.log('  - permitActivities:', permitActivities);
   console.log('  - permitStartDate:', permitStartDate);
   
-  // Format address: Sitio, Barangay, Municipality, Province (if Sitio exists) or Barangay, Municipality, Province
+  // Format address: use single Location param if present, otherwise build from components
   let formattedAddress = '';
-  if (sitio && sitio.trim()) {
+  if (locationParam && locationParam.trim()) {
+    formattedAddress = locationParam.trim();
+  } else if (sitio && sitio.trim()) {
     formattedAddress = `${sitio}, ${barangay}, ${municipality}, ${province}`;
   } else {
     formattedAddress = `${barangay}, ${municipality}, ${province}`;
@@ -942,7 +949,14 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
   
   // Always use the formatted address which includes Sitio, Barangay, Municipality
   // This ensures consistent address format with sitio included when available
-  let businessAddress = formattedAddress;
+  // Build component-based address for the applicant name block (never uses locationParam)
+  let componentAddress = '';
+  if (sitio && sitio.trim()) {
+    componentAddress = `${sitio}, ${barangay}, ${municipality}, ${province}`;
+  } else {
+    componentAddress = `${barangay}, ${municipality}, ${province}`;
+  }
+  let businessAddress = componentAddress;
 
   // Generate permit activities content based on display mode
   // For N/A or custom validity types, use the permit date parameter text directly

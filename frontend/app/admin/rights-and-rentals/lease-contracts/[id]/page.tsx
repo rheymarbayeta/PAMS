@@ -27,6 +27,7 @@ interface LeaseContract {
   status: string;
   created_at: string;
   updated_at: string;
+  property_units: { id: number; stall_number: string; floor_level: string; unit_description: string; area_sqm: number | null; status: string }[];
 }
 
 export default function ViewLeaseContractPage() {
@@ -214,6 +215,23 @@ export default function ViewLeaseContractPage() {
                   <p className="text-sm text-gray-600">Address</p>
                   <p className="text-lg font-medium text-gray-900">{contract.property_address}</p>
                 </div>
+                {contract.property_units && contract.property_units.length > 0 && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600 mb-2">Units / Stalls</p>
+                    <div className="flex flex-wrap gap-2">
+                      {contract.property_units.map(unit => (
+                        <span
+                          key={unit.id}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-800"
+                        >
+                          {unit.stall_number}
+                          {unit.floor_level ? ` (${unit.floor_level})` : ''}
+                          {unit.unit_description ? ` – ${unit.unit_description}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
