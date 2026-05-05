@@ -26,12 +26,16 @@ router.get('/lessees', async (req, res) => {
           p.property_name,
           p.property_code,
           p.address,
+          pu.stall_number,
+          pu.floor_level,
+          pu.area_sqm,
           lc.contract_effective_date,
           lc.contract_termination_date,
           lc.status
         FROM lessees l
         LEFT JOIN lease_contracts lc ON l.id = lc.lessee_id
         LEFT JOIN properties p ON lc.property_id = p.id
+        LEFT JOIN property_units pu ON lc.property_unit_id = pu.id
         ORDER BY l.name ASC
       `);
       res.json(lessees);

@@ -65,6 +65,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
     or_number: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Fetch balance and payments when contract changes
   useEffect(() => {
@@ -318,68 +319,144 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
 
               {/* Payment History */}
               <div>
-                <h3 className="text-lg font-semibold mb-4 text-gray-800">Payment History</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">Payment History</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Sort by date:</span>
+                    <button
+                      onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+                    >
+                      {sortOrder === 'desc' ? (
+                        <>
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+                          </svg>
+                          Newest First
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m-4 4l-4-4" />
+                          </svg>
+                          Oldest First
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
                 {payments.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg text-gray-500">
                     No payments recorded yet
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-gray-200 border border-gray-300">
-                          <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
-                            Date
-                          </th>
-                          <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
-                            Type
-                          </th>
-                          <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">
-                            Amount Paid
-                          </th>
-                          <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">
-                            Balance / Total Collected
-                          </th>
-                          <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
-                            OR Number
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {payments.map((payment) => (
-                          <tr
-                            key={`${payment.payment_type}-${payment.id}`}
-                            className="border border-gray-300 hover:bg-gray-50"
-                          >
-                            <td className="px-4 py-2 text-sm text-gray-700">
-                              {new Date(payment.payment_date).toLocaleDateString()}
-                            </td>
-                            <td className="px-4 py-2 text-sm">
-                              <span
-                                className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                  payment.payment_type === 'rights'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-blue-100 text-blue-800'
-                                }`}
-                              >
-                                {payment.payment_type.toUpperCase()}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-right text-sm font-medium text-gray-700">
-                              ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className="px-4 py-2 text-right text-sm text-gray-700">
-                              <span title={payment.payment_type === 'rental' ? 'Cumulative total collected' : 'Remaining balance'}>
-                                ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-600">
-                              {payment.or_number || '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="space-y-6">
+                    {/* Rights Payments */}
+                    {(() => {
+                      const rightsPayments = payments
+                        .filter(p => p.payment_type === 'rights')
+                        .sort((a, b) => {
+                          const diff = new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime();
+                          return sortOrder === 'desc' ? -diff : diff;
+                        });
+                      return (
+                        <div>
+                          <h4 className="text-sm font-semibold text-green-700 uppercase tracking-wide mb-2 flex items-center gap-2">
+                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>
+                            Rights Payments
+                            <span className="text-gray-400 font-normal normal-case tracking-normal">({rightsPayments.length} record{rightsPayments.length !== 1 ? 's' : ''})</span>
+                          </h4>
+                          {rightsPayments.length === 0 ? (
+                            <div className="text-center py-4 bg-green-50 rounded-lg text-gray-500 text-sm">
+                              No rights payments recorded yet
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse">
+                                <thead>
+                                  <tr className="bg-green-50 border border-green-200">
+                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
+                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Balance</th>
+                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rightsPayments.map((payment) => (
+                                    <tr key={`rights-${payment.id}`} className="border border-gray-200 hover:bg-green-50/50">
+                                      <td className="px-4 py-2 text-sm text-gray-700">
+                                        {new Date(payment.payment_date).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-4 py-2 text-right text-sm font-medium text-gray-700">
+                                        ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-2 text-right text-sm text-gray-700">
+                                        ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Rental Payments */}
+                    {(() => {
+                      const rentalPayments = payments
+                        .filter(p => p.payment_type === 'rental')
+                        .sort((a, b) => {
+                          const diff = new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime();
+                          return sortOrder === 'desc' ? -diff : diff;
+                        });
+                      return (
+                        <div>
+                          <h4 className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-2 flex items-center gap-2">
+                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                            Rental Payments
+                            <span className="text-gray-400 font-normal normal-case tracking-normal">({rentalPayments.length} record{rentalPayments.length !== 1 ? 's' : ''})</span>
+                          </h4>
+                          {rentalPayments.length === 0 ? (
+                            <div className="text-center py-4 bg-blue-50 rounded-lg text-gray-500 text-sm">
+                              No rental payments recorded yet
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse">
+                                <thead>
+                                  <tr className="bg-blue-50 border border-blue-200">
+                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
+                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Total Collected</th>
+                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rentalPayments.map((payment) => (
+                                    <tr key={`rental-${payment.id}`} className="border border-gray-200 hover:bg-blue-50/50">
+                                      <td className="px-4 py-2 text-sm text-gray-700">
+                                        {new Date(payment.payment_date).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-4 py-2 text-right text-sm font-medium text-gray-700">
+                                        ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-2 text-right text-sm text-gray-700">
+                                        ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
