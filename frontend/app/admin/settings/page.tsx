@@ -22,6 +22,10 @@ interface Settings {
   permit_by_signatory_name?: Setting;
   permit_by_signatory_title?: Setting;
   permit_by_signatory_enabled?: Setting;
+  citation_signatory_enabled?: Setting;
+  citation_prepared_by_position?: Setting;
+  citation_certified_by_name?: Setting;
+  citation_certified_by_position?: Setting;
 }
 
 export default function SettingsPage() {
@@ -39,6 +43,10 @@ export default function SettingsPage() {
     permit_by_signatory_name: '',
     permit_by_signatory_title: '',
     permit_by_signatory_enabled: 'true',
+    citation_signatory_enabled: 'true',
+    citation_prepared_by_position: '',
+    citation_certified_by_name: '',
+    citation_certified_by_position: '',
   });
 
   useEffect(() => {
@@ -61,6 +69,10 @@ export default function SettingsPage() {
         permit_by_signatory_name: settingsData.permit_by_signatory_name?.value || '',
         permit_by_signatory_title: settingsData.permit_by_signatory_title?.value || '',
         permit_by_signatory_enabled: settingsData.permit_by_signatory_enabled?.value || 'true',
+        citation_signatory_enabled: settingsData.citation_signatory_enabled?.value ?? 'true',
+        citation_prepared_by_position: settingsData.citation_prepared_by_position?.value || '',
+        citation_certified_by_name: settingsData.citation_certified_by_name?.value || '',
+        citation_certified_by_position: settingsData.citation_certified_by_position?.value || '',
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -83,6 +95,10 @@ export default function SettingsPage() {
         api.put(`/api/settings/permit_by_signatory_name`, { value: formData.permit_by_signatory_name }),
         api.put(`/api/settings/permit_by_signatory_title`, { value: formData.permit_by_signatory_title }),
         api.put(`/api/settings/permit_by_signatory_enabled`, { value: formData.permit_by_signatory_enabled }),
+        api.put(`/api/settings/citation_signatory_enabled`, { value: formData.citation_signatory_enabled }),
+        api.put(`/api/settings/citation_prepared_by_position`, { value: formData.citation_prepared_by_position }),
+        api.put(`/api/settings/citation_certified_by_name`, { value: formData.citation_certified_by_name }),
+        api.put(`/api/settings/citation_certified_by_position`, { value: formData.citation_certified_by_position }),
       ]);
       alert('Settings saved successfully');
       fetchSettings();
@@ -439,6 +455,77 @@ export default function SettingsPage() {
                     placeholder="e.g., CITY BUSINESS PERMIT OFFICER"
                     value={formData.permit_by_signatory_title}
                     onChange={(e) => setFormData({ ...formData, permit_by_signatory_title: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Citation Report Signatory */}
+            <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-cyan-100 flex items-center justify-center">
+                    <svg className="h-4 w-4 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-semibold text-gray-900">Citation Report Signatory</h2>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-sm font-medium text-gray-700">Enable</span>
+                  <input
+                    type="checkbox"
+                    checked={formData.citation_signatory_enabled === 'true'}
+                    onChange={(e) => setFormData({ ...formData, citation_signatory_enabled: e.target.checked ? 'true' : 'false' })}
+                    className="w-5 h-5 rounded border-gray-300 text-cyan-600 focus:ring-2 focus:ring-cyan-500"
+                  />
+                </label>
+              </div>
+              <p className="text-sm text-gray-500 mb-6">
+                Configure the signatory block displayed at the bottom of the citation ticket report. Toggle to enable or disable. The "Prepared by" name is automatically filled with the logged-in user's name.
+              </p>
+
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${formData.citation_signatory_enabled === 'false' ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div>
+                  <label htmlFor="citation_prepared_by_position" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Prepared By — Position
+                  </label>
+                  <input
+                    id="citation_prepared_by_position"
+                    type="text"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 outline-none"
+                    placeholder="e.g., Traffic Enforcer"
+                    value={formData.citation_prepared_by_position}
+                    onChange={(e) => setFormData({ ...formData, citation_prepared_by_position: e.target.value })}
+                  />
+                </div>
+                <div>
+                  {/* spacer */}
+                </div>
+                <div>
+                  <label htmlFor="citation_certified_by_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Certified Correct By — Name
+                  </label>
+                  <input
+                    id="citation_certified_by_name"
+                    type="text"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 outline-none"
+                    placeholder="e.g., HAIDEE D. OGOC"
+                    value={formData.citation_certified_by_name}
+                    onChange={(e) => setFormData({ ...formData, citation_certified_by_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="citation_certified_by_position" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Certified Correct By — Position
+                  </label>
+                  <input
+                    id="citation_certified_by_position"
+                    type="text"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 outline-none"
+                    placeholder="e.g., ACTING MUNICIPAL TREASURER"
+                    value={formData.citation_certified_by_position}
+                    onChange={(e) => setFormData({ ...formData, citation_certified_by_position: e.target.value })}
                   />
                 </div>
               </div>

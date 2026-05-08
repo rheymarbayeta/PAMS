@@ -204,6 +204,40 @@
     line-height: 1.55;
   }
 
+  /* Signatory block (last page) */
+  .signatory-block {
+    margin-top: 18px;
+  }
+  .signatory-block table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .signatory-block td {
+    width: 50%;
+    vertical-align: top;
+    padding: 4px 8px;
+  }
+  .sig-label {
+    font-size: 9px;
+    color: #444;
+    margin-bottom: 20px;
+  }
+  .sig-line {
+    display: inline-block;
+    min-width: 200px;
+    padding-top: 3px;
+  }
+  .sig-name {
+    font-size: 10.5px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  .sig-position {
+    font-size: 9px;
+    font-style: italic;
+    color: #1a56db;
+  }
+
   @page {
     size: 8.5in 13in portrait;
     margin: 0;
@@ -447,14 +481,16 @@ const FIRST_HDR_H = 172;  // page-1 overhead: logo block + title/date + dividers
 const CONT_HDR_H  = 66;   // continuation-page overhead: header block
 const THEAD_H     = 28;   // <thead> row
 const SUMMARY_H   = 80;   // <tfoot> totals row + .summary-box (last page only)
+const SIGNATORY_H = 90;   // .signatory-block height reserve (when enabled)
 const SAFETY_PX   = 40;   // guard buffer before the white footer blocker
 
 // Available px for <tbody> rows on a given page.
-function availH(isFirst, reserveSummary) {
+// reserveH: number of px to reserve at the bottom (pass 0 for non-last pages).
+function availH(isFirst, reserveH) {
   return USABLE_H
     - (isFirst ? FIRST_HDR_H : CONT_HDR_H)
     - THEAD_H
-    - (reserveSummary ? SUMMARY_H : 0)
+    - reserveH
     - SAFETY_PX;
 }
 
@@ -517,7 +553,7 @@ function measureRowHeights(citations) {
  * Pass 2 – if the last page cannot also fit the totals+summary block,
  *           overflow the excess rows onto a new final page.
  */
-function paginateCitations(citations, rowHeights) {
+function paginateCitations(citations, rowHeights, reserveH) {
   if (citations.length === 0) return [{ isFirst: true, rows: [] }];
 
   // Pass 1: fill pages as full as possible (no summary reserve yet)
@@ -525,7 +561,7 @@ function paginateCitations(citations, rowHeights) {
   let i = 0;
   while (i < citations.length) {
     const isFirst = pages.length === 0;
-    const cap     = availH(isFirst, /*reserveSummary=*/false);
+    const cap     = availH(isFirst, /*reserveH=*/0);
     let used = 0;
     const pageRows = [];
     while (i < citations.length) {
@@ -539,9 +575,9 @@ function paginateCitations(citations, rowHeights) {
     pages.push({ isFirst, rows: pageRows });
   }
 
-  // Pass 2: ensure the last page fits the summary block
+  // Pass 2: ensure the last page fits the summary+signatory block
   const last     = pages[pages.length - 1];
-  const lastCap  = availH(last.isFirst, /*reserveSummary=*/true);
+  const lastCap  = availH(last.isFirst, reserveH);
   const startIdx = citations.length - last.rows.length; // global index of first row on last page
   let used = 0, fitCount = 0;
   for (let j = 0; j < last.rows.length; j++) {
@@ -560,6 +596,35 @@ function paginateCitations(citations, rowHeights) {
 }
 
 // ── Main HTML builder (paginated) ─────────────────────────────────────────────
+function buildSignatoryHTML(settings, currentUserName) {
+  if (settings.citation_signatory_enabled?.value === 'false') return '';
+  const preparedByPosition  = settings.citation_prepared_by_position?.value  || '';
+  const certifiedByName     = settings.citation_certified_by_name?.value     || '';
+  const certifiedByPosition = settings.citation_certified_by_position?.value || '';
+  return `
+    <div class="signatory-block">
+      <table>
+        <tr>
+          <td>
+            <div class="sig-label">Prepared by:</div>
+            <div class="sig-line">
+              <div class="sig-name">${currentUserName || ''}</div>
+              <div class="sig-position">${preparedByPosition}</div>
+            </div>
+          </td>
+          <td>
+            <div class="sig-label">Certified correct by:</div>
+            <div class="sig-line">
+              <div class="sig-name">${certifiedByName}</div>
+              <div class="sig-position">${certifiedByPosition}</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
 function buildReportHTML(citations, rowHeights, settings, currentUserName) {
   const now = new Date();
   const issuedAt = now.toLocaleDateString('en-US', {
@@ -570,6 +635,10 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
   const footerHTML  = buildFooterHTML(currentUserName, issuedAt);
   const filterLabel = buildFilterLabel();
 
+  // Compute reserve height for the last page (summary + optional signatory)
+  const signatoryEnabled = settings.citation_signatory_enabled?.value !== 'false';
+  const reserveH = SUMMARY_H + (signatoryEnabled ? SIGNATORY_H : 0);
+
   // Totals
   const totalFines  = citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
   const paidCount   = citations.filter(c => c.payment_status === 'Paid').length;
@@ -577,7 +646,7 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
   const partialCount = citations.filter(c => c.payment_status === 'Partially Paid').length;
 
   // Split citations into pages using real measured row heights
-  const pages = paginateCitations(citations, rowHeights);
+  const pages = paginateCitations(citations, rowHeights, reserveH);
 
   // Build each page
   let pagesHTML = '';
@@ -648,6 +717,9 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
       `;
     }
 
+    // Signatory block (last page only)
+    const signatoryBlock = isLast ? buildSignatoryHTML(settings, currentUserName) : '';
+
     pagesHTML += `
       <div class="page" id="page-${pageIdx + 1}">
         <div class="page-content">
@@ -658,6 +730,7 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
             ${summaryHTML}
           </table>
           ${statsBlock}
+          ${signatoryBlock}
         </div>
         <div class="page-footer">${footerHTML}</div>
       </div>
@@ -722,8 +795,11 @@ ${reportContent.innerHTML}
 </body>
 </html>`;
 
-    const date     = new Date().toISOString().split('T')[0];
-    const filename = `Citation_Report_${date}.pdf`;
+    const date       = new Date().toISOString().split('T')[0];
+    const statusLabel = (paymentStatus && paymentStatus !== 'all')
+      ? paymentStatus.toUpperCase()
+      : 'ALL';
+    const filename = `Citation Report - ${statusLabel} - ${date}.pdf`;
 
     const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
       method: 'POST',
