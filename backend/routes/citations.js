@@ -83,10 +83,12 @@ router.get('/', async (req, res) => {
                  CASE WHEN c.payment_status = 'Paid' THEN 'Pending' ELSE c.payment_status END
                WHEN COALESCE(cp.total_paid, 0) >= c.fine_amount THEN 'Paid'
                ELSE 'Partially Paid'
-             END as payment_status
+             END as payment_status,
+             cr.receipt_number
       FROM citations c
       LEFT JOIN users u ON c.issued_by_user_id = u.user_id
-      LEFT JOIN (SELECT citation_id, SUM(amount_paid) as total_paid FROM citation_payments GROUP BY citation_id) cp ON cp.citation_id = c.citation_id${whereSQL}
+      LEFT JOIN (SELECT citation_id, SUM(amount_paid) as total_paid FROM citation_payments GROUP BY citation_id) cp ON cp.citation_id = c.citation_id
+      LEFT JOIN (SELECT citation_id, MAX(receipt_number) as receipt_number FROM citation_payments GROUP BY citation_id) cr ON cr.citation_id = c.citation_id${whereSQL}
       ORDER BY c.created_at DESC
       LIMIT ${limitNum} OFFSET ${offset}
     `;

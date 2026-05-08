@@ -97,6 +97,10 @@ export default function CitationsPage() {
     violations: '',
   });
 
+  // Citation report modal
+  const [showCitationReportModal, setShowCitationReportModal] = useState(false);
+  const [citationReportUrl, setCitationReportUrl] = useState('');
+
   // eTracs integration state
   const [etracsSearching, setEtracsSearching] = useState(false);
   const [etracsResults, setEtracsResults] = useState<any[]>([]);
@@ -406,6 +410,20 @@ export default function CitationsPage() {
       dateTo: '',
       violations: '',
     });
+  };
+
+  const openCitationReport = () => {
+    const token = localStorage.getItem('token') || '';
+    const params = new URLSearchParams();
+    if (reportFilters.paymentStatus && reportFilters.paymentStatus !== 'all') {
+      params.set('paymentStatus', reportFilters.paymentStatus);
+    }
+    if (reportFilters.dateFrom) params.set('dateFrom', reportFilters.dateFrom);
+    if (reportFilters.dateTo)   params.set('dateTo', reportFilters.dateTo);
+    if (reportFilters.violations) params.set('violations', reportFilters.violations);
+    if (token) params.set('token', token);
+    setCitationReportUrl(`/citation-report.html?${params.toString()}`);
+    setShowCitationReportModal(true);
   };
 
   // Verify driver information with eTracs
@@ -1185,6 +1203,12 @@ export default function CitationsPage() {
                     >
                       ↻ Reset
                     </button>
+                    <button
+                      onClick={openCitationReport}
+                      className="flex-1 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm"
+                    >
+                      📄 Preview Report
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1374,6 +1398,46 @@ export default function CitationsPage() {
                     </table>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Citation Report Modal */}
+          {showCitationReportModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
+              <div className="bg-white rounded-lg shadow-2xl w-full h-full max-w-5xl max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+                  <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Citation Ticket Report</h3>
+                  <button
+                    onClick={() => {
+                      setShowCitationReportModal(false);
+                      setCitationReportUrl('');
+                    }}
+                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <iframe
+                    src={citationReportUrl}
+                    className="w-full h-full border-0"
+                    title="Citation Ticket Report"
+                  />
+                </div>
+                <div className="flex items-center justify-end px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 bg-gray-50">
+                  <button
+                    onClick={() => {
+                      setShowCitationReportModal(false);
+                      setCitationReportUrl('');
+                    }}
+                    className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           )}

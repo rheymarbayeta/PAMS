@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    font-family: 'Cambria', 'Noto Serif', 'Georgia', serif;
+  }
+  #report-container {
+    max-width: 8.5in;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .loading {
+    padding: 40px;
+    text-align: center;
+    font-size: 18px;
+    color: #666;
+  }
+  .error {
+    padding: 20px;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    color: #856404;
+    margin: 20px;
+  }
+  .controls {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    text-align: right;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .btn {
+    padding: 8px 16px;
+    margin-left: 5px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .btn:hover {
+    background-color: #0056b3;
+  }
+  .btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+  }
+  .btn-print {
+    background-color: #28a745;
+  }
+  .btn-print:hover {
+    background-color: #1e7e34;
+  }
+  .report-pdf-btn {
+    padding: 8px 16px;
+    margin-left: 5px;
+    background-color: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .report-pdf-btn:hover:not(:disabled) {
+    background-color: #4f46e5;
+  }
+  .report-pdf-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  .report-error {
+    padding: 12px;
+    background-color: #fee;
+    border: 1px solid #fcc;
+    border-radius: 4px;
+    color: #c33;
+    margin: 10px 15px;
+    font-size: 13px;
+    display: none;
+  }
+  .report-error.show {
+    display: block;
+  }
+
+  /* Page container — 8.5 × 13 in legal */
+  .page {
+    width: 8.5in;
+    height: 13in;
+    padding: 0.5in;
+    padding-bottom: 0.75in;
+    margin: 0 auto 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
+    page-break-after: always;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .page:last-child {
+    page-break-after: avoid;
+  }
+  .page-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .page-footer {
+    position: absolute;
+    /*
+     * Anchor at the very bottom and cover the ENTIRE padding-bottom zone (0.75 in).
+     * This creates a solid white blocker so any content that slightly overflows
+     * the content area never visually reaches the footer text.
+     * Text is pushed down by padding-top: 0.40 in so it appears at the same
+     * visual position as the original bottom: 0.35 in placement.
+     */
+    bottom: 0;
+    left: 0.5in;
+    right: 0.5in;
+    height: 0.75in;
+    padding-top: 0.40in;
+    text-align: center;
+    font-size: 8px;
+    color: #666;
+    background: white;
+  }
+  /* The inner <div> carries the visible top border + text gap */
+  .page-footer > div {
+    border-top: 1px solid #ccc;
+    padding-top: 6px;
+  }
+  .hidden {
+    display: none;
+  }
+
+  /* Citation table */
+  .citation-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin-top: 10px;
+  }
+  .citation-table th {
+    border: 1px solid #333;
+    padding: 6px 8px;
+    background-color: #f0f0f0;
+    font-weight: bold;
+    text-align: center;
+    font-size: 11px;
+  }
+  .citation-table td {
+    border: 1px solid #555;
+    padding: 5px 8px;
+    vertical-align: top;
+  }
+  .citation-table td.center {
+    text-align: center;
+  }
+  .citation-table td.right {
+    text-align: right;
+  }
+  .citation-table tfoot td {
+    border: 1px solid #333;
+    padding: 6px 8px;
+    font-weight: bold;
+    background-color: #f0f0f0;
+  }
+
+  /* Continuation header */
+  .continuation-header {
+    text-align: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ccc;
+  }
+  .continuation-header h3 {
+    font-size: 13px;
+    color: #666;
+  }
+
+  /* Summary section */
+  .summary-box {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border: 1px solid #999;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  @page {
+    size: 8.5in 13in portrait;
+    margin: 0;
+  }
+  @media print {
+    body {
+      background: white;
+      margin: 0;
+      padding: 0;
+    }
+    #report-container {
+      box-shadow: none;
+      margin: 0;
+      max-width: 100%;
+    }
+    .controls {
+      display: none !important;
+    }
+    .page {
+      box-shadow: none;
+      margin: 0;
+      width: 8.5in;
+      height: 13in;
+      page-break-after: always;
+      overflow: hidden;
+    }
+    .page:last-child {
+      page-break-after: avoid;
+    }
+  }
+</style>
+<title>Citation Ticket Report</title>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn btn-print" onclick="printReport()">🖨️ Print</button>
+    <button class="report-pdf-btn" id="reportPdfBtn" onclick="generateReportPDF()">📄 Download PDF</button>
+    <div id="reportError" class="report-error"></div>
+  </div>
+
+  <div id="loading" class="loading">
+    <p>Loading citation report...</p>
+  </div>
+
+  <div id="error" class="error hidden"></div>
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script src="js/modal-dialog.js"></script>
+<script>
+// ── URL parameters ──────────────────────────────────────────────────────────
+const urlParams    = new URLSearchParams(window.location.search);
+const paymentStatus = urlParams.get('paymentStatus') || 'all';
+const dateFrom      = urlParams.get('dateFrom')      || '';
+const dateTo        = urlParams.get('dateTo')        || '';
+const violationFilter = urlParams.get('violations')  || '';
+const authToken     = urlParams.get('token') || localStorage.getItem('token') || '';
+
+// ── API base URL ─────────────────────────────────────────────────────────────
+let apiBaseUrl = '';
+if (typeof window !== 'undefined') {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    apiBaseUrl = 'http://localhost:5000';
+  } else {
+    const origin = window.location.origin;
+    if (origin.includes(':6070')) {
+      apiBaseUrl = origin.replace(':6070', ':5040');
+    } else if (origin.includes(':3000')) {
+      apiBaseUrl = origin.replace(':3000', ':5000');
+    } else {
+      apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+    }
+  }
+}
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  loadReport();
+});
+
+async function loadReport() {
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    // Fetch citations ──────────────────────────────────────────────────────
+    let citationsUrl = `${apiBaseUrl}/api/citations?limit=10000`;
+    if (paymentStatus && paymentStatus !== 'all') citationsUrl += `&status=${encodeURIComponent(paymentStatus)}`;
+    if (dateFrom) citationsUrl += `&dateFrom=${encodeURIComponent(dateFrom)}`;
+    if (dateTo)   citationsUrl += `&dateTo=${encodeURIComponent(dateTo)}`;
+
+    const citationsRes = await fetch(citationsUrl, { method: 'GET', headers, credentials: 'include' });
+    if (!citationsRes.ok) {
+      if (citationsRes.status === 401) throw new Error('Unauthorised. Please log in again.');
+      throw new Error(`HTTP ${citationsRes.status} ${citationsRes.statusText}`);
+    }
+    let citations = (await citationsRes.json()).data || [];
+
+    // Re-apply payment status filter client-side so computed statuses (from the
+    // server CASE expression) are consistent with the filter label in the report.
+    if (paymentStatus && paymentStatus !== 'all') {
+      citations = citations.filter(c => c.payment_status === paymentStatus);
+    }
+
+    // Client-side violation filter
+    if (violationFilter) {
+      citations = citations.filter(c => {
+        const v = c.violations || [];
+        return Array.isArray(v) ? v.includes(violationFilter) : false;
+      });
+    }
+
+    // Fetch settings ───────────────────────────────────────────────────────
+    let settings = {};
+    try {
+      const settingsRes = await fetch(`${apiBaseUrl}/api/settings`, { method: 'GET', headers, credentials: 'include' });
+      if (settingsRes.ok) settings = await settingsRes.json();
+    } catch (_) { /* non-critical */ }
+
+    // Fetch current user ───────────────────────────────────────────────────
+    let currentUserName = 'PAMS';
+    try {
+      const meRes = await fetch(`${apiBaseUrl}/api/auth/me`, { method: 'GET', headers, credentials: 'include' });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.full_name) currentUserName = meData.full_name;
+      }
+    } catch (_) { /* non-critical */ }
+
+    renderReport(citations, settings, currentUserName);
+
+  } catch (err) {
+    console.error('Error loading citation report:', err);
+    showError(`Failed to load citation report: ${err.message}`);
+  }
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+async function renderReport(citations, settings, currentUserName) {
+  // Measure actual row heights in the browser before paginating so every page
+  // uses the maximum available space without overflow or large blank gaps.
+  const rowHeights = await measureRowHeights(citations);
+  const html = buildReportHTML(citations, rowHeights, settings, currentUserName);
+  document.getElementById('report-content').innerHTML = html;
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('report-content').classList.remove('hidden');
+  updatePageNumbers();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatDate(dateStr) {
+  if (!dateStr) return 'N/A';
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+function formatCurrency(value) {
+  const num = parseFloat(value) || 0;
+  return '₱ ' + num.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function buildFilterLabel() {
+  const parts = [];
+  if (paymentStatus && paymentStatus !== 'all') parts.push(`Status: ${paymentStatus}`);
+  if (dateFrom) parts.push(`From: ${dateFrom}`);
+  if (dateTo)   parts.push(`To: ${dateTo}`);
+  if (violationFilter) parts.push(`Violation: ${violationFilter}`);
+  return parts.length ? parts.join('  |  ') : 'All Citations';
+}
+
+// ── Header HTML (mirrors permit-report.html) ──────────────────────────────────
+function buildHeaderHTML(settings) {
+  const getLogoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
+    return url;
+  };
+
+  const logoLeftUrl  = getLogoUrl(settings.permit_header_logo_left?.value)  || '/dalaguete-logo.png';
+  const logoRightUrl = getLogoUrl(settings.permit_header_logo_right?.value) || null;
+
+  const hLogoH = Math.max(20, Math.min(120, parseFloat(settings.permit_header_logo_size?.value) || 50));
+
+  const hLine1 = settings.permit_header_line_1?.value !== undefined ? settings.permit_header_line_1.value : 'REPUBLIC OF THE PHILIPPINES';
+  const hLine2 = settings.permit_header_line_2?.value !== undefined ? settings.permit_header_line_2.value : 'MUNICIPALITY OF DALAGUETE';
+  const hLine3 = settings.permit_header_line_3?.value !== undefined ? settings.permit_header_line_3.value : 'PROVINCE OF CEBU';
+  const hLine4 = settings.permit_header_line_4?.value !== undefined ? settings.permit_header_line_4.value : 'OFFICE OF THE MUNICIPAL MAYOR';
+  const hLine5 = settings.permit_header_line_5?.value !== undefined ? settings.permit_header_line_5.value : 'Tel. # 520 4141 loc. 315';
+
+  const hBasePx = Math.max(7, Math.min(20, parseFloat(settings.permit_header_font_size?.value) || 11));
+  const hLine4Px = Math.round(hBasePx * 1.45);
+
+  const headerTextLines = `
+    ${hLine1 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine1}</div>` : ''}
+    ${hLine2 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine2}</div>` : ''}
+    ${hLine3 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine3}</div>` : ''}
+    ${hLine4 ? `<div style="font-size:${hLine4Px}px;font-weight:bold;margin-top:2px;">${hLine4}</div>` : ''}
+    ${hLine5 ? `<div style="font-size:${hBasePx}px;font-weight:bold;margin-top:2px;">${hLine5}</div>` : ''}
+  `;
+
+  return `
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:6px;">
+        ${logoLeftUrl ? `<img src="${logoLeftUrl}" alt="Logo" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+        <div style="text-align:center;line-height:1.2;">${headerTextLines}</div>
+        ${logoRightUrl ? `<img src="${logoRightUrl}" alt="Logo 2" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+      </div>
+      <div style="border-bottom:2px solid #333;margin-top:6px;"></div>
+    </div>
+  `;
+}
+
+// ── Footer HTML ───────────────────────────────────────────────────────────────
+function buildFooterHTML(currentUserName, issuedAt) {
+  return `
+    <div>Generated by: ${currentUserName} | Permit and Assessment Management System | Issued: ${issuedAt} | Page <span class="page-number"></span> of <span class="total-pages"></span></div>
+  `;
+}
+
+// ── Table header row ──────────────────────────────────────────────────────────
+function tableHeaderRow() {
+  return `
+    <tr>
+      <th style="width:13%;">Ticket No.</th>
+      <th style="width:10%;">Date</th>
+      <th style="width:22%;">Payor</th>
+      <th style="width:13%;">O.R. No.</th>
+      <th style="width:30%;">Violations</th>
+      <th style="width:12%;">Amount</th>
+    </tr>
+  `;
+}
+
+// ── Page geometry constants (px at 96 DPI) ───────────────────────────────────
+// Page 8.5 × 13 in  |  padding: 0.5 in top, 0.75 in bottom
+const USABLE_H    = (13 - 0.5 - 0.75) * 96; // 1128 px — between top/bottom padding
+const FIRST_HDR_H = 172;  // page-1 overhead: logo block + title/date + dividers
+const CONT_HDR_H  = 66;   // continuation-page overhead: header block
+const THEAD_H     = 28;   // <thead> row
+const SUMMARY_H   = 80;   // <tfoot> totals row + .summary-box (last page only)
+const SAFETY_PX   = 40;   // guard buffer before the white footer blocker
+
+// Available px for <tbody> rows on a given page.
+function availH(isFirst, reserveSummary) {
+  return USABLE_H
+    - (isFirst ? FIRST_HDR_H : CONT_HDR_H)
+    - THEAD_H
+    - (reserveSummary ? SUMMARY_H : 0)
+    - SAFETY_PX;
+}
+
+/**
+ * Measure the actual rendered height of every citation row by injecting a
+ * hidden table at exact page-content width (7.5 in = 720 px) and reading
+ * each <tr>.offsetHeight.  Returns Promise<number[]>.
+ */
+function measureRowHeights(citations) {
+  return new Promise(resolve => {
+    if (citations.length === 0) { resolve([]); return; }
+
+    const wrap = document.createElement('div');
+    // Position off-screen but fully rendered so offsetHeight is accurate.
+    wrap.style.cssText = [
+      'position:absolute', 'top:-99999px', 'left:0',
+      'width:720px',   // 8.5 in − 0.5 in left pad − 0.5 in right pad = 7.5 in = 720 px
+      'visibility:hidden', 'pointer-events:none', 'overflow:hidden'
+    ].join(';');
+
+    const tbl   = document.createElement('table');
+    tbl.className = 'citation-table';
+    tbl.style.width = '100%';
+    const tbody = document.createElement('tbody');
+
+    citations.forEach(c => {
+      const violations = Array.isArray(c.violations)
+        ? c.violations.join('; ')
+        : (c.violations || 'N/A');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="center" style="width:13%">${c.ticket_number  || 'N/A'}</td>
+        <td class="center" style="width:10%">${formatDate(c.violation_date)}</td>
+        <td style="width:22%">${c.driver_name  || 'N/A'}</td>
+        <td class="center" style="width:13%">${c.receipt_number || '—'}</td>
+        <td style="width:30%">${violations}</td>
+        <td class="right"  style="width:12%">${formatCurrency(c.fine_amount)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbl.appendChild(tbody);
+    wrap.appendChild(tbl);
+    document.body.appendChild(wrap);
+
+    // One animation frame so the browser finishes layout before we read heights.
+    requestAnimationFrame(() => {
+      const heights = Array.from(tbody.querySelectorAll('tr'))
+        .map(tr => tr.offsetHeight || 28); // fallback 28 px
+      document.body.removeChild(wrap);
+      resolve(heights);
+    });
+  });
+}
+
+/**
+ * Adaptive two-pass pagination using real DOM-measured row heights.
+ *
+ * Pass 1 – greedy pack without summary reserve → maximises every page.
+ * Pass 2 – if the last page cannot also fit the totals+summary block,
+ *           overflow the excess rows onto a new final page.
+ */
+function paginateCitations(citations, rowHeights) {
+  if (citations.length === 0) return [{ isFirst: true, rows: [] }];
+
+  // Pass 1: fill pages as full as possible (no summary reserve yet)
+  const pages = [];
+  let i = 0;
+  while (i < citations.length) {
+    const isFirst = pages.length === 0;
+    const cap     = availH(isFirst, /*reserveSummary=*/false);
+    let used = 0;
+    const pageRows = [];
+    while (i < citations.length) {
+      const h = rowHeights[i] || 28;
+      // Always admit at least one row per page to avoid infinite loop.
+      if (pageRows.length > 0 && used + h > cap) break;
+      pageRows.push(citations[i]);
+      used += h;
+      i++;
+    }
+    pages.push({ isFirst, rows: pageRows });
+  }
+
+  // Pass 2: ensure the last page fits the summary block
+  const last     = pages[pages.length - 1];
+  const lastCap  = availH(last.isFirst, /*reserveSummary=*/true);
+  const startIdx = citations.length - last.rows.length; // global index of first row on last page
+  let used = 0, fitCount = 0;
+  for (let j = 0; j < last.rows.length; j++) {
+    const h = rowHeights[startIdx + j] || 28;
+    if (used + h > lastCap) break;
+    used += h;
+    fitCount++;
+  }
+  if (fitCount < last.rows.length) {
+    // Move the rows that don't fit onto a fresh final page.
+    const overflow = last.rows.splice(fitCount);
+    pages.push({ isFirst: false, rows: overflow });
+  }
+
+  return pages;
+}
+
+// ── Main HTML builder (paginated) ─────────────────────────────────────────────
+function buildReportHTML(citations, rowHeights, settings, currentUserName) {
+  const now = new Date();
+  const issuedAt = now.toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  const headerHTML  = buildHeaderHTML(settings);
+  const footerHTML  = buildFooterHTML(currentUserName, issuedAt);
+  const filterLabel = buildFilterLabel();
+
+  // Totals
+  const totalFines  = citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
+  const paidCount   = citations.filter(c => c.payment_status === 'Paid').length;
+  const pendingCount = citations.filter(c => c.payment_status === 'Pending').length;
+  const partialCount = citations.filter(c => c.payment_status === 'Partially Paid').length;
+
+  // Split citations into pages using real measured row heights
+  const pages = paginateCitations(citations, rowHeights);
+
+  // Build each page
+  let pagesHTML = '';
+  pages.forEach((page, pageIdx) => {
+    const isLast = pageIdx === pages.length - 1;
+
+    // Build table rows
+    let rowsHTML = '';
+    page.rows.forEach(c => {
+      const violations = Array.isArray(c.violations) ? c.violations.join('; ') : (c.violations || 'N/A');
+      rowsHTML += `
+        <tr>
+          <td class="center">${c.ticket_number || 'N/A'}</td>
+          <td class="center">${formatDate(c.violation_date)}</td>
+          <td>${c.driver_name || 'N/A'}</td>
+          <td class="center">${c.receipt_number || '—'}</td>
+          <td>${violations}</td>
+          <td class="right">${formatCurrency(c.fine_amount)}</td>
+        </tr>
+      `;
+    });
+
+    // On the last page, add totals row + summary
+    let summaryHTML = '';
+    if (isLast) {
+      summaryHTML = `
+        <tfoot>
+          <tr>
+            <td colspan="5" style="text-align:right;font-weight:bold;">TOTAL AMOUNT:</td>
+            <td class="right" style="font-weight:bold;">${formatCurrency(totalFines)}</td>
+          </tr>
+        </tfoot>
+      `;
+    }
+
+    // Page heading
+    let pageHeading = '';
+    if (page.isFirst) {
+      pageHeading = `
+        ${headerHTML}
+        <div style="text-align:center;margin-bottom:4px;">
+          <div style="font-size:16px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">CITATION TICKET REPORT</div>
+          <div style="font-size:10px;color:#555;margin-top:4px;">${filterLabel}</div>
+          <div style="font-size:10px;color:#555;">As of: ${issuedAt}</div>
+        </div>
+        <div style="border-bottom:1px solid #ccc;margin-bottom:10px;"></div>
+      `;
+    } else {
+      pageHeading = `
+        <div class="continuation-header">
+          <h3>CITATION TICKET REPORT — Continuation (Page ${pageIdx + 1})</h3>
+          <div style="font-size:9px;color:#555;">${filterLabel}</div>
+        </div>
+      `;
+    }
+
+    // Summary block (last page only)
+    let statsBlock = '';
+    if (isLast) {
+      statsBlock = `
+        <div class="summary-box">
+          <strong>Total Citations:</strong> ${citations.length} &nbsp;&nbsp;
+          <strong>Paid:</strong> ${paidCount} &nbsp;&nbsp;
+          <strong>Pending:</strong> ${pendingCount} &nbsp;&nbsp;
+          <strong>Partially Paid:</strong> ${partialCount} &nbsp;&nbsp;
+          <strong>Total Fine Amount:</strong> ${formatCurrency(totalFines)}
+        </div>
+      `;
+    }
+
+    pagesHTML += `
+      <div class="page" id="page-${pageIdx + 1}">
+        <div class="page-content">
+          ${pageHeading}
+          <table class="citation-table">
+            <thead>${tableHeaderRow()}</thead>
+            <tbody>${rowsHTML}</tbody>
+            ${summaryHTML}
+          </table>
+          ${statsBlock}
+        </div>
+        <div class="page-footer">${footerHTML}</div>
+      </div>
+    `;
+  });
+
+  return pagesHTML;
+}
+
+// ── Page numbers ─────────────────────────────────────────────────────────────
+function updatePageNumbers() {
+  const pages = document.querySelectorAll('.page');
+  const total = pages.length;
+  pages.forEach((page, i) => {
+    const pn = page.querySelector('.page-number');
+    const tp = page.querySelector('.total-pages');
+    if (pn) pn.textContent = i + 1;
+    if (tp) tp.textContent = total;
+  });
+}
+
+// ── Print ─────────────────────────────────────────────────────────────────────
+function printReport() {
+  window.print();
+}
+
+// ── Download PDF via Puppeteer (server-side) ──────────────────────────────────
+async function generateReportPDF() {
+  const btn        = document.getElementById('reportPdfBtn');
+  const errDiv     = document.getElementById('reportError');
+  const origText   = btn.innerHTML;
+
+  try {
+    const reportContent = document.getElementById('report-content');
+    if (!reportContent || reportContent.classList.contains('hidden')) {
+      throw new Error('Report not loaded yet.');
+    }
+
+    btn.disabled  = true;
+    btn.innerHTML = '⏳ Generating PDF...';
+    errDiv.classList.remove('show');
+
+    const styleText = Array.from(document.querySelectorAll('style'))
+      .map(s => s.innerHTML).join('\n');
+
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+${styleText}
+body { background: white; margin: 0; padding: 0; }
+.controls { display: none !important; }
+#report-container { box-shadow: none; margin: 0; max-width: 100%; }
+.page { box-shadow: none; margin: 0; }
+</style>
+</head>
+<body>
+<div id="report-container">
+${reportContent.innerHTML}
+</div>
+</body>
+</html>`;
+
+    const date     = new Date().toISOString().split('T')[0];
+    const filename = `Citation_Report_${date}.pdf`;
+
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      },
+      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal' })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Server error' }));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url  = window.URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    btn.innerHTML = '✅ Downloaded!';
+    setTimeout(() => {
+      btn.innerHTML = '📄 Download PDF';
+      btn.disabled  = false;
+    }, 2000);
+
+  } catch (err) {
+    errDiv.textContent = `Error: ${err.message}`;
+    errDiv.classList.add('show');
+    setTimeout(() => errDiv.classList.remove('show'), 5000);
+    btn.innerHTML = '📄 Download PDF';
+    btn.disabled  = false;
+  }
+}
+
+// ── Error display ─────────────────────────────────────────────────────────────
+function showError(message) {
+  const el = document.getElementById('error');
+  el.textContent = message;
+  el.classList.remove('hidden');
+  document.getElementById('loading').classList.add('hidden');
+}
+</script>
+</body>
+</html>
