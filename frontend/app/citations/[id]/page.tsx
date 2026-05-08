@@ -32,6 +32,7 @@ interface CitationDetails {
   remarks: string;
   fine_amount: number;
   payment_status: string;
+  enforcer_id: string;
   enforcer_name: string;
   enforcer_badge: string;
   enforcer_signature: string;
@@ -100,6 +101,7 @@ export default function CitationDetailsPage() {
   const [citation, setCitation] = useState<CitationDetails | null>(null);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [auditTrail, setAuditTrail] = useState<AuditTrailRecord[]>([]);
+  const [enforcers, setEnforcers] = useState<{ enforcer_id: string; full_name: string; badge_number: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [auditLoading, setAuditLoading] = useState(true);
   const [error, setError] = useState('');
@@ -132,6 +134,7 @@ export default function CitationDetailsPage() {
     fineAmount: string;
     paymentStatus: string;
     isCompleted: boolean;
+    enforcerId: string;
     enforcerName: string;
     enforcerBadge: string;
     witnessName: string;
@@ -158,6 +161,7 @@ export default function CitationDetailsPage() {
     fineAmount: '',
     paymentStatus: '',
     isCompleted: false,
+    enforcerId: '',
     enforcerName: '',
     enforcerBadge: '',
     witnessName: '',
@@ -181,6 +185,12 @@ export default function CitationDetailsPage() {
       fetchAuditTrail();
     }
   }, [citationId]);
+
+  useEffect(() => {
+    api.get('/api/enforcers?limit=1000&status=Active')
+      .then((r) => setEnforcers(r.data.data || []))
+      .catch(() => {});
+  }, []);
 
   const fetchCitationDetails = async () => {
     try {
@@ -210,6 +220,7 @@ export default function CitationDetailsPage() {
         fineAmount: String(data.fine_amount) || '',
         paymentStatus: data.payment_status || '',
         isCompleted: !!data.is_completed,
+        enforcerId: data.enforcer_id || '',
         enforcerName: data.enforcer_name || '',
         enforcerBadge: data.enforcer_badge || '',
         witnessName: data.witness_name || '',
@@ -261,6 +272,7 @@ export default function CitationDetailsPage() {
         paymentStatus: editData.paymentStatus,
         fineAmount: parseFloat(editData.fineAmount) || 0,
         isCompleted: editData.isCompleted,
+        enforcerId: editData.enforcerId,
         enforcerName: editData.enforcerName,
         enforcerBadge: editData.enforcerBadge,
         witnessName: editData.witnessName,
@@ -703,13 +715,26 @@ export default function CitationDetailsPage() {
                 <div>
                   <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3 pb-2 border-b border-amber-200">Enforcer & Witness Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      placeholder="Enforcer Name"
-                      value={editData.enforcerName}
-                      onChange={(e) => setEditData((p) => ({ ...p, enforcerName: e.target.value }))}
+                    <select
+                      value={editData.enforcerId}
+                      onChange={(e) => {
+                        const selected = enforcers.find((en) => en.enforcer_id === e.target.value);
+                        setEditData((p) => ({
+                          ...p,
+                          enforcerId: e.target.value,
+                          enforcerName: selected?.full_name || p.enforcerName,
+                          enforcerBadge: selected?.badge_number || p.enforcerBadge,
+                        }));
+                      }}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    />
+                    >
+                      <option value="">— Select Enforcer —</option>
+                      {enforcers.map((en) => (
+                        <option key={en.enforcer_id} value={en.enforcer_id}>
+                          {en.full_name} (#{en.badge_number})
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="text"
                       placeholder="Enforcer Badge"

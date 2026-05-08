@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +39,7 @@ interface FilterOptions {
 
 export default function EnforcersPage() {
   const { hasRole } = useAuth();
+  const router = useRouter();
   const [enforcers, setEnforcers] = useState<Enforcer[]>([]);
   const [stats, setStats] = useState<EnforcerStats | null>(null);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
@@ -73,7 +75,7 @@ export default function EnforcersPage() {
 
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 10,
+    limit: 25,
     total: 0,
   });
 
@@ -604,7 +606,7 @@ export default function EnforcersPage() {
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <button
-                                onClick={() => handleViewDetail(enforcer.enforcer_id)}
+                                onClick={() => router.push(`/admin/enforcers/${enforcer.enforcer_id}`)}
                                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200"
                                 title="View Details"
                               >
@@ -646,15 +648,34 @@ export default function EnforcersPage() {
                 </div>
 
                 {/* Pagination */}
-                <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50">
-                  <div className="text-sm text-slate-600">
-                    Showing <span className="font-semibold">{(pagination.page - 1) * pagination.limit + 1}</span> to{' '}
-                    <span className="font-semibold">
-                      {Math.min(pagination.page * pagination.limit, pagination.total)}
-                    </span>{' '}
-                    of <span className="font-semibold">{pagination.total}</span> enforcers
+                <div className="px-6 py-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-slate-600">
+                      Showing <span className="font-semibold">{Math.min((pagination.page - 1) * pagination.limit + 1, pagination.total)}</span> to{' '}
+                      <span className="font-semibold">
+                        {Math.min(pagination.page * pagination.limit, pagination.total)}
+                      </span>{' '}
+                      of <span className="font-semibold">{pagination.total}</span> enforcers
+                    </span>
+                    <select
+                      value={pagination.limit}
+                      onChange={(e) => setPagination({ page: 1, limit: Number(e.target.value), total: pagination.total })}
+                      className="border border-slate-200 rounded-md px-2 py-1 text-sm text-slate-700 bg-white focus:border-slate-400 outline-none"
+                    >
+                      <option value={10}>10 / page</option>
+                      <option value={25}>25 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPagination({ ...pagination, page: 1 })}
+                      disabled={pagination.page === 1}
+                      className="px-2 py-1 border border-slate-300 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      «
+                    </button>
                     <button
                       onClick={() => setPagination({ ...pagination, page: Math.max(1, pagination.page - 1) })}
                       disabled={pagination.page === 1}
@@ -691,10 +712,17 @@ export default function EnforcersPage() {
                     </div>
                     <button
                       onClick={() => setPagination({ ...pagination, page: Math.min(totalPages, pagination.page + 1) })}
-                      disabled={pagination.page === totalPages}
+                      disabled={pagination.page === totalPages || totalPages === 0}
                       className="px-3 py-1 border border-slate-300 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                     >
                       Next
+                    </button>
+                    <button
+                      onClick={() => setPagination({ ...pagination, page: totalPages })}
+                      disabled={pagination.page === totalPages || totalPages === 0}
+                      className="px-2 py-1 border border-slate-300 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      »
                     </button>
                   </div>
                 </div>

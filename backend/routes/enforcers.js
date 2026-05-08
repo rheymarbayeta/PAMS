@@ -420,7 +420,9 @@ router.delete('/:id', authorize('SuperAdmin'), async (req, res) => {
 router.get('/:id/citations', async (req, res) => {
   try {
     const enforcerId = req.params.id;
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, status } = req.query;
+
+    console.log('[GET /:id/citations] enforcerId:', enforcerId, 'page:', page, 'status filter:', status);
 
     // Verify enforcer exists
     const [enforcer] = await pool.execute(
@@ -437,30 +439,43 @@ router.get('/:id/citations', async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
     const offset = (pageNum - 1) * limitNum;
 
-    // Get total count
+    // Build where clause (enforcer_id always, status optional)
+    let whereSQL = 'WHERE enforcer_id = ?';
+    const baseParams = [enforcerId];
+    if (status) {
+      whereSQL += ' AND payment_status = ?';
+      baseParams.push(status);
+    }
+
+    console.log('[GET /:id/citations] whereSQL:', whereSQL, 'params:', baseParams);
+
+    // Get total count (filtered)
     const [countResult] = await pool.execute(
-      'SELECT COUNT(*) as total FROM citations WHERE enforcer_id = ?',
-      [enforcerId]
+      `SELECT COUNT(*) as total FROM citations ${whereSQL}`,
+      baseParams
     );
     const total = countResult[0]?.total || 0;
+    console.log('[GET /:id/citations] total (filtered):', total);
 
-    // Get citations
+    // Get citations (filtered + paginated)
     const [citations] = await pool.execute(
       `SELECT 
         citation_id, ticket_number, driver_name, plate_number, violation_date,
         violation_location, fine_amount, payment_status, created_at
        FROM citations 
-       WHERE enforcer_id = ? 
+       ${whereSQL}
        ORDER BY created_at DESC
-       LIMIT ?, ?`,
-      [enforcerId, offset, limitNum]
+       LIMIT ${offset}, ${limitNum}`,
+      baseParams
     );
 
-    // Get summary statistics
+    console.log('[GET /:id/citations] rows returned:', citations.length);
+
+    // Get summary statistics (always unfiltered so totals are accurate)
     const [stats] = await pool.execute(
       `SELECT 
         COUNT(*) as total_issued,
-        SUM(fine_amount) as total_fines,
+        COALESCE(SUM(fine_amount), 0) as total_fines,
         COUNT(CASE WHEN payment_status = 'Paid' THEN 1 END) as paid_count,
         COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_count,
         COUNT(CASE WHEN payment_status IN ('Installment', 'Partially Paid') THEN 1 END) as installment_count
@@ -468,6 +483,8 @@ router.get('/:id/citations', async (req, res) => {
        WHERE enforcer_id = ?`,
       [enforcerId]
     );
+
+    console.log('[GET /:id/citations] stats:', stats[0]);
 
     res.json({
       enforcer: enforcer[0],

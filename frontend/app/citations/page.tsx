@@ -259,7 +259,7 @@ export default function CitationsPage() {
         violationDate: formData.violationDate,
         fineAmount: formData.fineAmount,
         paymentStatus: formData.paymentStatus,
-        enforcer_id: formData.enforcerId,
+        enforcerId: formData.enforcerId,
       });
 
       setSuccessMessage('Citation ticket saved successfully!');

@@ -373,6 +373,7 @@ router.put('/:id', async (req, res) => {
       isCompleted,
       enforcerName,
       enforcerBadge,
+      enforcerId,
       witnessName,
       supervisorName,
     } = req.body;
@@ -482,6 +483,10 @@ router.put('/:id', async (req, res) => {
     if (enforcerBadge !== undefined) {
       updateFields.push('enforcer_badge = ?');
       updateParams.push(enforcerBadge);
+    }
+    if (enforcerId !== undefined) {
+      updateFields.push('enforcer_id = ?');
+      updateParams.push(enforcerId || null);
     }
     if (witnessName !== undefined) {
       updateFields.push('witness_name = ?');
