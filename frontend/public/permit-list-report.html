@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background-color: #f5f5f5;
+    font-family: 'Cambria', 'Noto Serif', 'Georgia', serif;
+  }
+  #report-container {
+    max-width: 8.5in;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .loading { padding: 40px; text-align: center; font-size: 18px; color: #666; }
+  .error {
+    padding: 20px; background-color: #fff3cd;
+    border: 1px solid #ffc107; border-radius: 4px;
+    color: #856404; margin: 20px;
+  }
+  .controls {
+    padding: 15px; background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    text-align: right;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .btn {
+    padding: 8px 16px; margin-left: 5px;
+    background-color: #28a745; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+  }
+  .btn:hover { background-color: #1e7e34; }
+  .btn:disabled { background-color: #6c757d; cursor: not-allowed; }
+  .report-pdf-btn {
+    padding: 8px 16px; margin-left: 5px;
+    background-color: #6366f1; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+  }
+  .report-pdf-btn:hover:not(:disabled) { background-color: #4f46e5; }
+  .report-pdf-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+  .report-error {
+    padding: 12px; background-color: #fee;
+    border: 1px solid #fcc; border-radius: 4px;
+    color: #c33; margin: 10px 15px; font-size: 13px; display: none;
+  }
+  .report-error.show { display: block; }
+
+  /* Page — 8.5 × 13 in legal */
+  .page {
+    width: 8.5in; height: 13in;
+    padding: 0.5in; padding-bottom: 0.75in;
+    margin: 0 auto 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
+    page-break-after: always;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .page:last-child { page-break-after: avoid; }
+  .page-content { height: 100%; display: flex; flex-direction: column; }
+  .page-footer {
+    position: absolute;
+    bottom: 0; left: 0.5in; right: 0.5in;
+    height: 0.75in; padding-top: 0.40in;
+    text-align: center; font-size: 8px; color: #666;
+    background: white;
+  }
+  .page-footer > div {
+    border-top: 1px solid #ccc;
+    padding-top: 6px;
+  }
+  .hidden { display: none; }
+
+  /* Permit table */
+  .permit-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 10.5px; margin-top: 10px;
+  }
+  .permit-table th {
+    border: 1px solid #333; padding: 6px 8px;
+    background-color: #f0f0f0; font-weight: bold;
+    text-align: center; font-size: 11px;
+  }
+  .permit-table td {
+    border: 1px solid #555; padding: 5px 8px; vertical-align: top;
+  }
+  .permit-table td.center { text-align: center; }
+  .permit-table tfoot td {
+    border: 1px solid #333; padding: 6px 8px;
+    font-weight: bold; background-color: #f0f0f0;
+  }
+
+  .continuation-header {
+    text-align: center; margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 1px solid #ccc;
+  }
+  .continuation-header h3 { font-size: 13px; color: #666; }
+
+  .summary-box {
+    margin-top: 10px; padding: 8px 12px;
+    border: 1px solid #999; font-size: 11px; line-height: 1.55;
+  }
+
+  .signatory-block { margin-top: 18px; }
+  .signatory-block table { width: 100%; border-collapse: collapse; }
+  .signatory-block td { width: 50%; vertical-align: top; padding: 4px 8px; }
+  .sig-label { font-size: 9px; color: #444; margin-bottom: 20px; }
+  .sig-line { display: inline-block; min-width: 200px; padding-top: 3px; }
+  .sig-name { font-size: 10.5px; font-weight: bold; text-transform: uppercase; }
+  .sig-position { font-size: 9px; font-style: italic; color: #1a56db; }
+
+  /* Status badge inline */
+  .status-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  .status-Pending       { background:#fff3cd; color:#856404; }
+  .status-Assessed      { background:#cff4fc; color:#0c5460; }
+  .status-PendingApproval { background:#fde8d8; color:#7d3000; }
+  .status-Approved      { background:#d1fae5; color:#065f46; }
+  .status-Paid          { background:#ccfbf1; color:#0f5132; }
+  .status-Issued        { background:#dbeafe; color:#1e40af; }
+  .status-Released      { background:#d1fae5; color:#065f46; }
+  .status-Rejected      { background:#fee2e2; color:#991b1b; }
+
+  @page { size: 8.5in 13in portrait; margin: 0; }
+  @media print {
+    body { background: white; margin: 0; padding: 0; }
+    #report-container { box-shadow: none; margin: 0; max-width: 100%; }
+    .controls { display: none !important; }
+    .page { box-shadow: none; margin: 0; width: 8.5in; height: 13in; page-break-after: always; overflow: hidden; }
+    .page:last-child { page-break-after: avoid; }
+  }
+</style>
+<title>Permit Application Report</title>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn" onclick="printReport()">🖨️ Print</button>
+    <button class="report-pdf-btn" id="reportPdfBtn" onclick="generateReportPDF()">📄 Download PDF</button>
+    <div id="reportError" class="report-error"></div>
+  </div>
+  <div id="loading" class="loading"><p>Loading permit report...</p></div>
+  <div id="error" class="error hidden"></div>
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script>
+// ── URL parameters ────────────────────────────────────────────────────────────
+const urlParams     = new URLSearchParams(window.location.search);
+const statusFilter  = urlParams.get('status')         || '';   // comma-separated
+const dateFrom      = urlParams.get('dateFrom')        || '';
+const dateTo        = urlParams.get('dateTo')          || '';
+const permitCat     = urlParams.get('permitCategory')  || '';
+const searchTerm    = urlParams.get('search')          || '';
+const authToken     = urlParams.get('token') || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || '';
+
+// ── API base URL ──────────────────────────────────────────────────────────────
+let apiBaseUrl = '';
+{
+  const origin = window.location.origin;
+  if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    apiBaseUrl = 'http://localhost:5000';
+  } else if (origin.includes(':6070')) {
+    apiBaseUrl = origin.replace(':6070', ':5040');
+  } else if (origin.includes(':3000')) {
+    apiBaseUrl = origin.replace(':3000', ':5000');
+  } else {
+    apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+  }
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', loadReport);
+
+async function loadReport() {
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    // Build query
+    let url = `${apiBaseUrl}/api/applications?limit=10000`;
+    if (permitCat)  url += `&permitCategory=${encodeURIComponent(permitCat)}`;
+
+    const res = await fetch(url, { method: 'GET', headers, credentials: 'include' });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('Unauthorised. Please log in again.');
+      throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    }
+    let apps = await res.json();
+    if (!Array.isArray(apps)) apps = apps.data || apps.applications || [];
+
+    // Client-side filters
+    const statuses = statusFilter ? statusFilter.split(',').map(s => s.trim()).filter(Boolean) : [];
+    if (statuses.length)  apps = apps.filter(a => statuses.includes(a.status));
+    if (dateFrom)         apps = apps.filter(a => new Date(a.created_at) >= new Date(dateFrom));
+    if (dateTo)           apps = apps.filter(a => new Date(a.created_at) <= new Date(dateTo + 'T23:59:59'));
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      apps = apps.filter(a =>
+        (a.permit_number || '').toLowerCase().includes(t) ||
+        (a.entity_name   || '').toLowerCase().includes(t) ||
+        (a.permit_type_name || '').toLowerCase().includes(t)
+      );
+    }
+
+    // Fetch settings
+    let settings = {};
+    try {
+      const sr = await fetch(`${apiBaseUrl}/api/settings`, { method: 'GET', headers, credentials: 'include' });
+      if (sr.ok) settings = await sr.json();
+    } catch (_) {}
+
+    // Fetch current user name
+    let currentUserName = 'PAMS';
+    try {
+      const mr = await fetch(`${apiBaseUrl}/api/auth/me`, { method: 'GET', headers, credentials: 'include' });
+      if (mr.ok) { const d = await mr.json(); if (d.full_name) currentUserName = d.full_name; }
+    } catch (_) {}
+
+    renderReport(apps, settings, currentUserName);
+  } catch (err) {
+    console.error('Error loading permit report:', err);
+    showError(`Failed to load permit report: ${err.message}`);
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+async function renderReport(apps, settings, currentUserName) {
+  const rowHeights = await measureRowHeights(apps);
+  const html = buildReportHTML(apps, rowHeights, settings, currentUserName);
+  document.getElementById('report-content').innerHTML = html;
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('report-content').classList.remove('hidden');
+  updatePageNumbers();
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────────
+function formatDate(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function statusClass(status) {
+  return 'status-' + (status || '').replace(/\s+/g, '');
+}
+
+function buildFilterLabel() {
+  const parts = [];
+  if (statusFilter) parts.push(`Status: ${statusFilter}`);
+  if (permitCat)    parts.push(`Category: ${permitCat}`);
+  if (dateFrom)     parts.push(`From: ${dateFrom}`);
+  if (dateTo)       parts.push(`To: ${dateTo}`);
+  if (searchTerm)   parts.push(`Search: "${searchTerm}"`);
+  return parts.length ? parts.join('  |  ') : 'All Applications';
+}
+
+// ── Header HTML ───────────────────────────────────────────────────────────────
+function buildHeaderHTML(settings) {
+  const getLogoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
+    return url;
+  };
+  const logoLeft  = getLogoUrl(settings.permit_header_logo_left?.value)  || '/dalaguete-logo.png';
+  const logoRight = getLogoUrl(settings.permit_header_logo_right?.value) || null;
+  const hLogoH    = Math.max(20, Math.min(120, parseFloat(settings.permit_header_logo_size?.value) || 50));
+
+  const hBasePx  = Math.max(7, Math.min(20, parseFloat(settings.permit_header_font_size?.value) || 11));
+  const hLine4Px = Math.round(hBasePx * 1.45);
+
+  const l1 = settings.permit_header_line_1?.value ?? 'REPUBLIC OF THE PHILIPPINES';
+  const l2 = settings.permit_header_line_2?.value ?? 'MUNICIPALITY OF DALAGUETE';
+  const l3 = settings.permit_header_line_3?.value ?? 'PROVINCE OF CEBU';
+  const l4 = settings.permit_header_line_4?.value ?? 'OFFICE OF THE MUNICIPAL MAYOR';
+  const l5 = settings.permit_header_line_5?.value ?? 'Tel. # 520 4141 loc. 315';
+
+  const textBlock = [
+    l1 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${l1}</div>` : '',
+    l2 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${l2}</div>` : '',
+    l3 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${l3}</div>` : '',
+    l4 ? `<div style="font-size:${hLine4Px}px;font-weight:bold;margin-top:2px;">${l4}</div>` : '',
+    l5 ? `<div style="font-size:${hBasePx}px;font-weight:bold;margin-top:2px;">${l5}</div>` : '',
+  ].join('');
+
+  return `
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:6px;">
+        ${logoLeft  ? `<img src="${logoLeft}"  alt="Logo"   style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+        <div style="text-align:center;line-height:1.2;">${textBlock}</div>
+        ${logoRight ? `<img src="${logoRight}" alt="Logo 2" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+      </div>
+      <div style="border-bottom:2px solid #333;margin-top:6px;"></div>
+    </div>
+  `;
+}
+
+function buildFooterHTML(currentUserName, issuedAt) {
+  return `<div>Generated by: ${currentUserName} | Permit and Assessment Management System | Issued: ${issuedAt} | Page <span class="page-number"></span> of <span class="total-pages"></span></div>`;
+}
+
+function buildSignatoryHTML(settings, currentUserName) {
+  if (settings.citation_signatory_enabled?.value === 'false') return '';
+  const preparedPos  = settings.citation_prepared_by_position?.value  || '';
+  const certName     = settings.citation_certified_by_name?.value     || '';
+  const certPos      = settings.citation_certified_by_position?.value || '';
+  return `
+    <div class="signatory-block">
+      <table><tr>
+        <td>
+          <div class="sig-label">Prepared by:</div>
+          <div class="sig-line">
+            <div class="sig-name">${currentUserName}</div>
+            <div class="sig-position">${preparedPos}</div>
+          </div>
+        </td>
+        <td>
+          <div class="sig-label">Certified correct by:</div>
+          <div class="sig-line">
+            <div class="sig-name">${certName}</div>
+            <div class="sig-position">${certPos}</div>
+          </div>
+        </td>
+      </tr></table>
+    </div>
+  `;
+}
+
+// ── Table header ──────────────────────────────────────────────────────────────
+function tableHeaderRow() {
+  return `<tr>
+    <th style="width:5%;">#</th>
+    <th style="width:14%;">Permit No.</th>
+    <th style="width:26%;">Permittee</th>
+    <th style="width:22%;">Permit Type</th>
+    <th style="width:10%;">Status</th>
+    <th style="width:13%;">Creator</th>
+    <th style="width:10%;">Date</th>
+  </tr>`;
+}
+
+// ── Page geometry (px @ 96 DPI) ───────────────────────────────────────────────
+const USABLE_H    = (13 - 0.5 - 0.75) * 96; // 1128 px
+const FIRST_HDR_H = 172;
+const CONT_HDR_H  = 66;
+const THEAD_H     = 28;
+const SUMMARY_H   = 70;
+const SIGNATORY_H = 90;
+const SAFETY_PX   = 40;
+
+function availH(isFirst, reserveH) {
+  return USABLE_H - (isFirst ? FIRST_HDR_H : CONT_HDR_H) - THEAD_H - reserveH - SAFETY_PX;
+}
+
+function measureRowHeights(apps) {
+  return new Promise(resolve => {
+    if (apps.length === 0) { resolve([]); return; }
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:absolute;top:-99999px;left:0;width:720px;visibility:hidden;pointer-events:none;overflow:hidden;';
+    const tbl   = document.createElement('table');
+    tbl.className = 'permit-table';
+    tbl.style.width = '100%';
+    const tbody = document.createElement('tbody');
+    apps.forEach((a, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="center" style="width:5%">${i + 1}</td>
+        <td style="width:14%">${a.permit_number || a.application_number || '—'}</td>
+        <td style="width:26%">${a.entity_name || '—'}</td>
+        <td style="width:22%">${a.attribute_name || a.permit_type_name || '—'}</td>
+        <td class="center" style="width:10%">${a.status || '—'}</td>
+        <td style="width:13%">${a.creator_name || '—'}</td>
+        <td class="center" style="width:10%">${formatDate(a.created_at)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    wrap.appendChild(tbl);
+    document.body.appendChild(wrap);
+    requestAnimationFrame(() => {
+      const heights = Array.from(tbody.querySelectorAll('tr')).map(tr => tr.offsetHeight || 24);
+      document.body.removeChild(wrap);
+      resolve(heights);
+    });
+  });
+}
+
+function paginateApps(apps, rowHeights, reserveH) {
+  if (apps.length === 0) return [{ isFirst: true, rows: [], startIdx: 0 }];
+  const pages = [];
+  let i = 0;
+  while (i < apps.length) {
+    const isFirst  = pages.length === 0;
+    const cap      = availH(isFirst, 0);
+    let used = 0;
+    const startIdx = i;
+    const pageRows = [];
+    while (i < apps.length) {
+      const h = rowHeights[i] || 24;
+      if (pageRows.length > 0 && used + h > cap) break;
+      pageRows.push(apps[i]);
+      used += h;
+      i++;
+    }
+    pages.push({ isFirst, rows: pageRows, startIdx });
+  }
+  // Pass 2: ensure last page fits summary+signatory
+  const last      = pages[pages.length - 1];
+  const lastCap   = availH(last.isFirst, reserveH);
+  const gStart    = last.startIdx;
+  let used2 = 0, fitCount = 0;
+  for (let j = 0; j < last.rows.length; j++) {
+    const h = rowHeights[gStart + j] || 24;
+    if (used2 + h > lastCap) break;
+    used2 += h;
+    fitCount++;
+  }
+  if (fitCount < last.rows.length) {
+    const overflow = last.rows.splice(fitCount);
+    pages.push({ isFirst: false, rows: overflow, startIdx: gStart + fitCount });
+  }
+  return pages;
+}
+
+// ── Main HTML builder ─────────────────────────────────────────────────────────
+function buildReportHTML(apps, rowHeights, settings, currentUserName) {
+  const now = new Date();
+  const issuedAt = now.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const headerHTML  = buildHeaderHTML(settings);
+  const filterLabel = buildFilterLabel();
+  const footerHTML  = buildFooterHTML(currentUserName, issuedAt);
+
+  const signatoryEnabled = settings.citation_signatory_enabled?.value !== 'false';
+  const reserveH = SUMMARY_H + (signatoryEnabled ? SIGNATORY_H : 0);
+
+  // Status counts
+  const statusCounts = {};
+  apps.forEach(a => { statusCounts[a.status] = (statusCounts[a.status] || 0) + 1; });
+
+  const pages = paginateApps(apps, rowHeights, reserveH);
+  let pagesHTML = '';
+
+  pages.forEach((page, pageIdx) => {
+    const isLast = pageIdx === pages.length - 1;
+    let rowsHTML = '';
+    page.rows.forEach((a, j) => {
+      const rowNum = page.startIdx + j + 1;
+      rowsHTML += `<tr>
+        <td class="center">${rowNum}</td>
+        <td>${a.permit_number || a.application_number || '—'}</td>
+        <td>${a.entity_name || '—'}</td>
+        <td>${a.attribute_name || a.permit_type_name || '—'}</td>
+        <td class="center"><span class="status-badge ${statusClass(a.status)}">${a.status || '—'}</span></td>
+        <td>${a.creator_name || '—'}</td>
+        <td class="center">${formatDate(a.created_at)}</td>
+      </tr>`;
+    });
+
+    const summaryHTML = isLast ? `<tfoot><tr>
+      <td colspan="6" style="text-align:right;font-weight:bold;">TOTAL:</td>
+      <td class="center" style="font-weight:bold;">${apps.length} records</td>
+    </tr></tfoot>` : '';
+
+    const pageHeading = page.isFirst ? `
+      ${headerHTML}
+      <div style="text-align:center;margin-bottom:4px;">
+        <div style="font-size:16px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">PERMIT APPLICATION REPORT</div>
+        <div style="font-size:10px;color:#555;margin-top:4px;">${filterLabel}</div>
+        <div style="font-size:10px;color:#555;">As of: ${issuedAt}</div>
+      </div>
+      <div style="border-bottom:1px solid #ccc;margin-bottom:10px;"></div>
+    ` : `
+      <div class="continuation-header">
+        <h3>PERMIT APPLICATION REPORT — Continuation (Page ${pageIdx + 1})</h3>
+        <div style="font-size:9px;color:#555;">${filterLabel}</div>
+      </div>
+    `;
+
+    let statsBlock = '';
+    if (isLast) {
+      const breakdown = Object.entries(statusCounts)
+        .map(([s, n]) => `<strong>${s}:</strong> ${n}`)
+        .join(' &nbsp;|&nbsp; ');
+      statsBlock = `<div class="summary-box"><strong>Total Applications:</strong> ${apps.length} &nbsp;&nbsp; ${breakdown}</div>`;
+    }
+
+    const signatoryBlock = isLast ? buildSignatoryHTML(settings, currentUserName) : '';
+
+    pagesHTML += `
+      <div class="page" id="page-${pageIdx + 1}">
+        <div class="page-content">
+          ${pageHeading}
+          <table class="permit-table">
+            <thead>${tableHeaderRow()}</thead>
+            <tbody>${rowsHTML}</tbody>
+            ${summaryHTML}
+          </table>
+          ${statsBlock}
+          ${signatoryBlock}
+        </div>
+        <div class="page-footer">${footerHTML}</div>
+      </div>
+    `;
+  });
+
+  return pagesHTML;
+}
+
+function updatePageNumbers() {
+  const pages = document.querySelectorAll('.page');
+  const total = pages.length;
+  pages.forEach((page, i) => {
+    const pn = page.querySelector('.page-number');
+    const tp = page.querySelector('.total-pages');
+    if (pn) pn.textContent = i + 1;
+    if (tp) tp.textContent = total;
+  });
+}
+
+function printReport() { window.print(); }
+
+async function generateReportPDF() {
+  const btn      = document.getElementById('reportPdfBtn');
+  const errDiv   = document.getElementById('reportError');
+  try {
+    const reportContent = document.getElementById('report-content');
+    if (!reportContent || reportContent.classList.contains('hidden')) throw new Error('Report not loaded yet.');
+    btn.disabled  = true;
+    btn.innerHTML = '⏳ Generating PDF...';
+    errDiv.classList.remove('show');
+
+    const styleText = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
+    const fullHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<style>
+${styleText}
+body { background: white; margin: 0; padding: 0; }
+.controls { display: none !important; }
+#report-container { box-shadow: none; margin: 0; max-width: 100%; }
+.page { box-shadow: none; margin: 0; }
+</style></head><body>
+<div id="report-container">${reportContent.innerHTML}</div>
+</body></html>`;
+
+    const date   = new Date().toISOString().split('T')[0];
+    const label  = statusFilter ? statusFilter.toUpperCase().replace(',', '-') : 'ALL';
+    const filename = `Permit Report - ${label} - ${date}.pdf`;
+
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      },
+      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal' })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Server error' }));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url  = window.URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    btn.innerHTML = '✅ Downloaded!';
+    setTimeout(() => { btn.innerHTML = '📄 Download PDF'; btn.disabled = false; }, 2000);
+  } catch (err) {
+    errDiv.textContent = `Error: ${err.message}`;
+    errDiv.classList.add('show');
+    setTimeout(() => errDiv.classList.remove('show'), 5000);
+    btn.innerHTML = '📄 Download PDF'; btn.disabled = false;
+  }
+}
+
+function showError(message) {
+  const el = document.getElementById('error');
+  el.textContent = message; el.classList.remove('hidden');
+  document.getElementById('loading').classList.add('hidden');
+}
+</script>
+</body>
+</html>

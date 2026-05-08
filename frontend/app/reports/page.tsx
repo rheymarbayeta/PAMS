@@ -99,6 +99,10 @@ export default function ReportsPage() {
   const [generatingFormat, setGeneratingFormat] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
 
+  // Print preview
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [printPreviewUrl, setPrintPreviewUrl] = useState('');
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -361,6 +365,19 @@ export default function ReportsPage() {
     }
   };
 
+  const openPrintPreview = () => {
+    const token = localStorage.getItem('token') || '';
+    const params = new URLSearchParams();
+    if (statusFilters.length > 0) params.set('status', statusFilters.join(','));
+    if (dateRangeStart) params.set('dateFrom', dateRangeStart);
+    if (dateRangeEnd) params.set('dateTo', dateRangeEnd);
+    if (selectedCategory) params.set('permitCategory', selectedCategory);
+    if (searchTerm) params.set('search', searchTerm);
+    if (token) params.set('token', token);
+    setPrintPreviewUrl(`/permit-list-report.html?${params.toString()}`);
+    setShowPrintPreview(true);
+  };
+
   const clearFilters = () => {
     setStatusFilters([]);
     setPermitTypeFilter('all');
@@ -619,54 +636,17 @@ export default function ReportsPage() {
                     <span className="hidden sm:inline">Export</span>
                   </button>
 
-                  {/* Report Dropdown */}
-                  <div className="relative group">
-                    <button
-                      className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-700 hover:from-indigo-100 hover:to-blue-100 transition-all duration-200"
-                      title="Generate Report"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                      <span className="hidden sm:inline">Report</span>
-                      <svg className="h-3 w-3 ml-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-
-                    <div className="hidden group-hover:block absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
-                      <div className="p-2 space-y-1">
-                        <button
-                          onClick={() => handleGenerateReport('html')}
-                          disabled={generatingFormat !== null}
-                          className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {generatingFormat === 'html' ? '⏳ Generating HTML...' : '🌐 HTML Report'}
-                        </button>
-                        <button
-                          onClick={() => handleGenerateReport('pdf')}
-                          disabled={generatingFormat !== null}
-                          className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {generatingFormat === 'pdf' ? '⏳ Generating PDF...' : '📕 PDF Report'}
-                        </button>
-                        <button
-                          onClick={() => handleGenerateReport('csv')}
-                          disabled={generatingFormat !== null}
-                          className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {generatingFormat === 'csv' ? '⏳ Generating CSV...' : '📊 CSV Report'}
-                        </button>
-                        <button
-                          onClick={() => handleGenerateReport('xlsx')}
-                          disabled={generatingFormat !== null}
-                          className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {generatingFormat === 'xlsx' ? '⏳ Generating Excel...' : '📗 Excel Report'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  {/* Print Preview */}
+                  <button
+                    onClick={openPrintPreview}
+                    className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-700 hover:from-indigo-100 hover:to-blue-100 transition-all duration-200"
+                    title="Print Preview"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    <span className="hidden sm:inline">Print Preview</span>
+                  </button>
                 </div>
               </div>
 
@@ -1006,6 +986,40 @@ export default function ReportsPage() {
           </div>
         </div>
       </Layout>
+
+      {/* Print Preview Modal */}
+      {showPrintPreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full h-full max-w-6xl max-h-[95vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Permit Report — Print Preview</h3>
+              <button
+                onClick={() => { setShowPrintPreview(false); setPrintPreviewUrl(''); }}
+                className="p-1 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                src={printPreviewUrl}
+                className="w-full h-full border-0"
+                title="Permit Report Preview"
+              />
+            </div>
+            <div className="flex items-center justify-end px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+              <button
+                onClick={() => { setShowPrintPreview(false); setPrintPreviewUrl(''); }}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ProtectedRoute>
   );
 }

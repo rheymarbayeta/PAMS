@@ -1,5 +1,5 @@
 # Backend Dockerfile
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Install Chromium and system fonts required by Puppeteer
 RUN apk add --no-cache \

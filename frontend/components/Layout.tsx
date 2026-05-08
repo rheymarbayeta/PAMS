@@ -143,12 +143,9 @@ export default function Layout({ children }: LayoutProps) {
       ],
     },
     {
-      paths: ['/reports', '/admin/reports', '/admin/templates', '/admin/report-templates'],
+      paths: ['/reports'],
       tabs: [
         { href: '/reports', label: 'Permit Reports' },
-        { href: '/admin/reports', label: 'Financial Reports' },
-        { href: '/admin/templates', label: 'DOCX Templates' },
-        { href: '/admin/report-templates', label: 'HTML Templates' },
       ],
     },
     {
