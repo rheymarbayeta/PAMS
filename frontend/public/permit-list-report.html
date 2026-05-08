@@ -164,6 +164,7 @@ const statusFilter  = urlParams.get('status')         || '';   // comma-separate
 const dateFrom      = urlParams.get('dateFrom')        || '';
 const dateTo        = urlParams.get('dateTo')          || '';
 const permitCat     = urlParams.get('permitCategory')  || '';
+const attributeParam = urlParams.get('attribute')      || '';
 const searchTerm    = urlParams.get('search')          || '';
 const authToken     = urlParams.get('token') || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || '';
 
@@ -205,6 +206,7 @@ async function loadReport() {
     // Client-side filters
     const statuses = statusFilter ? statusFilter.split(',').map(s => s.trim()).filter(Boolean) : [];
     if (statuses.length)  apps = apps.filter(a => statuses.includes(a.status));
+    if (attributeParam)   apps = apps.filter(a => a.attribute_name === attributeParam);
     if (dateFrom)         apps = apps.filter(a => new Date(a.created_at) >= new Date(dateFrom));
     if (dateTo)           apps = apps.filter(a => new Date(a.created_at) <= new Date(dateTo + 'T23:59:59'));
     if (searchTerm) {
@@ -263,6 +265,7 @@ function buildFilterLabel() {
   const parts = [];
   if (statusFilter) parts.push(`Status: ${statusFilter}`);
   if (permitCat)    parts.push(`Category: ${permitCat}`);
+  if (attributeParam) parts.push(`Attribute: ${attributeParam}`);
   if (dateFrom)     parts.push(`From: ${dateFrom}`);
   if (dateTo)       parts.push(`To: ${dateTo}`);
   if (searchTerm)   parts.push(`Search: "${searchTerm}"`);
@@ -344,13 +347,12 @@ function buildSignatoryHTML(settings, currentUserName) {
 // ── Table header ──────────────────────────────────────────────────────────────
 function tableHeaderRow() {
   return `<tr>
-    <th style="width:5%;">#</th>
-    <th style="width:14%;">Permit No.</th>
+    <th style="width:4%;">\#</th>
+    <th style="width:17%;">Permit No.</th>
     <th style="width:26%;">Permittee</th>
-    <th style="width:22%;">Permit Type</th>
-    <th style="width:10%;">Status</th>
-    <th style="width:13%;">Creator</th>
-    <th style="width:10%;">Date</th>
+    <th style="width:17%;">Permit Type</th>
+    <th style="width:18%;">Address</th>
+    <th style="width:18%;">Location</th>
   </tr>`;
 }
 
@@ -379,13 +381,12 @@ function measureRowHeights(apps) {
     apps.forEach((a, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="center" style="width:5%">${i + 1}</td>
-        <td style="width:14%">${a.permit_number || a.application_number || '—'}</td>
+        <td class="center" style="width:4%">${i + 1}</td>
+        <td style="width:17%">${a.permit_number || a.application_number || '—'}</td>
         <td style="width:26%">${a.entity_name || '—'}</td>
-        <td style="width:22%">${a.attribute_name || a.permit_type_name || '—'}</td>
-        <td class="center" style="width:10%">${a.status || '—'}</td>
-        <td style="width:13%">${a.creator_name || '—'}</td>
-        <td class="center" style="width:10%">${formatDate(a.created_at)}</td>
+        <td style="width:17%">${a.attribute_name || a.permit_type_name || '—'}</td>
+        <td style="width:18%">${a.entity_address || '—'}</td>
+        <td style="width:18%">${a.location || a.entity_address || '—'}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -462,19 +463,19 @@ function buildReportHTML(apps, rowHeights, settings, currentUserName) {
     page.rows.forEach((a, j) => {
       const rowNum = page.startIdx + j + 1;
       rowsHTML += `<tr>
-        <td class="center">${rowNum}</td>
-        <td>${a.permit_number || a.application_number || '—'}</td>
-        <td>${a.entity_name || '—'}</td>
-        <td>${a.attribute_name || a.permit_type_name || '—'}</td>
-        <td class="center"><span class="status-badge ${statusClass(a.status)}">${a.status || '—'}</span></td>
-        <td>${a.creator_name || '—'}</td>
-        <td class="center">${formatDate(a.created_at)}</td>
+        <td class="center" style="width:4%">${rowNum}</td>
+        <td style="width:17%">${a.permit_number || a.application_number || '—'}</td>
+        <td style="width:26%">${a.entity_name || '—'}</td>
+        <td style="width:17%">${a.attribute_name || a.permit_type_name || '—'}</td>
+        <td style="width:18%">${a.entity_address || '—'}</td>
+        <td style="width:18%">${a.location || a.entity_address || '—'}</td>
       </tr>`;
+      
     });
 
     const summaryHTML = isLast ? `<tfoot><tr>
-      <td colspan="6" style="text-align:right;font-weight:bold;">TOTAL:</td>
-      <td class="center" style="font-weight:bold;">${apps.length} records</td>
+      <td colspan="5" style="text-align:right;font-weight:bold;">TOTAL:</td>
+      <td style="font-weight:bold;">${apps.length} records</td>
     </tr></tfoot>` : '';
 
     const pageHeading = page.isFirst ? `

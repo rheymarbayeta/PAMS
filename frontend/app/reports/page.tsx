@@ -75,6 +75,7 @@ export default function ReportsPage() {
   const [dateRangeStart, setDateRangeStart] = useState<string>('');
   const [dateRangeEnd, setDateRangeEnd] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [attributeFilter, setAttributeFilter] = useState<string>('all');
 
   // Column selection
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(
@@ -87,6 +88,7 @@ export default function ReportsPage() {
 
   // UI states
   const [permitTypes, setPermitTypes] = useState<string[]>([]);
+  const [attributes, setAttributes] = useState<string[]>([]);
   const [creators, setCreators] = useState<string[]>([]);
   const [assessors, setAssessors] = useState<string[]>([]);
   const [approvers, setApprovers] = useState<string[]>([]);
@@ -121,7 +123,7 @@ export default function ReportsPage() {
   // Reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilters, permitTypeFilter, creatorFilter, assessorFilter, approverFilter, dateRangeStart, dateRangeEnd, searchTerm]);
+  }, [statusFilters, permitTypeFilter, attributeFilter, creatorFilter, assessorFilter, approverFilter, dateRangeStart, dateRangeEnd, searchTerm]);
 
   const fetchPermitCategories = async () => {
     try {
@@ -153,12 +155,14 @@ export default function ReportsPage() {
       }
 
       // Extract unique values for filters
-      const permitTypeSet = new Set<string>(apps.map((app: Application) => app.attribute_name || app.permit_type_name).filter(Boolean));
+      const permitTypeSet = new Set<string>(apps.map((app: Application) => app.permit_type_name).filter(Boolean));
+      const attributeSet = new Set<string>(apps.map((app: Application) => app.attribute_name).filter(Boolean));
       const creatorSet = new Set<string>(apps.map((app: Application) => app.creator_name));
       const assessorSet = new Set<string>(apps.map((app: Application) => app.assessor_name).filter(Boolean) as string[]);
       const approverSet = new Set<string>(apps.map((app: Application) => app.approver_name).filter(Boolean) as string[]);
 
       setPermitTypes(Array.from(permitTypeSet).sort());
+      setAttributes(Array.from(attributeSet).sort());
       setCreators(Array.from(creatorSet).sort());
       setAssessors(Array.from(assessorSet).sort());
       setApprovers(Array.from(approverSet).sort());
@@ -195,7 +199,11 @@ export default function ReportsPage() {
           return false;
         }
         // Permit type filter
-        if (permitTypeFilter !== 'all' && (app.attribute_name || app.permit_type_name) !== permitTypeFilter) {
+        if (permitTypeFilter !== 'all' && app.permit_type_name !== permitTypeFilter) {
+          return false;
+        }
+        // Attribute filter
+        if (attributeFilter !== 'all' && app.attribute_name !== attributeFilter) {
           return false;
         }
         // Creator filter
@@ -372,6 +380,7 @@ export default function ReportsPage() {
     if (dateRangeStart) params.set('dateFrom', dateRangeStart);
     if (dateRangeEnd) params.set('dateTo', dateRangeEnd);
     if (selectedCategory) params.set('permitCategory', selectedCategory);
+    if (attributeFilter !== 'all') params.set('attribute', attributeFilter);
     if (searchTerm) params.set('search', searchTerm);
     if (token) params.set('token', token);
     setPrintPreviewUrl(`/permit-list-report.html?${params.toString()}`);
@@ -381,6 +390,7 @@ export default function ReportsPage() {
   const clearFilters = () => {
     setStatusFilters([]);
     setPermitTypeFilter('all');
+    setAttributeFilter('all');
     setCreatorFilter('all');
     setAssessorFilter('all');
     setApproverFilter('all');
@@ -392,6 +402,7 @@ export default function ReportsPage() {
   const hasActiveFilters =
     statusFilters.length > 0 ||
     permitTypeFilter !== 'all' ||
+    attributeFilter !== 'all' ||
     creatorFilter !== 'all' ||
     assessorFilter !== 'all' ||
     approverFilter !== 'all' ||
@@ -713,6 +724,22 @@ export default function ReportsPage() {
                         <option value="all">All Permit Types</option>
                         {permitTypes.map(type => (
                           <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Attribute Filter */}
+                    <div>
+                      <label htmlFor="attribute-filter" className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Attribute</label>
+                      <select
+                        id="attribute-filter"
+                        value={attributeFilter}
+                        onChange={(e) => setAttributeFilter(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white hover:bg-slate-50 focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none cursor-pointer"
+                      >
+                        <option value="all">All Attributes</option>
+                        {attributes.map(attr => (
+                          <option key={attr} value={attr}>{attr}</option>
                         ))}
                       </select>
                     </div>

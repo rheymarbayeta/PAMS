@@ -111,6 +111,12 @@ router.get('/', async (req, res) => {
         a.created_at,
         a.updated_at,
         COALESCE(e.entity_name, 'Unknown Entity') as entity_name,
+        e.address as entity_address,
+        COALESCE(
+          (SELECT ap.param_value FROM application_parameters ap
+           WHERE ap.application_id = a.application_id AND ap.param_name = 'Location' LIMIT 1),
+          e.address
+        ) as location,
         COALESCE(u1.full_name, 'Unknown User') as creator_name,
         u2.full_name as assessor_name,
         u3.full_name as approver_name
