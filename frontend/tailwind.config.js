@@ -38,6 +38,19 @@ module.exports = {
           800: '#115e59',
           900: '#134e4a',
         },
+        // Theme-aware tokens (reference CSS custom properties)
+        theme: {
+          'sidebar':        'var(--sidebar-bg)',
+          'sidebar-active': 'var(--sidebar-active)',
+          'sidebar-hover':  'var(--sidebar-hover)',
+          'sidebar-border': 'var(--sidebar-border)',
+          'sidebar-text':   'var(--sidebar-text)',
+          'sidebar-section':'var(--sidebar-section)',
+          'primary':        'var(--primary)',
+          'primary-dark':   'var(--primary-dark)',
+          'page':           'var(--page-bg)',
+          'tab-active':     'var(--tab-active-border)',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],

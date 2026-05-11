@@ -149,11 +149,12 @@ export default function Layout({ children }: LayoutProps) {
       ],
     },
     {
-      paths: ['/admin/settings', '/admin/settings/role-permissions'],
+      paths: ['/admin/settings', '/admin/settings/role-permissions', '/admin/settings/theme'],
       tabs: [
         { href: '/admin/settings', label: 'General' },
         { href: '/admin/settings/permit-display', label: 'Permit Display' },
         { href: '/admin/settings/role-permissions', label: 'Role Permissions' },
+        { href: '/admin/settings/theme', label: 'Theme' },
       ],
     },
   ];
@@ -161,7 +162,7 @@ export default function Layout({ children }: LayoutProps) {
   const currentGroup = pageGroups.find(g => g.paths.some(p => pathname === p || pathname.startsWith(p + '/')));
 
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--sidebar-bg)' }}>
       {/* Logo */}
       <div className="flex items-center h-16 px-4 flex-shrink-0">
         <Link href="/dashboard" className="flex items-center space-x-3">
@@ -177,7 +178,8 @@ export default function Layout({ children }: LayoutProps) {
         {mobile && (
           <button
             onClick={() => setSidebarOpen(false)}
-            className="ml-auto p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700"
+            className="ml-auto p-1.5 rounded-lg hover:text-white transition-colors"
+            style={{ color: 'var(--sidebar-section)' }}
             aria-label="Close menu"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -187,7 +189,7 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        <p className={`px-3 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider ${!mobile ? 'hidden lg:block' : ''}`}>Main</p>
+        <p className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider ${!mobile ? 'hidden lg:block' : ''}`} style={{ color: 'var(--sidebar-section)' }}>Main</p>
         {navLinks.filter(link => link.show).map((link) => (
           <Link
             key={link.href}
@@ -195,9 +197,15 @@ export default function Layout({ children }: LayoutProps) {
             title={link.label}
             className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group ${
               isActive(link.href)
-                ? 'bg-teal-600 text-white'
-                : 'text-slate-300 hover:bg-slate-700/60 hover:text-white'
+                ? 'text-white'
+                : 'hover:text-white'
             }`}
+            style={isActive(link.href)
+              ? { backgroundColor: 'var(--sidebar-active)' }
+              : { color: 'var(--sidebar-text)' }
+            }
+            onMouseEnter={e => { if (!isActive(link.href)) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--sidebar-hover)'; }}
+            onMouseLeave={e => { if (!isActive(link.href)) (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
           >
             <span className="flex-shrink-0">{navIcons[link.href]}</span>
             <span className={`ml-3 truncate ${!mobile ? 'hidden lg:block' : ''}`}>{link.label}</span>
@@ -207,8 +215,8 @@ export default function Layout({ children }: LayoutProps) {
         {canAccess(['SuperAdmin', 'Admin']) && !canAccess(['Rights and Rentals Manager']) && (
           <>
             <div className="pt-4">
-              <p className={`px-3 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider ${!mobile ? 'hidden lg:block' : ''}`}>Admin</p>
-              <div className={`border-t border-slate-700 mb-2 ${!mobile ? 'lg:hidden' : 'hidden'}`}></div>
+              <p className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider ${!mobile ? 'hidden lg:block' : ''}`} style={{ color: 'var(--sidebar-section)' }}>Admin</p>
+              <div className={`border-t mb-2 ${!mobile ? 'lg:hidden' : 'hidden'}`} style={{ borderColor: 'var(--sidebar-border)' }}></div>
             </div>
             {adminLinks.map((link) => (
               <Link
@@ -217,9 +225,15 @@ export default function Layout({ children }: LayoutProps) {
                 title={link.label}
                 className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group ${
                   isLinkActive(link.href, link.activePaths)
-                    ? 'bg-teal-600 text-white'
-                    : 'text-slate-300 hover:bg-slate-700/60 hover:text-white'
+                    ? 'text-white'
+                    : 'hover:text-white'
                 }`}
+                style={isLinkActive(link.href, link.activePaths)
+                  ? { backgroundColor: 'var(--sidebar-active)' }
+                  : { color: 'var(--sidebar-text)' }
+                }
+                onMouseEnter={e => { if (!isLinkActive(link.href, link.activePaths)) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--sidebar-hover)'; }}
+                onMouseLeave={e => { if (!isLinkActive(link.href, link.activePaths)) (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
               >
                 <span className="flex-shrink-0">{navIcons[link.href]}</span>
                 <span className={`ml-3 truncate ${!mobile ? 'hidden lg:block' : ''}`}>{link.label}</span>
@@ -230,14 +244,14 @@ export default function Layout({ children }: LayoutProps) {
       </nav>
 
       {/* User info + Logout at bottom */}
-      <div className="flex-shrink-0 border-t border-slate-700 p-3">
+      <div className="flex-shrink-0 border-t p-3" style={{ borderColor: 'var(--sidebar-border)' }}>
         <div className={`flex items-center mb-3 ${!mobile ? 'lg:flex hidden' : ''}`}>
-          <div className="h-8 w-8 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0">
+          <div className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--sidebar-active)' }}>
             <span className="text-sm font-medium text-white">{user?.full_name?.charAt(0).toUpperCase() || 'U'}</span>
           </div>
           <div className="ml-3 min-w-0">
             <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
-            <p className="text-xs text-slate-400 truncate">{displayRoles}</p>
+            <p className="text-xs truncate" style={{ color: 'var(--sidebar-section)' }}>{displayRoles}</p>
           </div>
         </div>
         <button
@@ -253,7 +267,7 @@ export default function Layout({ children }: LayoutProps) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--page-bg)' }}>
       <ChatNotification />
 
       {/* Mobile sidebar overlay */}
@@ -262,12 +276,12 @@ export default function Layout({ children }: LayoutProps) {
       )}
 
       {/* Mobile sidebar drawer */}
-      <div className={`fixed inset-y-0 left-0 w-64 bg-slate-900 z-50 transform transition-transform duration-300 ease-in-out lg:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed inset-y-0 left-0 w-64 z-50 transform transition-transform duration-300 ease-in-out lg:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`} style={{ backgroundColor: 'var(--sidebar-bg)' }}>
         <SidebarContent mobile />
       </div>
 
       {/* Desktop sidebar - icons only on md, full on lg */}
-      <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:left-0 md:w-16 lg:w-64 bg-slate-900 z-30 transition-all duration-200">
+      <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:left-0 md:w-16 lg:w-64 z-30 transition-all duration-200" style={{ backgroundColor: 'var(--sidebar-bg)' }}>
         <SidebarContent />
       </aside>
 
@@ -342,9 +356,13 @@ export default function Layout({ children }: LayoutProps) {
                     href={tab.href}
                     className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       isActive(tab.href)
-                        ? 'border-teal-600 text-teal-700'
+                        ? 'border-transparent'
                         : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                     }`}
+                    style={isActive(tab.href)
+                      ? { borderBottomColor: 'var(--tab-active-border)', color: 'var(--tab-active-text)' }
+                      : undefined
+                    }
                   >
                     {tab.label}
                   </Link>

@@ -3,6 +3,7 @@ import Script from 'next/script';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -46,9 +47,17 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <Script src="/js/modal-dialog.js" strategy="beforeInteractive" />
+        {/* Anti-flash: apply saved theme before first paint */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('pams-theme');if(t&&['default','purple','evening','peacock'].includes(t)){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className={`${inter.className} antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
