@@ -26,6 +26,12 @@ export default function EntitiesPage() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('grid');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('entitiesViewMode') as 'list' | 'grid' | 'table' | null;
+    if (saved) setViewMode(saved);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -133,6 +139,30 @@ export default function EntitiesPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => { setViewMode('list'); localStorage.setItem('entitiesViewMode', 'list'); }}
+                  className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'list' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="List view" aria-label="List view"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                </button>
+                <button
+                  onClick={() => { setViewMode('grid'); localStorage.setItem('entitiesViewMode', 'grid'); }}
+                  className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'grid' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="Grid view" aria-label="Grid view"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                </button>
+                <button
+                  onClick={() => { setViewMode('table'); localStorage.setItem('entitiesViewMode', 'table'); }}
+                  className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'table' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="Table view" aria-label="Table view"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+              </div>
               {canEdit && (
                 <Link
                   href="/admin/entities/add-entity"
@@ -221,6 +251,89 @@ export default function EntitiesPage() {
           )}
 
           {/* Entities List */}
+          {viewMode === 'table' ? (
+            <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-hidden overflow-x-auto">
+              {filteredEntities.length === 0 ? (
+                <div className="px-4 sm:px-6 py-12 text-center">
+                  <svg className="w-12 h-12 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                  <p className="text-gray-500 font-medium">{searchTerm ? 'No entities found matching your search.' : 'No entities registered yet.'}</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Entity</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact Person</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Phone</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Address</th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {paginatedEntities.map((entity) => (
+                      <tr key={entity.entity_id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-semibold text-emerald-600">{entity.entity_name.charAt(0).toUpperCase()}</span>
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold text-gray-900">{entity.entity_name}</div>
+                              {entity.firstname && entity.lastname && <div className="text-xs text-gray-500">{entity.firstname} {entity.lastname}</div>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{entity.contact_person || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{entity.email || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{entity.phone || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 max-w-[160px] truncate">{entity.address || '—'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <Link href={`/admin/entities/${entity.entity_id}`} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200">View</Link>
+                            {canEdit && <Link href={`/admin/entities/add-entity?id=${entity.entity_id}`} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-md border border-emerald-200 hover:border-emerald-600 transition-all duration-200">Edit</Link>}
+                            {hasRole('SuperAdmin') && canEdit && <button onClick={() => handleDelete(entity.entity_id)} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200">Delete</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredEntities.length === 0 ? (
+                <div className="col-span-full py-12 text-center">
+                  <svg className="w-12 h-12 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                  <p className="text-gray-500 font-medium">{searchTerm ? 'No entities found matching your search.' : 'No entities registered yet.'}</p>
+                </div>
+              ) : paginatedEntities.map((entity) => (
+                <div key={entity.entity_id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:shadow-md hover:border-emerald-200 transition-all duration-200 flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-base font-semibold text-emerald-600">{entity.entity_name.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{entity.entity_name}</p>
+                      {entity.firstname && entity.lastname && <p className="text-xs text-gray-500">{entity.firstname} {entity.lastname}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-xs text-gray-500">
+                    {entity.contact_person && <div className="flex items-center gap-1.5"><svg className="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg><span className="truncate">{entity.contact_person}</span></div>}
+                    {entity.email && <div className="flex items-center gap-1.5"><svg className="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg><span className="truncate">{entity.email}</span></div>}
+                    {entity.phone && <div className="flex items-center gap-1.5"><svg className="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg><span>{entity.phone}</span></div>}
+                    {entity.address && <div className="flex items-center gap-1.5"><svg className="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg><span className="truncate">{entity.address}</span></div>}
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-100 mt-auto">
+                    <Link href={`/admin/entities/${entity.entity_id}`} className="flex-1 text-center px-2 py-1.5 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200">View</Link>
+                    {canEdit && <Link href={`/admin/entities/add-entity?id=${entity.entity_id}`} className="flex-1 text-center px-2 py-1.5 text-xs font-medium text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-md border border-emerald-200 hover:border-emerald-600 transition-all duration-200">Edit</Link>}
+                    {hasRole('SuperAdmin') && canEdit && <button onClick={() => handleDelete(entity.entity_id)} className="flex-1 px-2 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200">Delete</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 overflow-hidden">
             <ul className="divide-y divide-gray-100">
               {paginatedEntities.map((entity, index) => (
@@ -378,6 +491,8 @@ export default function EntitiesPage() {
               )}
             </ul>
           </div>
+
+          )}
 
           {/* Modal */}
 

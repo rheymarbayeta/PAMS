@@ -36,6 +36,12 @@ export default function ApplicationsPage() {
   const [permitTypes, setPermitTypes] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('grid');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('applicationsViewMode') as 'list' | 'grid' | 'table' | null;
+    if (saved) setViewMode(saved);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -278,6 +284,39 @@ export default function ApplicationsPage() {
                   </option>
                 ))}
               </select>
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 ml-auto sm:ml-0">
+                <button
+                  onClick={() => { setViewMode('list'); localStorage.setItem('applicationsViewMode', 'list'); }}
+                  className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'list' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  title="List view"
+                  aria-label="List view"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => { setViewMode('grid'); localStorage.setItem('applicationsViewMode', 'grid'); }}
+                  className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'grid' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  title="Grid view"
+                  aria-label="Grid view"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => { setViewMode('table'); localStorage.setItem('applicationsViewMode', 'table'); }}
+                  className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'table' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  title="Table view"
+                  aria-label="Table view"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
           {/* Pagination and records info - BEFORE records list */}
@@ -354,8 +393,8 @@ export default function ApplicationsPage() {
           )}
 
           {/* Applications List */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            {filteredApplications.length === 0 ? (
+          {filteredApplications.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="text-center py-12 sm:py-16">
                 <div className="mx-auto h-12 w-12 sm:h-16 sm:w-16 rounded-full bg-slate-100 flex items-center justify-center mb-3 sm:mb-4">
                   <svg className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -365,7 +404,134 @@ export default function ApplicationsPage() {
                 <p className="text-slate-500 font-medium">No applications found</p>
                 <p className="text-slate-400 text-sm mt-1">Try adjusting your filter</p>
               </div>
-            ) : (
+            </div>
+          ) : viewMode === 'table' ? (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">Application #</th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Entity</th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Permit Type</th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Validity</th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">Created By</th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {paginatedApplications.map((app) => (
+                    <tr
+                      key={app.application_id}
+                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/applications/${app.application_id}`)}
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-slate-800">{app.application_number || `#${app.application_id}`}</div>
+                        {app.permit_number && (
+                          <div className="text-xs text-blue-600 mt-0.5">{app.permit_number}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700 max-w-[160px]">
+                        <div className="truncate">{app.entity_name}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600 max-w-[180px]">
+                        <div className="truncate">{app.attribute_name ? `${app.permit_type_name} - ${app.attribute_name}` : app.permit_type_name}</div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${getStatusColor(app.status)}`}>
+                          {app.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {getExpirationStatus(app.validity_date, app.status) ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${getExpirationStatus(app.validity_date, app.status)?.color}`}>
+                            {getExpirationStatus(app.validity_date, app.status)?.label}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{app.creator_name}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{new Date(app.created_at).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        {(hasRole('SuperAdmin') || (hasRole(['Admin', 'Application Creator']) && app.status === 'Pending')) && (
+                          <button
+                            onClick={(e) => handleDeleteApplication(e, app.application_id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200"
+                            title="Delete application"
+                          >
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedApplications.map((app) => (
+                <div
+                  key={app.application_id}
+                  className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 hover:shadow-md hover:border-teal-200 transition-all duration-200 cursor-pointer group flex flex-col gap-3"
+                  onClick={() => router.push(`/applications/${app.application_id}`)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-800 truncate">
+                      {app.application_number || `Application #${app.application_id}`}
+                    </span>
+                    <span className={`flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${getStatusColor(app.status)}`}>
+                      {app.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 w-9 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-teal-700 text-sm font-semibold">{app.entity_name.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{app.entity_name}</p>
+                      <p className="text-xs text-slate-500 truncate">{app.attribute_name ? `${app.permit_type_name} - ${app.attribute_name}` : app.permit_type_name}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {app.permit_number && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border border-blue-200 bg-blue-50 text-blue-700">
+                        {app.permit_number}
+                      </span>
+                    )}
+                    {getExpirationStatus(app.validity_date, app.status) && (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${getExpirationStatus(app.validity_date, app.status)?.color}`}>
+                        {getExpirationStatus(app.validity_date, app.status)?.label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-auto">
+                    <span className="text-xs text-slate-400 truncate">{app.creator_name}</span>
+                    <span className="text-xs text-slate-400 flex-shrink-0">{new Date(app.created_at).toLocaleDateString()}</span>
+                  </div>
+                  {(hasRole('SuperAdmin') || (hasRole(['Admin', 'Application Creator']) && app.status === 'Pending')) && (
+                    <button
+                      onClick={(e) => handleDeleteApplication(e, app.application_id)}
+                      className="w-full px-3 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200 flex items-center justify-center gap-1"
+                      title="Delete application"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <ul className="divide-y divide-slate-100">
                 {paginatedApplications.map((app, index) => (
                   <li
@@ -452,8 +618,8 @@ export default function ApplicationsPage() {
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </Layout>
     </ProtectedRoute>

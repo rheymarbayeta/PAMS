@@ -73,6 +73,13 @@ export default function EnforcersPage() {
     search: '',
   });
 
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('grid');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('enforcersViewMode') as 'list' | 'grid' | 'table' | null;
+    if (saved) setViewMode(saved);
+  }, []);
+
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 25,
@@ -518,32 +525,103 @@ export default function EnforcersPage() {
                 </select>
               </div>
 
-              {/* Reset Filters */}
-              <div className="flex items-end">
+              {/* Reset Filters + View Mode Toggle */}
+              <div className="flex items-end gap-2">
                 <button
                   onClick={() => {
                     setFilters({ status: '', department: '', station: '', search: '' });
                     setPagination({ ...pagination, page: 1 });
                   }}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-medium hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 text-sm"
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-medium hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 text-sm"
                 >
                   Reset Filters
                 </button>
+                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                  <button onClick={() => { setViewMode('list'); localStorage.setItem('enforcersViewMode', 'list'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'list' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`} title="List view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg></button>
+                  <button onClick={() => { setViewMode('grid'); localStorage.setItem('enforcersViewMode', 'grid'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'grid' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`} title="Grid view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg></button>
+                  <button onClick={() => { setViewMode('table'); localStorage.setItem('enforcersViewMode', 'table'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'table' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`} title="Table view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-8">
+          {/* Enforcers Display */}
+          <div className="mb-8">
             {enforcers.length === 0 ? (
-              <div className="px-6 py-12 text-center">
-                <svg className="h-12 w-12 text-slate-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                </svg>
+              <div className="bg-white rounded-xl border border-slate-200 px-6 py-12 text-center">
+                <svg className="h-12 w-12 text-slate-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
                 <p className="text-slate-600 font-medium">No enforcers found</p>
                 <p className="text-slate-500 text-sm mt-1">Create one to get started</p>
               </div>
+            ) : viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {enforcers.map((enforcer) => (
+                  <div key={enforcer.enforcer_id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md hover:border-teal-200 transition-all duration-200 flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-11 w-11 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                        <span className="text-base font-semibold text-slate-600">{enforcer.full_name.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{enforcer.full_name}</p>
+                        <p className="text-xs text-slate-500">#{enforcer.badge_number}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-xs text-slate-500">
+                      {enforcer.position && <div className="truncate">{enforcer.position}</div>}
+                      {enforcer.department && <div className="truncate">{enforcer.department}</div>}
+                      {enforcer.station && <div className="truncate">{enforcer.station}</div>}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeColor(enforcer.status)}`}>{enforcer.status}</span>
+                      <span className="text-xs text-slate-500">{enforcer.citations_issued} citations</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+                      <button onClick={() => router.push(`/admin/enforcers/${enforcer.enforcer_id}`)} className="flex-1 px-2 py-1.5 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200 text-center">View</button>
+                      {(hasRole('Admin') || hasRole('SuperAdmin')) && <button onClick={() => handleEdit(enforcer)} className="flex-1 px-2 py-1.5 text-xs font-medium text-teal-600 hover:text-white hover:bg-teal-600 rounded-md border border-teal-200 hover:border-teal-600 transition-all duration-200 text-center">Edit</button>}
+                      {hasRole('SuperAdmin') && <button onClick={() => handleDelete(enforcer.enforcer_id)} className="flex-1 px-2 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200 text-center">Delete</button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : viewMode === 'list' ? (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <ul className="divide-y divide-slate-100">
+                  {enforcers.map((enforcer) => (
+                    <li key={enforcer.enforcer_id} className="px-4 sm:px-6 py-4 hover:bg-slate-50 transition-colors group">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-semibold text-slate-600">{enforcer.full_name.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-slate-800 truncate">{enforcer.full_name}</span>
+                              <span className="text-xs text-slate-400">#{enforcer.badge_number}</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeColor(enforcer.status)}`}>{enforcer.status}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+                              {enforcer.position && <span>{enforcer.position}</span>}
+                              {enforcer.department && <><span className="text-slate-300">•</span><span>{enforcer.department}</span></>}
+                              {enforcer.station && <><span className="text-slate-300">•</span><span>{enforcer.station}</span></>}
+                              <span className="text-slate-300">•</span>
+                              <span>{enforcer.citations_issued} citations</span>
+                              <span className="text-slate-300">•</span>
+                              <span>₱{(enforcer.total_fines || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button onClick={() => router.push(`/admin/enforcers/${enforcer.enforcer_id}`)} className="px-2 py-1 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200">View</button>
+                          {(hasRole('Admin') || hasRole('SuperAdmin')) && <button onClick={() => handleEdit(enforcer)} className="px-2 py-1 text-xs font-medium text-teal-600 hover:text-white hover:bg-teal-600 rounded-md border border-teal-200 hover:border-teal-600 transition-all duration-200">Edit</button>}
+                          {hasRole('SuperAdmin') && <button onClick={() => handleDelete(enforcer.enforcer_id)} className="px-2 py-1 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200">Delete</button>}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -727,6 +805,7 @@ export default function EnforcersPage() {
                   </div>
                 </div>
               </>
+            </div>
             )}
           </div>
 

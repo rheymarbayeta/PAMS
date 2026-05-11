@@ -86,6 +86,12 @@ export default function CitationsPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
   const [listSearchTerm, setListSearchTerm] = useState<string>('');
+  const [citationsViewMode, setCitationsViewMode] = useState<'list' | 'grid' | 'table'>('grid');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('citationsViewMode') as 'list' | 'grid' | 'table' | null;
+    if (saved) setCitationsViewMode(saved);
+  }, []);
   const [reportCurrentPage, setReportCurrentPage] = useState<number>(1);
   const [reportRecordsPerPage, setReportRecordsPerPage] = useState<number>(10);
 
@@ -922,7 +928,7 @@ export default function CitationsPage() {
           {/* Citations List Tab */}
           {activeTab === 'list' && (
             <div className="space-y-6">
-              {/* Search Bar */}
+              {/* Search Bar + View Toggle */}
               <div className="flex items-center gap-3 bg-white p-4 rounded-lg border border-slate-200">
                 <svg className="h-5 w-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -951,6 +957,12 @@ export default function CitationsPage() {
                     </svg>
                   </button>
                 )}
+                {/* View Mode Toggle */}
+                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 ml-auto flex-shrink-0">
+                  <button onClick={() => { setCitationsViewMode('list'); localStorage.setItem('citationsViewMode', 'list'); }} className={`p-1.5 rounded-md transition-all duration-200 ${citationsViewMode === 'list' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="List view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg></button>
+                  <button onClick={() => { setCitationsViewMode('grid'); localStorage.setItem('citationsViewMode', 'grid'); }} className={`p-1.5 rounded-md transition-all duration-200 ${citationsViewMode === 'grid' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="Grid view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg></button>
+                  <button onClick={() => { setCitationsViewMode('table'); localStorage.setItem('citationsViewMode', 'table'); }} className={`p-1.5 rounded-md transition-all duration-200 ${citationsViewMode === 'table' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="Table view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                </div>
               </div>
 
               {/* Pagination and records info */}
@@ -1026,88 +1038,88 @@ export default function CitationsPage() {
                 </div>
               )}
 
-              {/* Citations Table */}
-              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                {loading ? (
-                  <div className="P-8 text-center">
-                    <div className="inline-flex items-center justify-center">
-                      <div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-slate-600 animate-spin"></div>
-                    </div>
-                    <p className="mt-2 text-slate-600">Loading citations...</p>
-                  </div>
-                ) : citations.length === 0 ? (
-                  <div className="p-8 text-center text-slate-600">
-                    No citations found. Create a new citation to get started.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-slate-800 text-white">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">
-                            Ticket #
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">
-                            Driver Name
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">
-                            Plate Number
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">
-                            Fine Amount
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">
-                            Payment Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold">
-                            Date
-                          </th>
+              {/* Citations Display */}
+              {loading ? (
+                <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
+                  <div className="inline-flex items-center justify-center"><div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-slate-600 animate-spin"></div></div>
+                  <p className="mt-2 text-slate-600">Loading citations...</p>
+                </div>
+              ) : citations.length === 0 ? (
+                <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-600">No citations found. Create a new citation to get started.</div>
+              ) : citationsViewMode === 'table' ? (
+                <div className="bg-white rounded-lg border border-slate-200 overflow-hidden overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-800 text-white">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Ticket #</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Driver Name</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Plate Number</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Fine Amount</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Payment Status</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {paginatedCitations.map((citation) => (
+                        <tr key={citation.citation_id} onClick={() => router.push(`/citations/${citation.citation_id}`)} className="hover:bg-slate-100 cursor-pointer transition-colors">
+                          <td className="px-6 py-4 text-sm font-medium text-slate-900">{citation.ticket_number}</td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{citation.driver_name}</td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{citation.plate_number}</td>
+                          <td className="px-6 py-4 text-sm font-semibold text-slate-900">₱{formatCurrency(Number(citation.fine_amount) || 0)}</td>
+                          <td className="px-6 py-4 text-sm"><span className={`px-3 py-1 rounded-full text-xs font-medium ${citation.payment_status === 'Paid' ? 'bg-green-100 text-green-800' : citation.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : citation.payment_status === 'Partially Paid' || citation.payment_status === 'Installment' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{citation.payment_status}</span></td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{new Date(citation.violation_date).toLocaleDateString()}</td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {paginatedCitations.map((citation) => (
-                          <tr
-                            key={citation.citation_id}
-                            onClick={() => router.push(`/citations/${citation.citation_id}`)}
-                            className="hover:bg-slate-100 cursor-pointer transition-colors"
-                          >
-                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                              {citation.ticket_number}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-slate-600">
-                              {citation.driver_name}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-slate-600">
-                              {citation.plate_number}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                              ₱{formatCurrency(Number(citation.fine_amount) || 0)}
-                            </td>
-                            <td className="px-6 py-4 text-sm">
-                              <span
-                                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                  citation.payment_status === 'Paid'
-                                    ? 'bg-green-100 text-green-800'
-                                    : citation.payment_status === 'Pending'
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : citation.payment_status === 'Partially Paid' || citation.payment_status === 'Installment'
-                                    ? 'bg-orange-100 text-orange-800'
-                                    : 'bg-blue-100 text-blue-800'
-                                }`}
-                              >
-                                {citation.payment_status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-slate-600">
-                              {new Date(citation.violation_date).toLocaleDateString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : citationsViewMode === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {paginatedCitations.map((citation) => (
+                    <div key={citation.citation_id} onClick={() => router.push(`/citations/${citation.citation_id}`)} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md hover:border-slate-300 cursor-pointer transition-all duration-200 flex flex-col gap-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-bold text-slate-800">{citation.ticket_number}</span>
+                        <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${citation.payment_status === 'Paid' ? 'bg-green-100 text-green-800' : citation.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : citation.payment_status === 'Partially Paid' || citation.payment_status === 'Installment' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{citation.payment_status}</span>
+                      </div>
+                      <div className="space-y-1 text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5"><svg className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg><span className="font-medium text-slate-700 truncate">{citation.driver_name}</span></div>
+                        <div className="flex items-center gap-1.5"><svg className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" /></svg><span>{citation.plate_number}</span></div>
+                        <div className="flex items-center gap-1.5"><svg className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg><span>{new Date(citation.violation_date).toLocaleDateString()}</span></div>
+                      </div>
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs text-slate-500">{citation.issued_by_name}</span>
+                        <span className="text-sm font-semibold text-slate-800">₱{formatCurrency(Number(citation.fine_amount) || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                  <ul className="divide-y divide-slate-200">
+                    {paginatedCitations.map((citation) => (
+                      <li key={citation.citation_id} onClick={() => router.push(`/citations/${citation.citation_id}`)} className="px-4 sm:px-6 py-4 hover:bg-slate-50 cursor-pointer transition-colors group">
+                        <div className="flex items-start sm:items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-slate-800">{citation.ticket_number}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${citation.payment_status === 'Paid' ? 'bg-green-100 text-green-800' : citation.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : citation.payment_status === 'Partially Paid' || citation.payment_status === 'Installment' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{citation.payment_status}</span>
+                            </div>
+                            <p className="mt-1 text-sm text-slate-700 font-medium">{citation.driver_name}</p>
+                            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+                              <span>{citation.plate_number}</span>
+                              <span>•</span>
+                              <span>{new Date(citation.violation_date).toLocaleDateString()}</span>
+                              <span>•</span>
+                              <span>{citation.issued_by_name}</span>
+                            </div>
+                          </div>
+                          <span className="text-sm font-semibold text-slate-800 flex-shrink-0">₱{formatCurrency(Number(citation.fine_amount) || 0)}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 

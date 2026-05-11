@@ -27,6 +27,12 @@ export default function RightsAndRentalsPage() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('grid');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('rentalsViewMode') as 'list' | 'grid' | 'table' | null;
+    if (saved) setViewMode(saved);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -206,6 +212,12 @@ export default function RightsAndRentalsPage() {
                       Add
                     </Link>
                   )}
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                    <button onClick={() => { setViewMode('list'); localStorage.setItem('rentalsViewMode', 'list'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`} title="List view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg></button>
+                    <button onClick={() => { setViewMode('grid'); localStorage.setItem('rentalsViewMode', 'grid'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'grid' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`} title="Grid view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg></button>
+                    <button onClick={() => { setViewMode('table'); localStorage.setItem('rentalsViewMode', 'table'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`} title="Table view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -233,8 +245,85 @@ export default function RightsAndRentalsPage() {
           </div>
           </div>
 
-          {/* Table */}
-          {paginatedLessees.length > 0 ? (
+          {/* Lessees Display */}
+          {paginatedLessees.length === 0 ? (
+            <div className="bg-white shadow-lg rounded-2xl border border-gray-100 p-8">
+              <div className="text-center py-12">
+                <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
+                <h3 className="mt-2 text-lg font-medium text-gray-900">No lessees found</h3>
+                <p className="mt-1 text-sm text-gray-600">{searchTerm ? 'No lessees match your search criteria.' : 'Get started by adding your first lessee.'}</p>
+                {canEdit && !searchTerm && (
+                  <Link href="/admin/rights-and-rentals/add-lessee" className="mt-4 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2.5 rounded-xl font-medium hover:from-blue-700 hover:to-blue-800 transition-all duration-200">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    Add Lessee
+                  </Link>
+                )}
+              </div>
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedLessees.map((lessee) => (
+                <div key={lessee.id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:shadow-md hover:border-blue-200 transition-all duration-200 flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm font-semibold text-blue-700">{lessee.name.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{lessee.name}</p>
+                      {lessee.stall_number && <p className="text-xs text-gray-500">Stall {lessee.stall_number}{lessee.floor_level ? ` (${lessee.floor_level})` : ''}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-xs text-gray-500">
+                    {lessee.contact_number && <div>{lessee.contact_number}</div>}
+                    {lessee.email && <div className="truncate">{lessee.email}</div>}
+                    {lessee.area_sqm && <div>{lessee.area_sqm} sqm</div>}
+                  </div>
+                  {lessee.status && (
+                    <span className={`self-start inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${lessee.status === 'active' ? 'bg-green-100 text-green-800' : lessee.status === 'terminated' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {lessee.status.charAt(0).toUpperCase() + lessee.status.slice(1)}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100 mt-auto">
+                    <Link href={`/admin/rights-and-rentals/lessee/${lessee.id}`} className="flex-1 text-center px-2 py-1.5 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200">View</Link>
+                    {canEdit && <Link href={`/admin/rights-and-rentals/edit-lessee/${lessee.id}`} className="flex-1 text-center px-2 py-1.5 text-xs font-medium text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-md border border-indigo-200 hover:border-indigo-600 transition-all duration-200">Edit</Link>}
+                    {canEdit && <button onClick={() => handleDelete(lessee.id)} className="flex-1 px-2 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200">Delete</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : viewMode === 'list' ? (
+            <div className="bg-white shadow-lg rounded-2xl border border-gray-100 overflow-hidden">
+              <ul className="divide-y divide-gray-100">
+                {paginatedLessees.map((lessee) => (
+                  <li key={lessee.id} className="px-4 sm:px-6 py-4 hover:bg-blue-50/50 transition-colors">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm font-semibold text-blue-700">{lessee.name.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-900">{lessee.name}</span>
+                            {lessee.stall_number && <span className="text-xs text-gray-500">Stall {lessee.stall_number}{lessee.floor_level ? ` (${lessee.floor_level})` : ''}</span>}
+                            {lessee.status && <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${lessee.status === 'active' ? 'bg-green-100 text-green-800' : lessee.status === 'terminated' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{lessee.status.charAt(0).toUpperCase() + lessee.status.slice(1)}</span>}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                            {lessee.contact_number && <span>{lessee.contact_number}</span>}
+                            {lessee.email && <><span className="text-gray-300">•</span><span className="truncate max-w-[160px]">{lessee.email}</span></>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <Link href={`/admin/rights-and-rentals/lessee/${lessee.id}`} className="px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200">View</Link>
+                        {canEdit && <Link href={`/admin/rights-and-rentals/edit-lessee/${lessee.id}`} className="px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-md border border-indigo-200 hover:border-indigo-600 transition-all duration-200">Edit</Link>}
+                        {canEdit && <button onClick={() => handleDelete(lessee.id)} className="px-2.5 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200">Delete</button>}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
             <div className="bg-white shadow-lg rounded-2xl border border-gray-100 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -305,29 +394,6 @@ export default function RightsAndRentalsPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white shadow-lg rounded-2xl border border-gray-100 p-8">
-              <div className="text-center py-12">
-                <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                </svg>
-                <h3 className="mt-2 text-lg font-medium text-gray-900">No lessees found</h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  {searchTerm ? 'No lessees match your search criteria.' : 'Get started by adding your first lessee.'}
-                </p>
-                {canEdit && !searchTerm && (
-                  <Link
-                    href="/admin/rights-and-rentals/add-lessee"
-                    className="mt-4 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2.5 rounded-xl font-medium hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add Lessee
-                  </Link>
-                )}
               </div>
             </div>
           )}
