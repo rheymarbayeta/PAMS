@@ -35,7 +35,7 @@ export const BARANGAYS_BY_MUNICIPALITY: MunicipalityBarangays = {
     'Nalhub',
     'Obo',
     'Obong',
-    'Panas',
+    'Pañas',
     'Poblacion',
     'Sacsac',
     'Salug',
