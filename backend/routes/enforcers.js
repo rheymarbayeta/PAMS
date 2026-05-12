@@ -461,7 +461,7 @@ router.get('/:id/citations', async (req, res) => {
     const [citations] = await pool.execute(
       `SELECT 
         citation_id, ticket_number, driver_name, plate_number, violation_date,
-        violation_location, fine_amount, payment_status, created_at
+        violation_location, violations, fine_amount, payment_status, created_at
        FROM citations 
        ${whereSQL}
        ORDER BY created_at DESC
@@ -469,9 +469,19 @@ router.get('/:id/citations', async (req, res) => {
       baseParams
     );
 
+    // Parse violations JSON
+    citations.forEach(row => {
+      if (row.violations && typeof row.violations === 'string') {
+        try { row.violations = JSON.parse(row.violations); }
+        catch (e) { row.violations = []; }
+      } else if (!row.violations) {
+        row.violations = [];
+      }
+    });
+
     console.log('[GET /:id/citations] rows returned:', citations.length);
 
-    // Get summary statistics (always unfiltered so totals are accurate)
+    // Get summary statistics — respect the same filter applied to the list
     const [stats] = await pool.execute(
       `SELECT 
         COUNT(*) as total_issued,
@@ -480,8 +490,8 @@ router.get('/:id/citations', async (req, res) => {
         COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_count,
         COUNT(CASE WHEN payment_status IN ('Installment', 'Partially Paid') THEN 1 END) as installment_count
        FROM citations 
-       WHERE enforcer_id = ?`,
-      [enforcerId]
+       ${whereSQL}`,
+      baseParams
     );
 
     console.log('[GET /:id/citations] stats:', stats[0]);

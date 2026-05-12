@@ -30,6 +30,7 @@ interface Citation {
   plate_number?: string;
   violation_date: string;
   violation_location?: string;
+  violations?: string[];
   fine_amount: number;
   payment_status: string;
   created_at: string;
@@ -74,7 +75,10 @@ function formatDate(dateStr?: string | null) {
 }
 
 function formatCurrency(amount: number) {
-  return '₱' + (amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const n = Number(amount) || 0;
+  const [int, dec] = n.toFixed(2).split('.');
+  const intFormatted = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return '₱' + intFormatted + '.' + dec;
 }
 
 export default function EnforcerDetailPage() {
@@ -93,6 +97,19 @@ export default function EnforcerDetailPage() {
   // Citation filters
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Report modal
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportUrl, setReportUrl] = useState('');
+
+  const openReport = () => {
+    const token = localStorage.getItem('token') || '';
+    const params = new URLSearchParams({ enforcerId });
+    if (statusFilter) params.set('status', statusFilter);
+    if (token) params.set('token', token);
+    setReportUrl(`/enforcer-report.html?${params.toString()}`);
+    setShowReportModal(true);
+  };
 
   const fetchEnforcer = useCallback(async () => {
     try {
@@ -150,6 +167,21 @@ export default function EnforcerDetailPage() {
       )
     : citations;
 
+  // Derive stats from the currently visible citations when search is active
+  const displayedStats = citationStats
+    ? search.trim()
+      ? {
+          total_issued: displayedCitations.length,
+          total_fines: displayedCitations.reduce((sum, c) => sum + Number(c.fine_amount || 0), 0),
+          paid_count: displayedCitations.filter((c) => c.payment_status === 'Paid').length,
+          pending_count: displayedCitations.filter((c) => c.payment_status === 'Pending').length,
+          installment_count: displayedCitations.filter((c) =>
+            ['Installment', 'Partially Paid'].includes(c.payment_status)
+          ).length,
+        }
+      : citationStats
+    : null;
+
   if (loading) {
     return (
       <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
@@ -184,6 +216,7 @@ export default function EnforcerDetailPage() {
   }
 
   return (
+    <>
     <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
       <Layout>
         <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -224,6 +257,15 @@ export default function EnforcerDetailPage() {
                   {enforcer.department && <> · {enforcer.department}</>}
                 </p>
               </div>
+              <button
+                onClick={openReport}
+                className="self-start sm:self-center inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all duration-200"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Generate Report
+              </button>
               <button
                 onClick={() => router.push('/admin/enforcers')}
                 className="self-start sm:self-center inline-flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200"
@@ -285,27 +327,27 @@ export default function EnforcerDetailPage() {
           </div>
 
           {/* Performance Stats */}
-          {citationStats && (
+          {displayedStats && (
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
                 <p className="text-xs text-slate-500 font-medium mb-1">Total Issued</p>
-                <p className="text-2xl font-bold text-slate-800">{citationStats.total_issued}</p>
+                <p className="text-2xl font-bold text-slate-800">{displayedStats.total_issued}</p>
               </div>
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
                 <p className="text-xs text-slate-500 font-medium mb-1">Paid</p>
-                <p className="text-2xl font-bold text-emerald-600">{citationStats.paid_count}</p>
+                <p className="text-2xl font-bold text-emerald-600">{displayedStats.paid_count}</p>
               </div>
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
                 <p className="text-xs text-slate-500 font-medium mb-1">Pending</p>
-                <p className="text-2xl font-bold text-amber-600">{citationStats.pending_count}</p>
+                <p className="text-2xl font-bold text-amber-600">{displayedStats.pending_count}</p>
               </div>
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
                 <p className="text-xs text-slate-500 font-medium mb-1">Installment</p>
-                <p className="text-2xl font-bold text-blue-600">{citationStats.installment_count}</p>
+                <p className="text-2xl font-bold text-blue-600">{displayedStats.installment_count}</p>
               </div>
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-center sm:col-span-1 col-span-2">
                 <p className="text-xs text-slate-500 font-medium mb-1">Total Fines</p>
-                <p className="text-lg font-bold text-purple-600">{formatCurrency(citationStats.total_fines)}</p>
+                <p className="text-lg font-bold text-purple-600">{formatCurrency(displayedStats.total_fines)}</p>
               </div>
             </div>
           )}
@@ -373,6 +415,7 @@ export default function EnforcerDetailPage() {
                         <th className="px-5 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">Plate</th>
                         <th className="px-5 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">Date</th>
                         <th className="px-5 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">Location</th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">Violations</th>
                         <th className="px-5 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide">Fine</th>
                         <th className="px-5 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wide">Status</th>
                         <th className="px-5 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wide">Actions</th>
@@ -394,6 +437,11 @@ export default function EnforcerDetailPage() {
                               : '—'}
                           </td>
                           <td className="px-5 py-3 text-slate-600 max-w-[180px] truncate">{c.violation_location || '—'}</td>
+                          <td className="px-5 py-3 text-slate-600 max-w-[200px]">
+                            {c.violations && c.violations.length > 0
+                              ? <span className="text-xs">{c.violations.join(', ')}</span>
+                              : '—'}
+                          </td>
                           <td className="px-5 py-3 text-right font-medium text-slate-800">{formatCurrency(c.fine_amount)}</td>
                           <td className="px-5 py-3 text-center">
                             <span
@@ -474,5 +522,36 @@ export default function EnforcerDetailPage() {
         </div>
       </Layout>
     </ProtectedRoute>
+
+      {/* Enforcer Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full h-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Enforcer Citations Report</h3>
+              <button
+                onClick={() => { setShowReportModal(false); setReportUrl(''); }}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <iframe src={reportUrl} className="w-full h-full border-0" title="Enforcer Citations Report" />
+            </div>
+            <div className="flex items-center justify-end px-4 sm:px-6 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => { setShowReportModal(false); setReportUrl(''); }}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

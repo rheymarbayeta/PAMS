@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Enforcer Citations Report</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background-color: #f5f5f5;
+    font-family: 'Cambria', 'Georgia', serif;
+  }
+  #report-container { max-width: 8.5in; margin: 20px auto; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .loading  { padding: 40px; text-align: center; font-size: 18px; color: #666; }
+  .error    { padding: 20px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404; margin: 20px; }
+  .hidden   { display: none; }
+
+  .controls {
+    padding: 15px; background-color: #f8f9fa; border-bottom: 1px solid #dee2e6;
+    text-align: right; position: sticky; top: 0; z-index: 100;
+  }
+  .btn {
+    padding: 8px 16px; margin-left: 5px; background-color: #007bff; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+  }
+  .btn:hover { background-color: #0056b3; }
+  .btn:disabled { background-color: #6c757d; cursor: not-allowed; }
+  .btn-print { background-color: #28a745; }
+  .btn-print:hover { background-color: #1e7e34; }
+  .report-pdf-btn {
+    padding: 8px 16px; margin-left: 5px; background-color: #6366f1; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+  }
+  .report-pdf-btn:hover:not(:disabled) { background-color: #4f46e5; }
+  .report-pdf-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+  .report-error {
+    padding: 12px; background-color: #fee; border: 1px solid #fcc;
+    border-radius: 4px; color: #c33; margin: 10px 15px; font-size: 13px; display: none;
+  }
+  .report-error.show { display: block; }
+
+  /* Page — 8.5 × 13 in legal */
+  .page {
+    width: 8.5in; min-height: 13in; padding: 0.5in; padding-bottom: 0.75in;
+    margin: 0 auto 20px auto; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative; page-break-after: always; box-sizing: border-box;
+  }
+  .page:last-child { page-break-after: avoid; }
+  .page-footer {
+    position: absolute; bottom: 0; left: 0.5in; right: 0.5in; height: 0.75in;
+    padding-top: 0.40in; text-align: center; font-size: 8px; color: #666; background: white;
+  }
+  .page-footer > div { border-top: 1px solid #ccc; padding-top: 6px; }
+
+  /* Table */
+  .citation-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 10px; }
+  .citation-table th {
+    border: 1px solid #333; padding: 6px 8px; background-color: #f0f0f0;
+    font-weight: bold; text-align: center; font-size: 11px;
+  }
+  .citation-table td { border: 1px solid #555; padding: 5px 8px; vertical-align: top; }
+  .citation-table td.center { text-align: center; }
+  .citation-table td.right  { text-align: right; }
+  .citation-table tfoot td {
+    border: 1px solid #333; padding: 6px 8px; font-weight: bold; background-color: #f0f0f0;
+  }
+
+  /* Summary box */
+  .summary-box {
+    margin-top: 10px; padding: 8px 12px; border: 1px solid #999;
+    font-size: 11px; line-height: 1.55;
+  }
+
+  /* Enforcer info box */
+  .enforcer-info-box {
+    margin-bottom: 10px; padding: 8px 12px; border: 1px solid #ccc;
+    font-size: 10.5px; line-height: 1.6; background: #fafafa;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px;
+  }
+  .enforcer-info-box .row { display: flex; gap: 6px; }
+  .enforcer-info-box .label { font-weight: bold; min-width: 90px; }
+
+  /* Signatory */
+  .signatory-block { margin-top: 18px; }
+  .signatory-block table { width: 100%; border-collapse: collapse; }
+  .signatory-block td { width: 50%; vertical-align: top; padding: 4px 8px; }
+  .sig-label { font-size: 9px; color: #444; margin-bottom: 20px; }
+  .sig-line  { display: inline-block; min-width: 200px; padding-top: 3px; }
+  .sig-name  { font-size: 10.5px; font-weight: bold; text-transform: uppercase; }
+  .sig-position { font-size: 9px; font-style: italic; color: #1a56db; }
+
+  @page { size: 8.5in 13in portrait; margin: 0; }
+  @media print {
+    body { background: white; margin: 0; padding: 0; }
+    #report-container { box-shadow: none; margin: 0; max-width: 100%; }
+    .controls { display: none !important; }
+    .page { box-shadow: none; margin: 0; width: 8.5in; min-height: 13in; page-break-after: always; }
+    .page:last-child { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn btn-print" onclick="printReport()">🖨️ Print</button>
+    <button class="report-pdf-btn" id="reportPdfBtn" onclick="generateReportPDF()">📄 Download PDF</button>
+    <div id="reportError" class="report-error"></div>
+  </div>
+  <div id="loading" class="loading"><p>Loading enforcer report...</p></div>
+  <div id="error"   class="error hidden"></div>
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script>
+// ── URL parameters ───────────────────────────────────────────────────────────
+const urlParams  = new URLSearchParams(window.location.search);
+const enforcerId = urlParams.get('enforcerId') || '';
+const statusFilter = urlParams.get('status') || '';
+const authToken  = urlParams.get('token') || localStorage.getItem('token') || '';
+
+// ── API base URL ─────────────────────────────────────────────────────────────
+let apiBaseUrl = '';
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  apiBaseUrl = 'http://localhost:5000';
+} else {
+  const origin = window.location.origin;
+  if (origin.includes(':6070'))      apiBaseUrl = origin.replace(':6070', ':5040');
+  else if (origin.includes(':3000')) apiBaseUrl = origin.replace(':3000', ':5000');
+  else                               apiBaseUrl = origin.replace(/:\d+$/, ':5000');
+}
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', loadReport);
+
+async function loadReport() {
+  try {
+    if (!enforcerId) throw new Error('No enforcer ID provided.');
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    // Enforcer details
+    const enfRes = await fetch(`${apiBaseUrl}/api/enforcers/${enforcerId}`, { headers });
+    if (!enfRes.ok) throw new Error(`HTTP ${enfRes.status}`);
+    const enfData = await enfRes.json();
+    const enforcer = enfData.enforcer ?? enfData;
+
+    // Citations
+    let citUrl = `${apiBaseUrl}/api/enforcers/${enforcerId}/citations?limit=10000`;
+    if (statusFilter) citUrl += `&status=${encodeURIComponent(statusFilter)}`;
+    const citRes = await fetch(citUrl, { headers });
+    if (!citRes.ok) throw new Error(`HTTP ${citRes.status}`);
+    const citData = await citRes.json();
+    const citations  = citData.citations  || [];
+    const statistics = citData.statistics || {};
+
+    // Settings
+    let settings = {};
+    try {
+      const sRes = await fetch(`${apiBaseUrl}/api/settings`, { headers });
+      if (sRes.ok) settings = await sRes.json();
+    } catch (_) {}
+
+    // Current user
+    let currentUserName = 'PAMS';
+    try {
+      const meRes = await fetch(`${apiBaseUrl}/api/auth/me`, { headers });
+      if (meRes.ok) { const d = await meRes.json(); if (d.full_name) currentUserName = d.full_name; }
+    } catch (_) {}
+
+    renderReport(enforcer, citations, statistics, settings, currentUserName);
+  } catch (err) {
+    console.error(err);
+    document.getElementById('loading').classList.add('hidden');
+    const el = document.getElementById('error');
+    el.textContent = `Failed to load report: ${err.message}`;
+    el.classList.remove('hidden');
+  }
+}
+
+// ── Formatters ───────────────────────────────────────────────────────────────
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+function fmtCurrency(v) {
+  const n = parseFloat(v) || 0;
+  const [int, dec] = n.toFixed(2).split('.');
+  return '₱' + int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + dec;
+}
+
+// ── Header ───────────────────────────────────────────────────────────────────
+function buildHeaderHTML(settings) {
+  const getLogoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
+    return url;
+  };
+  const logoLeftUrl  = getLogoUrl(settings.permit_header_logo_left?.value)  || '/dalaguete-logo.png';
+  const logoRightUrl = getLogoUrl(settings.permit_header_logo_right?.value) || null;
+  const hLogoH = Math.max(20, Math.min(120, parseFloat(settings.permit_header_logo_size?.value) || 50));
+  const hLine1 = settings.permit_header_line_1?.value ?? 'REPUBLIC OF THE PHILIPPINES';
+  const hLine2 = settings.permit_header_line_2?.value ?? 'MUNICIPALITY OF DALAGUETE';
+  const hLine3 = settings.permit_header_line_3?.value ?? 'PROVINCE OF CEBU';
+  const hLine4 = settings.permit_header_line_4?.value ?? 'OFFICE OF THE MUNICIPAL MAYOR';
+  const hLine5 = settings.permit_header_line_5?.value ?? 'Tel. # 520 4141 loc. 315';
+  const hBasePx  = Math.max(7, Math.min(20, parseFloat(settings.permit_header_font_size?.value) || 11));
+  const hLine4Px = Math.round(hBasePx * 1.45);
+  const lines = `
+    ${hLine1 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine1}</div>` : ''}
+    ${hLine2 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine2}</div>` : ''}
+    ${hLine3 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${hLine3}</div>` : ''}
+    ${hLine4 ? `<div style="font-size:${hLine4Px}px;font-weight:bold;margin-top:2px;">${hLine4}</div>` : ''}
+    ${hLine5 ? `<div style="font-size:${hBasePx}px;font-weight:bold;margin-top:2px;">${hLine5}</div>` : ''}
+  `;
+  return `
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:6px;">
+        ${logoLeftUrl ? `<img src="${logoLeftUrl}" alt="Logo" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+        <div style="text-align:center;line-height:1.2;">${lines}</div>
+        ${logoRightUrl ? `<img src="${logoRightUrl}" alt="Logo 2" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+      </div>
+      <div style="border-bottom:2px solid #333;margin-top:6px;"></div>
+    </div>
+  `;
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function renderReport(enforcer, citations, statistics, settings, currentUserName) {
+  const now = new Date();
+  const issuedAt = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const headerHTML = buildHeaderHTML(settings);
+  const filterLabel = statusFilter ? `Status Filter: ${statusFilter}` : 'All Statuses';
+
+  // Totals from server stats (reflects filter)
+  const totalIssued      = statistics.total_issued      || citations.length;
+  const totalFines       = statistics.total_fines       || citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
+  const paidCount        = statistics.paid_count        || 0;
+  const pendingCount     = statistics.pending_count     || 0;
+  const installmentCount = statistics.installment_count || 0;
+
+  // Enforcer info block
+  const enforcerBlock = `
+    <div class="enforcer-info-box">
+      <div class="row"><span class="label">Name:</span><span>${enforcer.full_name || '—'}</span></div>
+      <div class="row"><span class="label">Badge #:</span><span>${enforcer.badge_number || '—'}</span></div>
+      <div class="row"><span class="label">Position:</span><span>${enforcer.position || '—'}</span></div>
+      <div class="row"><span class="label">Department:</span><span>${enforcer.department || '—'}</span></div>
+      <div class="row"><span class="label">Station:</span><span>${enforcer.station || '—'}</span></div>
+      <div class="row"><span class="label">Status:</span><span>${enforcer.status || '—'}</span></div>
+    </div>
+  `;
+
+  // Build table rows (all on one or multiple logical pages via CSS page-break)
+  let rowsHTML = '';
+  citations.forEach(c => {
+    const violations = Array.isArray(c.violations) ? c.violations.join('; ') : (c.violations || 'N/A');
+    rowsHTML += `
+      <tr>
+        <td class="center">${c.ticket_number || '—'}</td>
+        <td class="center">${fmtDate(c.violation_date)}</td>
+        <td>${c.driver_name || '—'}</td>
+        <td>${c.plate_number || '—'}</td>
+        <td>${c.violation_location || '—'}</td>
+        <td>${violations}</td>
+        <td class="right">${fmtCurrency(c.fine_amount)}</td>
+
+      </tr>
+    `;
+  });
+
+  const emptyRow = citations.length === 0
+    ? `<tr><td colspan="7" style="text-align:center;padding:20px;color:#888;">No citations found.</td></tr>`
+    : '';
+
+  const footerHTML = `<div>Generated by: ${currentUserName} | Permit and Assessment Management System | Issued: ${issuedAt} | Page <span class="page-number"></span> of <span class="total-pages"></span></div>`;
+
+  const html = `
+    <div class="page" id="page-1">
+      <div>
+        ${headerHTML}
+        <div style="text-align:center;margin-bottom:6px;">
+          <div style="font-size:16px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">ENFORCER CITATIONS REPORT</div>
+          <div style="font-size:11px;font-weight:bold;margin-top:2px;">${enforcer.full_name} (Badge #${enforcer.badge_number})</div>
+          <div style="font-size:10px;color:#555;margin-top:2px;">${filterLabel} &nbsp;|&nbsp; As of: ${issuedAt}</div>
+        </div>
+        <div style="border-bottom:1px solid #ccc;margin-bottom:10px;"></div>
+
+        ${enforcerBlock}
+
+        <table class="citation-table">
+          <thead>
+            <tr>
+              <th style="width:12%;">Ticket No.</th>
+              <th style="width:10%;">Date</th>
+              <th style="width:19%;">Driver</th>
+              <th style="width:9%;">Plate</th>
+              <th style="width:19%;">Location</th>
+              <th style="width:22%;">Violations</th>
+              <th style="width:9%;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHTML}${emptyRow}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" style="text-align:right;font-weight:bold;">TOTAL FINES:</td>
+              <td class="right" style="font-weight:bold;">${fmtCurrency(totalFines)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="summary-box" style="margin-top:10px;">
+          <strong>Total Citations:</strong> ${totalIssued} &nbsp;&nbsp;
+          <strong>Paid:</strong> ${paidCount} &nbsp;&nbsp;
+          <strong>Pending:</strong> ${pendingCount} &nbsp;&nbsp;
+          <strong>Installment / Partial:</strong> ${installmentCount} &nbsp;&nbsp;
+          <strong>Total Fines:</strong> ${fmtCurrency(totalFines)}
+        </div>
+      </div>
+      <div class="page-footer">${footerHTML}</div>
+    </div>
+  `;
+
+  document.getElementById('report-content').innerHTML = html;
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('report-content').classList.remove('hidden');
+  updatePageNumbers();
+}
+
+function updatePageNumbers() {
+  const pages = document.querySelectorAll('.page');
+  const total = pages.length;
+  pages.forEach((page, i) => {
+    const pn = page.querySelector('.page-number');
+    const tp = page.querySelector('.total-pages');
+    if (pn) pn.textContent = i + 1;
+    if (tp) tp.textContent = total;
+  });
+}
+
+function printReport() { window.print(); }
+
+async function generateReportPDF() {
+  const btn      = document.getElementById('reportPdfBtn');
+  const errDiv   = document.getElementById('reportError');
+  const origText = btn.innerHTML;
+  try {
+    const reportContent = document.getElementById('report-content');
+    if (!reportContent || reportContent.classList.contains('hidden')) throw new Error('Report not loaded yet.');
+    btn.disabled  = true;
+    btn.innerHTML = '⏳ Generating PDF...';
+    errDiv.classList.remove('show');
+
+    const styleText = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
+    const fullHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><style>
+${styleText}
+body{background:white;margin:0;padding:0;}
+.controls{display:none!important;}
+#report-container{box-shadow:none;margin:0;max-width:100%;}
+.page{box-shadow:none;margin:0;}
+</style></head><body><div id="report-container">${reportContent.innerHTML}</div></body></html>`;
+
+    const date   = new Date().toISOString().split('T')[0];
+    const label  = statusFilter ? `_${statusFilter}` : '';
+    const fname  = `enforcer_report${label}_${date}.pdf`;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    const res = await fetch(`${apiBaseUrl}/api/reports/generate-pdf`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ html: fullHtml, filename: fname, width: '8.5in', height: '13in' })
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = fname; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    errDiv.textContent = `PDF error: ${err.message}`;
+    errDiv.classList.add('show');
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = origText;
+  }
+}
+</script>
+</body>
+</html>
