@@ -1,12 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+
+const BarangayMap = dynamic(() => import('@/components/BarangayMap'), { ssr: false, loading: () => (
+  <div className="h-full w-full flex items-center justify-center text-sm text-slate-400 animate-pulse">Loading map…</div>
+) });
 
 interface MonthlyTrend {
   month: string;
@@ -365,8 +370,8 @@ export default function DashboardPage() {
       {/* Calendars + Donut */}
       {showCalendar && (
         <>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-slate-700">Special Cockfight Permitted Dates</h3>
               <div className="flex items-center gap-2">
@@ -420,27 +425,20 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          {/* Donut Chart */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">Permits by Type</h3>
-            {data.permits.byCategory.length > 0 ? (
-              <div className="flex flex-col items-center gap-4">
-                <div className="relative h-36 w-36">
-                  <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${conicStops})` }}></div>
-                  <div className="absolute inset-[25%] rounded-full bg-white flex items-center justify-center"><span className="text-lg font-bold text-slate-700">{totalByCategory}</span></div>
-                </div>
-                <div className="w-full space-y-1.5">
-                  {data.permits.byCategory.slice(0, 5).map((cat, i) => (
-                    <div key={cat.category} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2"><div className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: donutColors[i % donutColors.length] }}></div><span className="text-slate-600 truncate max-w-[120px]">{cat.category}</span></div>
-                      <span className="font-medium text-slate-700">{cat.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-sm text-slate-400">No permit data</div>
-            )}
+          {/* Barangay Map */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">Permit Applications by Barangay</h3>
+            <div className="flex-1" style={{ minHeight: 320 }}>
+              <BarangayMap />
+            </div>
+            {/* Colour legend */}
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-slate-500">Fewer</span>
+              {['#f0fdf4','#bbf7d0','#4ade80','#16a34a','#15803d','#14532d'].map(c => (
+                <div key={c} className="h-3 flex-1 rounded" style={{ backgroundColor: c }} />
+              ))}
+              <span className="text-xs text-slate-500">More</span>
+            </div>
           </div>
         </div>
 

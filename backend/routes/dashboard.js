@@ -304,5 +304,22 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Permit application counts grouped by barangay (for map choropleth)
+router.get('/permits-by-barangay', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT ap.param_value AS barangay, COUNT(DISTINCT ap.application_id) AS count
+       FROM application_parameters ap
+       WHERE ap.param_name = 'Barangay'
+       GROUP BY ap.param_value
+       ORDER BY ap.param_value`
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Get permits-by-barangay error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
 
