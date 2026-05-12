@@ -83,6 +83,8 @@ export default function CitationsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [saveModal, setSaveModal] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveModalMessage, setSaveModalMessage] = useState('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
   const [listSearchTerm, setListSearchTerm] = useState<string>('');
@@ -137,6 +139,18 @@ export default function CitationsPage() {
     enforcerId: '',
     officer: user?.full_name || '',
   });
+
+  // Returns page numbers to display with null as ellipsis placeholder
+  function getPageWindow(current: number, total: number): (number | null)[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages: (number | null)[] = [];
+    pages.push(1);
+    if (current > 4) pages.push(null);
+    for (let i = Math.max(2, current - 2); i <= Math.min(total - 1, current + 2); i++) pages.push(i);
+    if (current < total - 3) pages.push(null);
+    pages.push(total);
+    return pages;
+  }
 
   function generateTicketNumber() {
     const prefix = 'DG-' + new Date().getFullYear();
@@ -244,6 +258,8 @@ export default function CitationsPage() {
     try {
       setSubmitting(true);
       setErrorMessage('');
+      setSaveModal('saving');
+      setSaveModalMessage('Saving citation record...');
 
       await api.post('/api/citations', {
         ticketNumber: formData.ticketNumber,
@@ -266,11 +282,15 @@ export default function CitationsPage() {
         fineAmount: formData.fineAmount,
         paymentStatus: formData.paymentStatus,
         enforcerId: formData.enforcerId,
+        enforcerName: formData.officer,
       });
 
       setSuccessMessage('Citation ticket saved successfully!');
+      setSaveModal('success');
+      setSaveModalMessage('Citation ticket saved successfully!');
       setTimeout(() => {
         setSuccessMessage('');
+        setSaveModal('idle');
         // Reset form
         setFormData({
           ticketNumber: '',
@@ -300,7 +320,10 @@ export default function CitationsPage() {
         setActiveTab('list');
       }, 2000);
     } catch (error: any) {
-      setErrorMessage(error.response?.data?.error || 'Failed to save citation');
+      const msg = error.response?.data?.error || 'Failed to save citation';
+      setErrorMessage(msg);
+      setSaveModal('error');
+      setSaveModalMessage(msg);
     } finally {
       setSubmitting(false);
     }
@@ -536,7 +559,7 @@ export default function CitationsPage() {
             </button>
           </div>
 
-          {/* Success and Error Messages */}
+          {/* Success and Error Messages (kept for accessibility fallback) */}
           {successMessage && (
             <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
               ✓ {successMessage}
@@ -546,6 +569,55 @@ export default function CitationsPage() {
           {errorMessage && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
               ✗ {errorMessage}
+            </div>
+          )}
+
+          {/* Save Status Modal */}
+          {saveModal !== 'idle' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8 flex flex-col items-center gap-5">
+                {saveModal === 'saving' && (
+                  <>
+                    <div className="h-14 w-14 rounded-full border-4 border-slate-200 border-t-slate-800 animate-spin" />
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-slate-800">Saving Citation</p>
+                      <p className="text-sm text-slate-500 mt-1">{saveModalMessage}</p>
+                    </div>
+                  </>
+                )}
+                {saveModal === 'success' && (
+                  <>
+                    <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center">
+                      <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-green-700">Saved Successfully</p>
+                      <p className="text-sm text-slate-500 mt-1">{saveModalMessage}</p>
+                    </div>
+                  </>
+                )}
+                {saveModal === 'error' && (
+                  <>
+                    <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center">
+                      <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-red-700">Save Failed</p>
+                      <p className="text-sm text-slate-500 mt-1">{saveModalMessage}</p>
+                    </div>
+                    <button
+                      onClick={() => { setSaveModal('idle'); setSaveModalMessage(''); }}
+                      className="mt-2 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm"
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -1009,21 +1081,25 @@ export default function CitationsPage() {
                         Previous
                       </button>
                       <div className="flex items-center gap-1">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                          <button
-                            key={pageNum}
-                            onClick={() => setCurrentPage(pageNum)}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                              currentPage === pageNum
-                                ? 'bg-slate-800 text-white'
-                                : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
-                            }`}
-                            aria-label={`Go to page ${pageNum}`}
-                            aria-current={currentPage === pageNum ? 'page' : undefined}
-                          >
-                            {pageNum}
-                          </button>
-                        ))}
+                        {getPageWindow(currentPage, totalPages).map((pageNum, idx) =>
+                          pageNum === null ? (
+                            <span key={`ellipsis-${idx}`} className="px-2 py-2 text-sm text-slate-400 select-none">…</span>
+                          ) : (
+                            <button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                currentPage === pageNum
+                                  ? 'bg-slate-800 text-white'
+                                  : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                              }`}
+                              aria-label={`Go to page ${pageNum}`}
+                              aria-current={currentPage === pageNum ? 'page' : undefined}
+                            >
+                              {pageNum}
+                            </button>
+                          )
+                        )}
                       </div>
                       <button
                         onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
@@ -1302,21 +1378,25 @@ export default function CitationsPage() {
                         Previous
                       </button>
                       <div className="flex items-center gap-1">
-                        {Array.from({ length: reportTotalPages }, (_, i) => i + 1).map((pageNum) => (
-                          <button
-                            key={pageNum}
-                            onClick={() => setReportCurrentPage(pageNum)}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                              reportCurrentPage === pageNum
-                                ? 'bg-slate-800 text-white'
-                                : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
-                            }`}
-                            aria-label={`Go to page ${pageNum}`}
-                            aria-current={reportCurrentPage === pageNum ? 'page' : undefined}
-                          >
-                            {pageNum}
-                          </button>
-                        ))}
+                        {getPageWindow(reportCurrentPage, reportTotalPages).map((pageNum, idx) =>
+                          pageNum === null ? (
+                            <span key={`ellipsis-${idx}`} className="px-2 py-2 text-sm text-slate-400 select-none">…</span>
+                          ) : (
+                            <button
+                              key={pageNum}
+                              onClick={() => setReportCurrentPage(pageNum)}
+                              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                reportCurrentPage === pageNum
+                                  ? 'bg-slate-800 text-white'
+                                  : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                              }`}
+                              aria-label={`Go to page ${pageNum}`}
+                              aria-current={reportCurrentPage === pageNum ? 'page' : undefined}
+                            >
+                              {pageNum}
+                            </button>
+                          )
+                        )}
                       </div>
                       <button
                         onClick={() => setReportCurrentPage(prev => Math.min(reportTotalPages, prev + 1))}

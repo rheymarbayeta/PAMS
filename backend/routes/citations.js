@@ -172,9 +172,12 @@ router.get('/:id', async (req, res) => {
     const [citations] = await pool.execute(
       `SELECT 
         c.*,
-        u.full_name as issued_by_name
+        u.full_name as issued_by_name,
+        COALESCE(c.enforcer_name, e.full_name) as enforcer_name,
+        COALESCE(c.enforcer_badge, e.badge_number) as enforcer_badge
       FROM citations c
       LEFT JOIN users u ON c.issued_by_user_id = u.user_id
+      LEFT JOIN enforcers e ON c.enforcer_id = e.enforcer_id
       WHERE c.citation_id = ?`,
       [citationId]
     );
@@ -273,6 +276,24 @@ router.post('/', async (req, res) => {
     const citationId = generateId(ID_PREFIXES.CITATION);
     const finalTicketNumber = ticketNumber || generateTicketNumber();
 
+    // Auto-resolve enforcer name and badge from enforcers table if not provided
+    let resolvedEnforcerName = enforcerName || null;
+    let resolvedEnforcerBadge = enforcerBadge || null;
+    if (enforcerId && (!resolvedEnforcerName || !resolvedEnforcerBadge)) {
+      try {
+        const [enforcerRows] = await pool.execute(
+          'SELECT full_name, badge_number FROM enforcers WHERE enforcer_id = ?',
+          [enforcerId]
+        );
+        if (enforcerRows.length > 0) {
+          resolvedEnforcerName = resolvedEnforcerName || enforcerRows[0].full_name;
+          resolvedEnforcerBadge = resolvedEnforcerBadge || enforcerRows[0].badge_number;
+        }
+      } catch (e) {
+        console.warn('Could not look up enforcer details:', e.message);
+      }
+    }
+
     const [result] = await pool.execute(
       `INSERT INTO citations (
         citation_id, ticket_number, driver_name, driver_address, driver_contact,
@@ -308,8 +329,8 @@ router.post('/', async (req, res) => {
         fineAmount || 0,
         paymentStatus || 'Pending',
         enforcerId || null,
-        enforcerName || null,
-        enforcerBadge || null,
+        resolvedEnforcerName,
+        resolvedEnforcerBadge,
         enforcerSignature || null,
         witnessName || null,
         witnessSignature || null,
