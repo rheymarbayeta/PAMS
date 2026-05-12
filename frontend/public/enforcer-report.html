@@ -29,6 +29,7 @@ body { background: #f5f5f5; font-family: 'Cambria', 'Georgia', serif; }
 .page-footer {
   position: absolute; bottom: 0; left: 0.5in; right: 0.5in;
   height: 0.75in; display: flex; align-items: flex-end; padding-bottom: 0.1in;
+  background: white; z-index: 2;
 }
 .page-footer > div {
   width: 100%; border-top: 1px solid #bbb; padding-top: 5px;
@@ -108,8 +109,9 @@ var DPI     = 96;
 var PAGE_H  = 13   * DPI;  // 1248 px
 var PAD_TOP = 0.5  * DPI;  //   48 px
 var FOOT_H  = 0.75 * DPI;  //   72 px
-var CONT_H  = PAGE_H - PAD_TOP - FOOT_H;   // 1128 px usable
-var CONT_W  = (8.5 - 1) * DPI;             //  720 px content width
+var CONT_H  = PAGE_H - PAD_TOP - FOOT_H;  // 1128 px — CSS clip boundary
+var PACK_H  = CONT_H - 40;               // 1088 px — conservative packing budget
+var CONT_W  = (8.5 - 1) * DPI;           //  720 px content width
 
 document.addEventListener('DOMContentLoaded', loadReport);
 
@@ -273,15 +275,14 @@ function renderReport(enforcer, citations, statistics, settings, userName) {
       '<td class="r" style="font-weight:bold;">' + fmtCur(totalFines) + '</td>' +
     '</tr></tfoot>';
 
-  // Measure fixed heights
-  var hdrH   = measure(headerHTML);
-  var p1TopH = measure(page1TopHTML);
-  var contH  = measure(headerHTML + contLabelHTML);
-  var theadH = measure('<table class="citation-table">' + THEAD_HTML + '</table>');
-  var sumH   = measure(summaryHTML);
+  // Measure the entire fixed top section as one unit for accuracy
+  var THEAD_TABLE = '<table class="citation-table">' + THEAD_HTML + '</table>';
+  var page1FixedH = measure(headerHTML + page1TopHTML + THEAD_TABLE);
+  var contFixedH  = measure(headerHTML + contLabelHTML + THEAD_TABLE);
+  var sumH        = measure(summaryHTML);
 
-  var rowArea1 = CONT_H - hdrH  - p1TopH - theadH;
-  var rowAreaN = CONT_H - contH - theadH;
+  var rowArea1 = PACK_H - page1FixedH;
+  var rowAreaN = PACK_H - contFixedH;
 
   // Measure each row
   var rowItems = citations.map(function(c) {
@@ -330,7 +331,7 @@ function renderReport(enforcer, citations, statistics, settings, userName) {
 
     pagesHTML +=
       '<div class="page">' +
-        '<div>' +
+        '<div style="height:' + CONT_H + 'px;overflow:hidden;">' +
           topHTML +
           '<table class="citation-table">' +
             THEAD_HTML + '<tbody>' + bodyRows + '</tbody>' + (isLastP ? tfootHTML : '') +
