@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import api from '@/services/api';
 
-interface BarangayCount {
+export interface BarangayCount {
   barangay: string;
-  count: number;
+  total: number;
+  permits: { permit_type: string; count: number }[];
 }
 
 // Leaflet must be loaded client-side only (no SSR)

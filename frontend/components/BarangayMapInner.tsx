@@ -4,11 +4,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import type { Layer, PathOptions } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-
-interface BarangayCount {
-  barangay: string;
-  count: number;
-}
+import type { BarangayCount } from './BarangayMap';
 
 interface Props {
   counts: BarangayCount[];
@@ -59,14 +55,14 @@ export default function BarangayMapInner({ counts }: Props) {
       .catch(() => console.warn('dalaguete-roads.geojson not found — run convert-roads-to-geojson.js'));
   }, []);
 
-  const countMap = new Map<string, number>(
-    counts.map(c => [c.barangay.trim().toUpperCase(), c.count])
+  const countMap = new Map<string, BarangayCount>(
+    counts.map(c => [c.barangay.trim().toUpperCase(), c])
   );
-  const max = Math.max(0, ...counts.map(c => c.count));
+  const max = Math.max(0, ...counts.map(c => c.total));
 
   const styleFeature = (feature: any): PathOptions => {
     const name: string = (feature?.properties?.BRGY ?? '').trim().toUpperCase();
-    const count = countMap.get(name) ?? 0;
+    const count = countMap.get(name)?.total ?? 0;
     return {
       fillColor: getColor(count, max),
       fillOpacity: 0.75,
@@ -78,7 +74,19 @@ export default function BarangayMapInner({ counts }: Props) {
   const onEachFeature = (feature: any, layer: Layer) => {
     const name: string = (feature?.properties?.BRGY ?? 'Unknown').trim();
     const displayName = name.charAt(0) + name.slice(1).toLowerCase();
-    const count = countMap.get(name.toUpperCase()) ?? 0;
+    const data = countMap.get(name.toUpperCase());
+    const total = data?.total ?? 0;
+
+    const buildHoverHtml = () => {
+      const permitLines = data?.permits
+        .map((p, i) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${i + 1}. ${p.permit_type}</span><span style="font-weight:600">${p.count}</span></div>`)
+        .join('') ?? '';
+      return `
+        <div style="font-size:12px;font-weight:700;margin-bottom:4px;border-bottom:1px solid #e2e8f0;padding-bottom:3px">${displayName}</div>
+        ${total > 0 ? permitLines : '<div style="font-size:11px;color:#94a3b8">No applications</div>'}
+        ${total > 0 ? `<div style="font-size:11px;color:#64748b;margin-top:3px;border-top:1px solid #e2e8f0;padding-top:3px">Total: ${total}</div>` : ''}
+      `;
+    };
 
     // Permanent centred label showing the barangay name
     (layer as any).bindTooltip(
@@ -86,13 +94,12 @@ export default function BarangayMapInner({ counts }: Props) {
       { permanent: true, direction: 'center', className: 'leaflet-brgy-label' }
     );
 
-    // Hover popup showing permit count
+    // Hover popup showing permit breakdown
     (layer as any).on({
       mouseover(e: any) {
         e.target.setStyle({ fillOpacity: 0.95, weight: 2, color: '#0d9488' });
         e.target.unbindTooltip();
-        e.target.bindTooltip(
-          `<div style="font-size:12px;font-weight:600">${displayName}</div><div style="font-size:11px">${count} permit${count !== 1 ? 's' : ''}</div>`,
+        e.target.bindTooltip(buildHoverHtml(),
           { sticky: true, className: 'leaflet-brgy-tooltip' }
         ).openTooltip();
       },
@@ -130,7 +137,22 @@ export default function BarangayMapInner({ counts }: Props) {
           box-shadow: 0 2px 8px rgba(0,0,0,0.12);
           pointer-events: none;
         }
-        .leaflet-container { border-radius: 8px; }
+        .leaflet-container {
+          border-radius: 8px;
+          isolation: isolate;
+          z-index: 0;
+        }
+        .leaflet-pane,
+        .leaflet-control-container { z-index: unset !important; }
+        .leaflet-map-pane    { z-index: 2 !important; }
+        .leaflet-tile-pane   { z-index: 2 !important; }
+        .leaflet-overlay-pane{ z-index: 4 !important; }
+        .leaflet-shadow-pane { z-index: 5 !important; }
+        .leaflet-marker-pane { z-index: 6 !important; }
+        .leaflet-tooltip-pane{ z-index: 7 !important; }
+        .leaflet-popup-pane  { z-index: 8 !important; }
+        .leaflet-top,
+        .leaflet-bottom      { z-index: 9 !important; }
       `}</style>
       <MapContainer
         center={[9.76, 123.52]}

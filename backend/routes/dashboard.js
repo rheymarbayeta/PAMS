@@ -308,13 +308,29 @@ router.get('/stats', async (req, res) => {
 router.get('/permits-by-barangay', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT ap.param_value AS barangay, COUNT(DISTINCT ap.application_id) AS count
+      `SELECT
+         ap.param_value AS barangay,
+         CASE
+           WHEN a.permit_type LIKE '% - %' THEN TRIM(SUBSTRING_INDEX(a.permit_type, ' - ', -1))
+           ELSE a.permit_type
+         END AS attribute_name,
+         COUNT(DISTINCT a.application_id) AS count
        FROM application_parameters ap
+       JOIN applications a ON a.application_id = ap.application_id
        WHERE ap.param_name = 'Barangay'
-       GROUP BY ap.param_value
-       ORDER BY ap.param_value`
+       GROUP BY ap.param_value, attribute_name
+       ORDER BY ap.param_value, count DESC`
     );
-    res.json(rows);
+
+    // Group into { barangay -> { total, permits: [{permit_type, count}] } }
+    const map = {};
+    for (const row of rows) {
+      const key = row.barangay;
+      if (!map[key]) map[key] = { barangay: key, total: 0, permits: [] };
+      map[key].total += Number(row.count);
+      map[key].permits.push({ permit_type: row.attribute_name, count: Number(row.count) });
+    }
+    res.json(Object.values(map));
   } catch (error) {
     console.error('Get permits-by-barangay error:', error);
     res.status(500).json({ error: 'Internal server error' });
