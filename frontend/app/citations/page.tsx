@@ -104,6 +104,7 @@ export default function CitationsPage() {
     dateTo: '',
     violations: '',
   });
+  const [citationReportHeader, setCitationReportHeader] = useState('permit');
 
   // Citation report modal
   const [showCitationReportModal, setShowCitationReportModal] = useState(false);
@@ -451,6 +452,7 @@ export default function CitationsPage() {
     if (reportFilters.dateTo)   params.set('dateTo', reportFilters.dateTo);
     if (reportFilters.violations) params.set('violations', reportFilters.violations);
     if (token) params.set('token', token);
+    params.set('header', citationReportHeader);
     setCitationReportUrl(`/citation-report.html?${params.toString()}`);
     setShowCitationReportModal(true);
   };
@@ -1205,7 +1207,7 @@ export default function CitationsPage() {
               {/* Filters Section */}
               <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <h3 className="text-lg font-bold text-slate-800 mb-4">Filters</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                       Payment Status
@@ -1282,6 +1284,21 @@ export default function CitationsPage() {
                       }
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Header Type
+                    </label>
+                    <select
+                      value={citationReportHeader}
+                      onChange={(e) => setCitationReportHeader(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="permit">Permit / Mayor&apos;s Office</option>
+                      <option value="assessment">Treasurer&apos;s Office</option>
+                      <option value="disco">Disco / Events Office</option>
+                    </select>
                   </div>
 
                   <div className="flex items-end gap-2">

@@ -110,8 +110,14 @@ router.get('/', async (req, res) => {
         a.status,
         a.created_at,
         a.updated_at,
+        a.issued_at as permit_date,
         COALESCE(e.entity_name, 'Unknown Entity') as entity_name,
-        e.address as entity_address,
+        TRIM(CONCAT_WS(', ',
+          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Street/Sitio' LIMIT 1)), ''),
+          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Barangay' LIMIT 1)), ''),
+          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Municipality' LIMIT 1)), ''),
+          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Province' LIMIT 1)), '')
+        )) as entity_address,
         COALESCE(
           (SELECT ap.param_value FROM application_parameters ap
            WHERE ap.application_id = a.application_id AND ap.param_name = 'Location' LIMIT 1),

@@ -21,6 +21,9 @@ interface Application {
   created_at: string;
   assessed_at?: string;
   approved_at?: string;
+  permit_date?: string;
+  location: string | null;
+  entity_address: string | null;
 }
 
 interface ReportStats {
@@ -35,17 +38,20 @@ interface ReportStats {
   rejected: number;
 }
 
-type ColumnKey = 'permit_number' | 'entity_name' | 'permit_type_name' | 'status' | 'creator_name' | 'assessor_name' | 'approver_name' | 'created_at' | 'assessed_at' | 'approved_at';
+type ColumnKey = 'permit_number' | 'entity_name' | 'permit_type_name' | 'status' | 'creator_name' | 'assessor_name' | 'approver_name' | 'created_at' | 'assessed_at' | 'approved_at' | 'permit_date' | 'location' | 'entity_address';
 
 const AVAILABLE_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'permit_number', label: 'Permit Number' },
   { key: 'entity_name', label: 'Permittee' },
   { key: 'permit_type_name', label: 'Permit' },
   { key: 'status', label: 'Status' },
+  { key: 'location', label: 'Location' },
+  { key: 'entity_address', label: 'Address' },
   { key: 'creator_name', label: 'Creator' },
   { key: 'assessor_name', label: 'Assessor' },
   { key: 'approver_name', label: 'Approver' },
   { key: 'created_at', label: 'Created Date' },
+  { key: 'permit_date', label: 'Permit Date' },
   { key: 'assessed_at', label: 'Assessed Date' },
   { key: 'approved_at', label: 'Approved Date' },
 ];
@@ -79,7 +85,7 @@ export default function ReportsPage() {
 
   // Column selection
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(
-    ['permit_number', 'entity_name', 'permit_type_name', 'status', 'created_at']
+    ['permit_number', 'entity_name', 'permit_type_name', 'status', 'location', 'entity_address', 'permit_date']
   );
 
   // Sorting
@@ -104,6 +110,7 @@ export default function ReportsPage() {
   // Print preview
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [printPreviewUrl, setPrintPreviewUrl] = useState('');
+  const [reportHeaderType, setReportHeaderType] = useState('permit');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -296,7 +303,7 @@ export default function ReportsPage() {
         .filter(col => visibleColumns.includes(col.key))
         .map(col => {
           let value = app[col.key];
-          if (col.key === 'created_at' || col.key === 'assessed_at' || col.key === 'approved_at') {
+          if (col.key === 'created_at' || col.key === 'assessed_at' || col.key === 'approved_at' || col.key === 'permit_date') {
             value = value ? new Date(value as string).toLocaleDateString() : '';
           }
           return `"${String(value || '').replace(/"/g, '""')}"`;
@@ -383,6 +390,7 @@ export default function ReportsPage() {
     if (attributeFilter !== 'all') params.set('attribute', attributeFilter);
     if (searchTerm) params.set('search', searchTerm);
     if (token) params.set('token', token);
+    params.set('header', reportHeaderType);
     setPrintPreviewUrl(`/permit-list-report.html?${params.toString()}`);
     setShowPrintPreview(true);
   };
@@ -648,6 +656,16 @@ export default function ReportsPage() {
                   </button>
 
                   {/* Print Preview */}
+                  <select
+                    value={reportHeaderType}
+                    onChange={(e) => setReportHeaderType(e.target.value)}
+                    className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    title="Header type for report"
+                  >
+                    <option value="permit">Permit / Mayor&apos;s Office</option>
+                    <option value="assessment">Treasurer&apos;s Office</option>
+                    <option value="disco">Disco / Events Office</option>
+                  </select>
                   <button
                     onClick={openPrintPreview}
                     className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-700 hover:from-indigo-100 hover:to-blue-100 transition-all duration-200"
@@ -870,7 +888,7 @@ export default function ReportsPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full table-fixed">
                   <thead>
                     <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-slate-200">
                       {AVAILABLE_COLUMNS.filter(col => visibleColumns.includes(col.key)).map(col => (
@@ -912,10 +930,10 @@ export default function ReportsPage() {
                                 {app[col.key]}
                               </span>
                             );
-                          } else if (col.key === 'created_at' || col.key === 'assessed_at' || col.key === 'approved_at') {
+                          } else if (col.key === 'created_at' || col.key === 'assessed_at' || col.key === 'approved_at' || col.key === 'permit_date') {
                             const dateValue = app[col.key];
                             cellContent = dateValue ? new Date(dateValue as string).toLocaleDateString() : '-';
-                          } else if (col.key === 'assessor_name' || col.key === 'approver_name') {
+                          } else if (col.key === 'assessor_name' || col.key === 'approver_name' || col.key === 'location' || col.key === 'entity_address') {
                             cellContent = app[col.key] || '-';
                           } else if (col.key === 'permit_type_name') {
                             cellContent = app.attribute_name || app.permit_type_name || '-';
@@ -926,7 +944,7 @@ export default function ReportsPage() {
                           return (
                             <td
                               key={`${app.application_id}-${col.key}`}
-                              className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-slate-700 whitespace-nowrap truncate"
+                              className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-slate-700 break-words align-top"
                               title={typeof cellContent === 'string' ? cellContent : undefined}
                             >
                               {cellContent}

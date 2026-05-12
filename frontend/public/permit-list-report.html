@@ -167,6 +167,8 @@ const permitCat     = urlParams.get('permitCategory')  || '';
 const attributeParam = urlParams.get('attribute')      || '';
 const searchTerm    = urlParams.get('search')          || '';
 const authToken     = urlParams.get('token') || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || '';
+// Header group: 'permit' | 'assessment' | 'disco'  (default: permit)
+const headerGroup   = urlParams.get('header') || 'permit';
 
 // ── API base URL ──────────────────────────────────────────────────────────────
 let apiBaseUrl = '';
@@ -273,25 +275,33 @@ function buildFilterLabel() {
 }
 
 // ── Header HTML ───────────────────────────────────────────────────────────────
+const HEADER_DEFAULTS = {
+  permit:     { line4: 'OFFICE OF THE MUNICIPAL MAYOR', line5: 'Tel. # 520 4141 loc. 315' },
+  assessment: { line4: "MUNICIPAL TREASURER'S OFFICE",  line5: '' },
+  disco:      { line4: 'OFFICE OF THE MUNICIPAL MAYOR', line5: '' },
+};
+
 function buildHeaderHTML(settings) {
+  const pfx = headerGroup + '_header';
+  const def = HEADER_DEFAULTS[headerGroup] || HEADER_DEFAULTS.permit;
   const getLogoUrl = (url) => {
     if (!url) return null;
     if (url.startsWith('http')) return url;
     if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
     return url;
   };
-  const logoLeft  = getLogoUrl(settings.permit_header_logo_left?.value)  || '/dalaguete-logo.png';
-  const logoRight = getLogoUrl(settings.permit_header_logo_right?.value) || null;
-  const hLogoH    = Math.max(20, Math.min(120, parseFloat(settings.permit_header_logo_size?.value) || 50));
+  const logoLeft  = getLogoUrl(settings[pfx + '_logo_left']?.value)  || '/dalaguete-logo.png';
+  const logoRight = getLogoUrl(settings[pfx + '_logo_right']?.value) || null;
+  const hLogoH    = Math.max(20, Math.min(120, parseFloat(settings[pfx + '_logo_size']?.value) || 50));
 
-  const hBasePx  = Math.max(7, Math.min(20, parseFloat(settings.permit_header_font_size?.value) || 11));
+  const hBasePx  = Math.max(7, Math.min(20, parseFloat(settings[pfx + '_font_size']?.value) || 11));
   const hLine4Px = Math.round(hBasePx * 1.45);
 
-  const l1 = settings.permit_header_line_1?.value ?? 'REPUBLIC OF THE PHILIPPINES';
-  const l2 = settings.permit_header_line_2?.value ?? 'MUNICIPALITY OF DALAGUETE';
-  const l3 = settings.permit_header_line_3?.value ?? 'PROVINCE OF CEBU';
-  const l4 = settings.permit_header_line_4?.value ?? 'OFFICE OF THE MUNICIPAL MAYOR';
-  const l5 = settings.permit_header_line_5?.value ?? 'Tel. # 520 4141 loc. 315';
+  const l1 = settings[pfx + '_line_1']?.value ?? 'REPUBLIC OF THE PHILIPPINES';
+  const l2 = settings[pfx + '_line_2']?.value ?? 'MUNICIPALITY OF DALAGUETE';
+  const l3 = settings[pfx + '_line_3']?.value ?? 'PROVINCE OF CEBU';
+  const l4 = settings[pfx + '_line_4']?.value != null ? settings[pfx + '_line_4'].value : def.line4;
+  const l5 = settings[pfx + '_line_5']?.value != null ? settings[pfx + '_line_5'].value : def.line5;
 
   const textBlock = [
     l1 ? `<div style="font-size:${hBasePx}px;font-weight:bold;">${l1}</div>` : '',
@@ -348,11 +358,12 @@ function buildSignatoryHTML(settings, currentUserName) {
 function tableHeaderRow() {
   return `<tr>
     <th style="width:4%;">\#</th>
-    <th style="width:17%;">Permit No.</th>
-    <th style="width:26%;">Permittee</th>
-    <th style="width:17%;">Permit Type</th>
-    <th style="width:18%;">Address</th>
-    <th style="width:18%;">Location</th>
+    <th style="width:16%;">Permit No.</th>
+    <th style="width:22%;">Permittee</th>
+    <th style="width:14%;">Permit Type</th>
+    <th style="width:16%;">Address</th>
+    <th style="width:16%;">Location</th>
+    <th style="width:12%;">Permit Date</th>
   </tr>`;
 }
 
@@ -382,11 +393,12 @@ function measureRowHeights(apps) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="center" style="width:4%">${i + 1}</td>
-        <td style="width:17%">${a.permit_number || a.application_number || '—'}</td>
-        <td style="width:26%">${a.entity_name || '—'}</td>
-        <td style="width:17%">${a.attribute_name || a.permit_type_name || '—'}</td>
-        <td style="width:18%">${a.entity_address || '—'}</td>
-        <td style="width:18%">${a.location || a.entity_address || '—'}</td>
+        <td style="width:16%">${a.permit_number || a.application_number || '—'}</td>
+        <td style="width:22%">${a.entity_name || '—'}</td>
+        <td style="width:14%">${a.attribute_name || a.permit_type_name || '—'}</td>
+        <td style="width:16%">${a.entity_address || '—'}</td>
+        <td style="width:16%">${a.location || a.entity_address || '—'}</td>
+        <td style="width:12%">${a.permit_date ? new Date(a.permit_date).toLocaleDateString('en-PH') : '—'}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -464,17 +476,18 @@ function buildReportHTML(apps, rowHeights, settings, currentUserName) {
       const rowNum = page.startIdx + j + 1;
       rowsHTML += `<tr>
         <td class="center" style="width:4%">${rowNum}</td>
-        <td style="width:17%">${a.permit_number || a.application_number || '—'}</td>
-        <td style="width:26%">${a.entity_name || '—'}</td>
-        <td style="width:17%">${a.attribute_name || a.permit_type_name || '—'}</td>
-        <td style="width:18%">${a.entity_address || '—'}</td>
-        <td style="width:18%">${a.location || a.entity_address || '—'}</td>
+        <td style="width:16%">${a.permit_number || a.application_number || '—'}</td>
+        <td style="width:22%">${a.entity_name || '—'}</td>
+        <td style="width:14%">${a.attribute_name || a.permit_type_name || '—'}</td>
+        <td style="width:16%">${a.entity_address || '—'}</td>
+        <td style="width:16%">${a.location || a.entity_address || '—'}</td>
+        <td style="width:12%">${a.permit_date ? new Date(a.permit_date).toLocaleDateString('en-PH') : '—'}</td>
       </tr>`;
       
     });
 
     const summaryHTML = isLast ? `<tfoot><tr>
-      <td colspan="5" style="text-align:right;font-weight:bold;">TOTAL:</td>
+      <td colspan="6" style="text-align:right;font-weight:bold;">TOTAL:</td>
       <td style="font-weight:bold;">${apps.length} records</td>
     </tr></tfoot>` : '';
 

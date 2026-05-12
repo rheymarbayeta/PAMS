@@ -101,12 +101,14 @@ export default function EnforcerDetailPage() {
   // Report modal
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportUrl, setReportUrl] = useState('');
+  const [reportHeaderType, setReportHeaderType] = useState('permit');
 
   const openReport = () => {
     const token = localStorage.getItem('token') || '';
     const params = new URLSearchParams({ enforcerId });
     if (statusFilter) params.set('status', statusFilter);
     if (token) params.set('token', token);
+    params.set('header', reportHeaderType);
     setReportUrl(`/enforcer-report.html?${params.toString()}`);
     setShowReportModal(true);
   };
@@ -257,15 +259,27 @@ export default function EnforcerDetailPage() {
                   {enforcer.department && <> · {enforcer.department}</>}
                 </p>
               </div>
-              <button
-                onClick={openReport}
-                className="self-start sm:self-center inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all duration-200"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Generate Report
-              </button>
+              <div className="flex items-center gap-2 self-start sm:self-center">
+                <select
+                  value={reportHeaderType}
+                  onChange={(e) => setReportHeaderType(e.target.value)}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  title="Header type for report"
+                >
+                  <option value="permit">Permit / Mayor&apos;s Office</option>
+                  <option value="assessment">Treasurer&apos;s Office</option>
+                  <option value="disco">Disco / Events Office</option>
+                </select>
+                <button
+                  onClick={openReport}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all duration-200"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Generate Report
+                </button>
+              </div>
               <button
                 onClick={() => router.push('/admin/enforcers')}
                 className="self-start sm:self-center inline-flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200"

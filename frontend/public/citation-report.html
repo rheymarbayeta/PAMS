@@ -296,6 +296,8 @@ const dateFrom      = urlParams.get('dateFrom')      || '';
 const dateTo        = urlParams.get('dateTo')        || '';
 const violationFilter = urlParams.get('violations')  || '';
 const authToken     = urlParams.get('token') || localStorage.getItem('token') || '';
+// Header group: 'permit' | 'assessment' | 'disco'  (default: permit)
+const headerGroup   = urlParams.get('header') || 'permit';
 
 // ── API base URL ─────────────────────────────────────────────────────────────
 let apiBaseUrl = '';
@@ -410,8 +412,17 @@ function buildFilterLabel() {
   return parts.length ? parts.join('  |  ') : 'All Citations';
 }
 
-// ── Header HTML (mirrors permit-report.html) ──────────────────────────────────
+// ── Header defaults per group ────────────────────────────────────────────────
+const HEADER_DEFAULTS = {
+  permit:     { line4: 'OFFICE OF THE MUNICIPAL MAYOR', line5: 'Tel. # 520 4141 loc. 315' },
+  assessment: { line4: 'MUNICIPAL TREASURER\'S OFFICE', line5: '' },
+  disco:      { line4: 'OFFICE OF THE MUNICIPAL MAYOR', line5: '' },
+};
+
+// ── Header HTML ───────────────────────────────────────────────────────────────
 function buildHeaderHTML(settings) {
+  const pfx = headerGroup + '_header';
+  const def = HEADER_DEFAULTS[headerGroup] || HEADER_DEFAULTS.permit;
   const getLogoUrl = (url) => {
     if (!url) return null;
     if (url.startsWith('http')) return url;
@@ -419,18 +430,18 @@ function buildHeaderHTML(settings) {
     return url;
   };
 
-  const logoLeftUrl  = getLogoUrl(settings.permit_header_logo_left?.value)  || '/dalaguete-logo.png';
-  const logoRightUrl = getLogoUrl(settings.permit_header_logo_right?.value) || null;
+  const logoLeftUrl  = getLogoUrl(settings[pfx + '_logo_left']?.value)  || '/dalaguete-logo.png';
+  const logoRightUrl = getLogoUrl(settings[pfx + '_logo_right']?.value) || null;
 
-  const hLogoH = Math.max(20, Math.min(120, parseFloat(settings.permit_header_logo_size?.value) || 50));
+  const hLogoH = Math.max(20, Math.min(120, parseFloat(settings[pfx + '_logo_size']?.value) || 50));
 
-  const hLine1 = settings.permit_header_line_1?.value !== undefined ? settings.permit_header_line_1.value : 'REPUBLIC OF THE PHILIPPINES';
-  const hLine2 = settings.permit_header_line_2?.value !== undefined ? settings.permit_header_line_2.value : 'MUNICIPALITY OF DALAGUETE';
-  const hLine3 = settings.permit_header_line_3?.value !== undefined ? settings.permit_header_line_3.value : 'PROVINCE OF CEBU';
-  const hLine4 = settings.permit_header_line_4?.value !== undefined ? settings.permit_header_line_4.value : 'OFFICE OF THE MUNICIPAL MAYOR';
-  const hLine5 = settings.permit_header_line_5?.value !== undefined ? settings.permit_header_line_5.value : 'Tel. # 520 4141 loc. 315';
+  const hLine1 = settings[pfx + '_line_1']?.value !== undefined ? settings[pfx + '_line_1'].value : 'REPUBLIC OF THE PHILIPPINES';
+  const hLine2 = settings[pfx + '_line_2']?.value !== undefined ? settings[pfx + '_line_2'].value : 'MUNICIPALITY OF DALAGUETE';
+  const hLine3 = settings[pfx + '_line_3']?.value !== undefined ? settings[pfx + '_line_3'].value : 'PROVINCE OF CEBU';
+  const hLine4 = settings[pfx + '_line_4']?.value !== undefined ? settings[pfx + '_line_4'].value : def.line4;
+  const hLine5 = settings[pfx + '_line_5']?.value !== undefined ? settings[pfx + '_line_5'].value : def.line5;
 
-  const hBasePx = Math.max(7, Math.min(20, parseFloat(settings.permit_header_font_size?.value) || 11));
+  const hBasePx = Math.max(7, Math.min(20, parseFloat(settings[pfx + '_font_size']?.value) || 11));
   const hLine4Px = Math.round(hBasePx * 1.45);
 
   const headerTextLines = `
