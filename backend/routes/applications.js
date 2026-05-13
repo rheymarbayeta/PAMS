@@ -296,16 +296,17 @@ router.get('/:id', async (req, res) => {
       [applicationId]
     );
 
-    // Get audit trail
+    // Get audit trail — check both application_id (FK column) and resource_id
+    // (used when application_id FK check was bypassed for non-app IDs)
     const [auditTrail] = await pool.execute(
       `SELECT 
         at.*,
         u.full_name as user_name
        FROM audit_trail at
        INNER JOIN users u ON at.user_id = u.user_id
-       WHERE at.application_id = ?
+       WHERE at.application_id = ? OR at.resource_id = ?
        ORDER BY at.timestamp DESC`,
-      [applicationId]
+      [applicationId, applicationId]
     );
 
     console.log('[Applications] ✅ Sending response with:');

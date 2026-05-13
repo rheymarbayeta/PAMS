@@ -2,14 +2,21 @@ const pool = require('../config/database');
 const { generateId, ID_PREFIXES } = require('./idGenerator');
 
 /**
- * Check if an ID is an application ID by checking its prefix
- * @param {string|null} id - The ID to check
- * @returns {boolean} - True if the ID is an application ID
+ * Check if an ID is a valid application ID by querying the DB
+ * @param {string|null} id
+ * @returns {Promise<boolean>}
  */
-function isApplicationId(id) {
+async function isApplicationId(id) {
   if (!id) return false;
-  // Application IDs start with 'app' prefix
-  return id.startsWith('app');
+  try {
+    const [rows] = await pool.execute(
+      'SELECT 1 FROM applications WHERE application_id = ? LIMIT 1',
+      [id]
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -22,10 +29,13 @@ function isApplicationId(id) {
 const logAction = async (userId, action, details, applicationId = null) => {
   try {
     const audit_log_id = generateId(ID_PREFIXES.AUDIT_LOG);
-    
-    // Only use the application_id if it's actually an application ID
-    // Otherwise, pass NULL to avoid foreign key constraint violations
-    const appIdForLogging = isApplicationId(applicationId) ? applicationId : null;
+
+    // Determine where to store the resource ID:
+    // application_id has a FK to applications — only store valid app IDs there.
+    // Everything else (citations, etc.) goes to resource_id.
+    const isApp = await isApplicationId(applicationId);
+    const appIdForLogging      = isApp ? applicationId : null;
+    const resourceIdForLogging = isApp ? null : applicationId;
     
     console.log('\n========== AUDIT LOGGER ==========');
     console.log('[AuditLogger] Input Parameters:');
@@ -44,8 +54,8 @@ const logAction = async (userId, action, details, applicationId = null) => {
     console.log('  - details:', details);
 
     await pool.execute(
-      'INSERT INTO audit_trail (log_id, user_id, application_id, action, details) VALUES (?, ?, ?, ?, ?)',
-      [audit_log_id, userId, appIdForLogging, action, details]
+      'INSERT INTO audit_trail (log_id, user_id, application_id, resource_id, action, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [audit_log_id, userId, appIdForLogging, resourceIdForLogging, action, details]
     );
 
     console.log('[AuditLogger] ✅ Action logged successfully');

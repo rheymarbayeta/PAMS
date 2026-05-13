@@ -327,8 +327,11 @@ async function loadReport() {
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
     // Fetch citations ──────────────────────────────────────────────────────
+    // NOTE: Do NOT pass paymentStatus to the API — the backend filters on the
+    // raw c.payment_status column, which differs from the computed payment_status
+    // returned in the response (computed from actual payment totals). The correct
+    // filter is applied client-side below on the computed value.
     let citationsUrl = `${apiBaseUrl}/api/citations?limit=10000`;
-    if (paymentStatus && paymentStatus !== 'all') citationsUrl += `&status=${encodeURIComponent(paymentStatus)}`;
     if (dateFrom) citationsUrl += `&dateFrom=${encodeURIComponent(dateFrom)}`;
     if (dateTo)   citationsUrl += `&dateTo=${encodeURIComponent(dateTo)}`;
 
@@ -475,11 +478,12 @@ function buildFooterHTML(currentUserName, issuedAt) {
 function tableHeaderRow() {
   return `
     <tr>
+      <th style="width:3%;">#</th>
       <th style="width:8%;">Ticket No.</th>
       <th style="width:6%;">Date</th>
-      <th style="width:12%;">Driver Name</th>
-      <th style="width:11%;">Address</th>
-      <th style="width:11%;">Violation Location</th>
+      <th style="width:11%;">Driver Name</th>
+      <th style="width:10%;">Address</th>
+      <th style="width:10%;">Violation Location</th>
       <th style="width:6%;">Violation Time</th>
       <th style="width:7%;">O.R. No.</th>
       <th style="width:27%;">Violations</th>
@@ -530,17 +534,18 @@ function measureRowHeights(citations) {
     tbl.style.width = '100%';
     const tbody = document.createElement('tbody');
 
-    citations.forEach(c => {
+    citations.forEach((c, idx) => {
       const violations = Array.isArray(c.violations)
         ? c.violations.join('; ')
         : (c.violations || 'N/A');
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <td class="center" style="width:3%">${idx + 1}</td>
         <td class="center" style="width:8%">${c.ticket_number  || 'N/A'}</td>
         <td class="center" style="width:6%">${formatDate(c.violation_date)}</td>
-        <td style="width:12%">${c.driver_name  || 'N/A'}</td>
-        <td style="width:11%">${c.driver_address || '—'}</td>
-        <td style="width:11%">${c.violation_location || '—'}</td>
+        <td style="width:11%">${c.driver_name  || 'N/A'}</td>
+        <td style="width:10%">${c.driver_address || '—'}</td>
+        <td style="width:10%">${c.violation_location || '—'}</td>
         <td class="center" style="width:6%">${c.violation_time || '—'}</td>
         <td class="center" style="width:7%">${c.receipt_number || '—'}</td>
         <td style="width:27%">${violations}</td>
@@ -672,10 +677,13 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
 
     // Build table rows
     let rowsHTML = '';
+    let rowNum = pages.slice(0, pageIdx).reduce((sum, p) => sum + p.rows.length, 0);
     page.rows.forEach(c => {
+      rowNum++;
       const violations = Array.isArray(c.violations) ? c.violations.join('; ') : (c.violations || 'N/A');
       rowsHTML += `
         <tr>
+          <td class="center">${rowNum}</td>
           <td class="center">${c.ticket_number || 'N/A'}</td>
           <td class="center">${formatDate(c.violation_date)}</td>
           <td>${c.driver_name || 'N/A'}</td>
@@ -695,7 +703,7 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
       summaryHTML = `
         <tfoot>
           <tr>
-            <td colspan="8" style="text-align:right;font-weight:bold;">TOTAL AMOUNT:</td>
+            <td colspan="9" style="text-align:right;font-weight:bold;">TOTAL AMOUNT:</td>
             <td class="right" style="font-weight:bold;">${formatCurrency(totalFines)}</td>
           </tr>
         </tfoot>

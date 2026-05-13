@@ -689,7 +689,7 @@ router.get('/:id/audit-trail', async (req, res) => {
         u.username as user_email
       FROM audit_trail a
       LEFT JOIN users u ON a.user_id = u.user_id
-      WHERE a.application_id = ?
+      WHERE a.resource_id = ?
       ORDER BY a.timestamp DESC`,
       [citationId]
     );
