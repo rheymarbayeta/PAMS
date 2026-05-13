@@ -53,12 +53,12 @@ body { background: #f5f5f5; font-family: 'Cambria', 'Georgia', serif; }
 }
 .enf-box .erow { display: flex; gap: 5px; }
 .enf-box .elbl { font-weight: bold; min-width: 80px; }
-.citation-table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+.citation-table { width: 100%; border-collapse: collapse; font-size: 9.5px; border: 1px solid #333; }
 .citation-table th {
   border: 1px solid #333; padding: 5px 6px;
   background: #f0f0f0; font-weight: bold; text-align: center; font-size: 10px;
 }
-.citation-table td { border: 1px solid #666; padding: 4px 6px; vertical-align: top; }
+.citation-table td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }
 .citation-table td.c { text-align: center; }
 .citation-table td.r { text-align: right; }
 .citation-table tfoot td { border: 1px solid #333; padding: 5px 6px; font-weight: bold; background: #f0f0f0; }
@@ -331,11 +331,11 @@ function renderReport(enforcer, citations, statistics, settings, userName) {
     var topHTML  = isFirstP ? headerHTML + page1TopHTML : headerHTML + contLabelHTML;
     var bodyRows = rows.length > 0
       ? rows.join('')
-      : '<tr><td colspan="7" style="text-align:center;padding:16px;color:#888;">No citations found.</td></tr>';
+      : '<tr><td colspan="9" style="text-align:center;padding:16px;color:#888;">No citations found.</td></tr>';
 
     pagesHTML +=
       '<div class="page">' +
-        '<div style="height:' + CONT_H + 'px;overflow:hidden;">' +
+        '<div style="height:' + (CONT_H - 2) + 'px;overflow:hidden;">' +
           topHTML +
           '<table class="citation-table">' +
             THEAD_HTML + '<tbody>' + bodyRows + '</tbody>' + (isLastP ? tfootHTML : '') +
