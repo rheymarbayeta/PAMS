@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
 import type { Layer, PathOptions } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { BarangayCount } from './BarangayMap';
@@ -18,6 +18,20 @@ function getColor(count: number, max: number): string {
   if (t < 0.6) return '#16a34a';
   if (t < 0.8) return '#15803d';
   return '#14532d';
+}
+
+function FitBounds({ data }: { data: any }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!data) return;
+    try {
+      const L = require('leaflet');
+      const layer = L.geoJSON(data);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [12, 12] });
+    } catch { /* ignore */ }
+  }, [data, map]);
+  return null;
 }
 
 export default function BarangayMapInner({ counts }: Props) {
@@ -156,7 +170,7 @@ export default function BarangayMapInner({ counts }: Props) {
       `}</style>
       <MapContainer
         center={[9.76, 123.52]}
-        zoom={12}
+        zoom={11}
         style={{ height: '100%', width: '100%', minHeight: 280 }}
         scrollWheelZoom={false}
         attributionControl={false}
@@ -165,6 +179,7 @@ export default function BarangayMapInner({ counts }: Props) {
           url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
           attribution="&copy; OpenStreetMap contributors &copy; CARTO"
         />
+        {geoData && <FitBounds data={geoData} />}
         {geoData && (
           <GeoJSON
             key={geoData.features?.length}

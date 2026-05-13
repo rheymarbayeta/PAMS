@@ -114,14 +114,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [permitCategories, setPermitCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [cockfightPermittedDates, setCockfightPermittedDates] = useState<Map<string, any[]>>(new Map());
-  const [dayApplications, setDayApplications] = useState<any[]>([]);
-  const [discoCurrentMonth, setDiscoCurrentMonth] = useState(new Date());
-  const [discoSelectedDate, setDiscoSelectedDate] = useState<string | null>(null);
-  const [discoPermittedDates, setDiscoPermittedDates] = useState<Map<string, any[]>>(new Map());
-  const [discoDayApplications, setDiscoDayApplications] = useState<any[]>([]);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<string | null>(null);
+  // Map<dateKey, {type: string, app: any}[]>
+  const [allPermittedDates, setAllPermittedDates] = useState<Map<string, {type: string; app: any}[]>>(new Map());
+  const [calendarDayApps, setCalendarDayApps] = useState<{type: string; app: any}[]>([]);
 
   const userRoles: string[] = user?.roles || (user?.role_name ? [user.role_name] : []);
   const isRRManager = userRoles.includes('Rights and Rentals Manager');
@@ -149,11 +146,7 @@ export default function DashboardPage() {
   }, [selectedCategory]);
 
   useEffect(() => {
-    if (showCockfightCalendar) fetchCockfightPermittedDates();
-  }, [showCockfightCalendar]);
-
-  useEffect(() => {
-    if (showCockfightCalendar) fetchDiscoPermittedDates();
+    if (showCockfightCalendar) fetchAllPermittedDates();
   }, [showCockfightCalendar]);
 
   const fetchPermitCategories = async () => {
@@ -178,83 +171,91 @@ export default function DashboardPage() {
     }
   };
 
-  // Parses Disco "Date" param values into MM-DD-YYYY keys.
-  // Handles: "May 2, 2026" / "April 30, 2026" and "4, 9, 13 May 2026" / "15, 16 May 2026"
-  const parseDiscoDateParam = (dateStr: string): string[] => {
+  // Color palette per permit type attribute_name
+  const PERMIT_TYPE_COLORS: Record<string, string> = {
+    'SPECIAL COCKFIGHT': '#10b981', // emerald
+    'DISCO':             '#8b5cf6', // purple
+    'CARAVAN':           '#0ea5e9', // sky
+    'MOTORCADE':         '#f59e0b', // amber
+    'PERYA':             '#f43f5e', // rose
+  };
+  const PERMIT_TYPE_LABEL: Record<string, string> = {
+    'SPECIAL COCKFIGHT': 'Special Cockfight',
+    'DISCO':             'Disco',
+    'CARAVAN':           'Caravan',
+    'MOTORCADE':         'Motorcade',
+    'PERYA':             'Perya',
+  };
+  const getPermitColor = (type: string) => PERMIT_TYPE_COLORS[type.trim().toUpperCase()] ?? '#6366f1';
+
+  // Parses text date values like "May 2, 2026", "4, 9, 13 May 2026", "6, 7, 8, 9, 10 May 2026"
+  const parseDateParam = (dateStr: string): string[] => {
     const results: string[] = [];
     const str = dateStr.trim();
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     const startsWithMonth = monthNames.some(m => str.startsWith(m));
     if (startsWithMonth) {
-      // Single date like "May 2, 2026"
       const d = new Date(str);
       if (!isNaN(d.getTime())) results.push(formatDateKey(d.getDate(), d.getMonth(), d.getFullYear()));
     } else {
-      // Multiple days at start: "4, 9, 13 May 2026"
       const multiMatch = str.match(/^([\d,\s]+)\s+([A-Za-z]+)\s+(\d{4})$/);
       if (multiMatch) {
-        const days = multiMatch[1].split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+        const days = multiMatch[1].split(',').map((d: string) => parseInt(d.trim())).filter((d: number) => !isNaN(d));
         const month = monthNames.findIndex(m => m === multiMatch[2]);
         const year = parseInt(multiMatch[3]);
-        if (month >= 0 && year) days.forEach(day => results.push(formatDateKey(day, month, year)));
+        if (month >= 0 && year) days.forEach((day: number) => results.push(formatDateKey(day, month, year)));
       }
     }
     return results;
   };
 
-  const fetchDiscoPermittedDates = async () => {
+  const fetchAllPermittedDates = async () => {
     try {
       const response = await api.get('/api/applications?limit=1000');
-      const dateMap = new Map<string, any[]>();
-      const discoApps = response.data.filter((app: any) =>
-        app.attribute_name?.trim().toUpperCase() === 'DISCO' ||
-        app.permit_type?.toLowerCase().includes('- disco')
-      );
-      for (const app of discoApps) {
-        try {
-          const detailResponse = await api.get(`/api/applications/${app.application_id}`);
-          const dateParam = detailResponse.data.parameters?.find((p: any) => p.param_name === 'Date');
-          if (dateParam?.param_value) {
-            const keys = parseDiscoDateParam(dateParam.param_value);
-            keys.forEach((key: string) => {
-              if (!dateMap.has(key)) dateMap.set(key, []);
-              dateMap.get(key)!.push(detailResponse.data);
-            });
-          }
-        } catch { /* ignore detail errors */ }
-      }
-      setDiscoPermittedDates(dateMap);
-    } catch (error) {
-      console.error('Error fetching disco dates:', error);
-    }
-  };
+      const allApps = response.data;
+      const dateMap = new Map<string, {type: string; app: any}[]>();
 
-  const fetchCockfightPermittedDates = async () => {
-    try {
-      const response = await api.get('/api/applications?limit=1000');
-      const dateMap = new Map<string, any[]>();
-      const cockfightApps = response.data.filter((app: any) =>
-        app.attribute_name?.trim().toUpperCase() === 'SPECIAL COCKFIGHT' ||
-        app.permit_type?.includes('Special Cockfight')
-      );
-      for (const app of cockfightApps) {
+      const addToMap = (dateKey: string, type: string, app: any) => {
+        if (!dateMap.has(dateKey)) dateMap.set(dateKey, []);
+        dateMap.get(dateKey)!.push({ type, app });
+      };
+
+      // Types that use JSON permitted_dates array (MM-DD-YYYY)
+      const jsonDateTypes = new Set(['SPECIAL COCKFIGHT']);
+      // Types that use a "Date" text param
+      const textDateTypes = new Set(['DISCO', 'CARAVAN', 'MOTORCADE', 'PERYA']);
+
+      const relevantApps = allApps.filter((app: any) => {
+        const attr = (app.attribute_name || '').trim().toUpperCase();
+        return jsonDateTypes.has(attr) || textDateTypes.has(attr);
+      });
+
+      await Promise.all(relevantApps.map(async (app: any) => {
         try {
-          const detailResponse = await api.get(`/api/applications/${app.application_id}`);
-          const permittedDatesParam = detailResponse.data.parameters?.find((p: any) => p.param_name === 'permitted_dates');
-          if (permittedDatesParam?.param_value) {
-            try {
-              const dates = JSON.parse(permittedDatesParam.param_value);
-              dates.forEach((dateStr: string) => {
-                if (!dateMap.has(dateStr)) dateMap.set(dateStr, []);
-                dateMap.get(dateStr)!.push(detailResponse.data);
-              });
-            } catch (e) { /* ignore parse errors */ }
+          const detailResp = await api.get(`/api/applications/${app.application_id}`);
+          const detail = detailResp.data;
+          const attr = (app.attribute_name || '').trim().toUpperCase();
+
+          if (jsonDateTypes.has(attr)) {
+            const param = detail.parameters?.find((p: any) => p.param_name === 'permitted_dates');
+            if (param?.param_value) {
+              try {
+                const dates: string[] = JSON.parse(param.param_value);
+                dates.forEach((dateStr: string) => addToMap(dateStr, attr, detail));
+              } catch { /* ignore */ }
+            }
+          } else if (textDateTypes.has(attr)) {
+            const param = detail.parameters?.find((p: any) => p.param_name === 'Date');
+            if (param?.param_value) {
+              parseDateParam(param.param_value).forEach((key: string) => addToMap(key, attr, detail));
+            }
           }
         } catch { /* ignore detail errors */ }
-      }
-      setCockfightPermittedDates(dateMap);
+      }));
+
+      setAllPermittedDates(dateMap);
     } catch (error) {
-      console.error('Error fetching cockfight dates:', error);
+      console.error('Error fetching permitted dates:', error);
     }
   };
 
@@ -276,20 +277,12 @@ export default function DashboardPage() {
   const formatDateKey = (day: number, month: number, year: number) =>
     `${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}-${year}`;
 
-  const handlePrevMonth = () => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)); setSelectedDate(null); setDayApplications([]); };
-  const handleNextMonth = () => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)); setSelectedDate(null); setDayApplications([]); };
+  const handlePrevMonth = () => { setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1)); setCalendarSelectedDate(null); setCalendarDayApps([]); };
+  const handleNextMonth = () => { setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1)); setCalendarSelectedDate(null); setCalendarDayApps([]); };
   const handleDayClick = (day: number) => {
-    const dateKey = formatDateKey(day, currentMonth.getMonth(), currentMonth.getFullYear());
-    setSelectedDate(dateKey);
-    setDayApplications(cockfightPermittedDates.get(dateKey) || []);
-  };
-
-  const handleDiscoPrevMonth = () => { setDiscoCurrentMonth(new Date(discoCurrentMonth.getFullYear(), discoCurrentMonth.getMonth() - 1)); setDiscoSelectedDate(null); setDiscoDayApplications([]); };
-  const handleDiscoNextMonth = () => { setDiscoCurrentMonth(new Date(discoCurrentMonth.getFullYear(), discoCurrentMonth.getMonth() + 1)); setDiscoSelectedDate(null); setDiscoDayApplications([]); };
-  const handleDiscoDayClick = (day: number) => {
-    const dateKey = formatDateKey(day, discoCurrentMonth.getMonth(), discoCurrentMonth.getFullYear());
-    setDiscoSelectedDate(dateKey);
-    setDiscoDayApplications(discoPermittedDates.get(dateKey) || []);
+    const dateKey = formatDateKey(day, calendarMonth.getMonth(), calendarMonth.getFullYear());
+    setCalendarSelectedDate(dateKey);
+    setCalendarDayApps(allPermittedDates.get(dateKey) || []);
   };
 
   if (loading || !data || authLoading) {
@@ -371,56 +364,78 @@ export default function DashboardPage() {
       {showCalendar && (
         <>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          {/* Unified Permitted Dates Calendar */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-slate-700">Special Cockfight Permitted Dates</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-700">Permitted Dates</h3>
               <div className="flex items-center gap-2">
                 <button onClick={handlePrevMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"><svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
-                <span className="text-sm font-medium text-slate-700 min-w-[140px] text-center">{currentMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}</span>
+                <span className="text-sm font-medium text-slate-700 min-w-[140px] text-center">{calendarMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}</span>
                 <button onClick={handleNextMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"><svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
               </div>
+            </div>
+            {/* Legend */}
+            <div className="flex flex-wrap gap-x-3 gap-y-1 mb-3">
+              {Object.entries(PERMIT_TYPE_LABEL).map(([key, label]) => (
+                <div key={key} className="flex items-center gap-1">
+                  <div className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PERMIT_TYPE_COLORS[key] }} />
+                  <span className="text-xs text-slate-500">{label}</span>
+                </div>
+              ))}
             </div>
             <div className="mb-4">
               <div className="grid grid-cols-7 gap-1 mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                  <div key={day} className="text-center text-xs font-semibold text-slate-500 py-2">{day}</div>
+                  <div key={day} className="text-center text-xs font-semibold text-slate-500 py-1">{day}</div>
                 ))}
               </div>
               <div className="grid grid-cols-7 gap-1">
-                {Array.from({ length: getDaysInMonth(currentMonth) + getFirstDayOfMonth(currentMonth) }).map((_, index) => {
-                  const day = index - getFirstDayOfMonth(currentMonth) + 1;
-                  if (day < 1 || day > getDaysInMonth(currentMonth)) return <div key={`empty-${index}`} className="bg-slate-50 border border-slate-100 h-16 rounded-lg" />;
-                  const dateKey = formatDateKey(day, currentMonth.getMonth(), currentMonth.getFullYear());
-                  const hasApplications = cockfightPermittedDates.has(dateKey);
-                  const count = cockfightPermittedDates.get(dateKey)?.length || 0;
-                  const isSelected = selectedDate === dateKey;
+                {Array.from({ length: getDaysInMonth(calendarMonth) + getFirstDayOfMonth(calendarMonth) }).map((_, index) => {
+                  const day = index - getFirstDayOfMonth(calendarMonth) + 1;
+                  if (day < 1 || day > getDaysInMonth(calendarMonth)) return <div key={`empty-${index}`} className="bg-slate-50 border border-slate-100 h-14 rounded-lg" />;
+                  const dateKey = formatDateKey(day, calendarMonth.getMonth(), calendarMonth.getFullYear());
+                  const entries = allPermittedDates.get(dateKey) || [];
+                  const uniqueTypes = Array.from(new Set(entries.map(e => e.type.trim().toUpperCase())));
+                  const hasEvents = uniqueTypes.length > 0;
+                  const isSelected = calendarSelectedDate === dateKey;
                   return (
-                    <div key={day} onClick={() => handleDayClick(day)} className={`border rounded-lg p-2 h-16 cursor-pointer transition-all flex flex-col justify-between ${hasApplications ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100' : 'border-slate-200 bg-white hover:bg-slate-50'} ${isSelected ? 'ring-2 ring-teal-500 ring-inset' : ''}`}>
-                      <div className="text-sm font-semibold text-slate-700">{day}</div>
-                      {hasApplications && <div className="text-xs font-medium text-emerald-600">{count} permitted</div>}
+                    <div key={day} onClick={() => handleDayClick(day)} className={`border rounded-lg p-1.5 h-14 cursor-pointer transition-all flex flex-col justify-between ${hasEvents ? 'border-slate-300 bg-slate-50 hover:bg-slate-100' : 'border-slate-200 bg-white hover:bg-slate-50'} ${isSelected ? 'ring-2 ring-slate-500 ring-inset' : ''}`}>
+                      <div className="text-xs font-semibold text-slate-700">{day}</div>
+                      {hasEvents && (
+                        <div className="flex flex-wrap gap-0.5">
+                          {uniqueTypes.map((type) => (
+                            <div key={type} className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: getPermitColor(type) }} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
-            {selectedDate && (
-              <div className="border-t border-slate-200 pt-4">
-                <h4 className="text-xs font-semibold text-slate-700 mb-3">Applications for {new Date(selectedDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</h4>
-                {dayApplications.length > 0 ? (
-                  <div className="space-y-2 max-h-56 overflow-y-auto">
-                    {dayApplications.map((app) => {
-                      const sbResolution = app.parameters?.find((p: any) => p.param_name === 'SB Resolution No.')?.param_value || 'N/A';
-                      const addressParts = ['Sitio', 'Barangay', 'Municipality', 'Province'].map(k => app.parameters?.find((p: any) => p.param_name === k)?.param_value || '').filter(Boolean);
+            {calendarSelectedDate && (
+              <div className="border-t border-slate-200 pt-3">
+                <h4 className="text-xs font-semibold text-slate-700 mb-2">
+                  {(() => { const [m,d,y] = calendarSelectedDate.split('-'); return new Date(+y,+m-1,+d).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}); })()}
+                </h4>
+                {calendarDayApps.length > 0 ? (
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                    {calendarDayApps.map((entry, idx) => {
+                      const color = getPermitColor(entry.type);
+                      const app = entry.app;
+                      const addressParts = ['Sitio','Street/Sitio','Barangay','Municipality','Province'].map((k: string) => app.parameters?.find((p: any) => p.param_name === k)?.param_value || '').filter(Boolean);
+                      const location = app.parameters?.find((p: any) => p.param_name === 'Location')?.param_value || addressParts.join(', ') || 'N/A';
                       return (
-                        <div key={app.application_id} onClick={() => router.push(`/applications/${app.application_id}`)} className="p-2.5 bg-slate-50 rounded border border-slate-200 hover:border-teal-300 hover:bg-teal-50 cursor-pointer transition-all text-xs space-y-1">
-                          <p className="text-slate-700"><span className="font-medium">Permit No.:</span> <span className="font-semibold">{app.permit_number || 'Pending'}</span><span className="ml-4 font-medium">SB Resolution No.:</span> <span className="font-semibold">{sbResolution}</span></p>
-                          <p className="text-slate-700"><span className="font-medium">Permitee:</span> <span className="font-semibold">{app.entity_name}</span><span className="ml-4 font-medium">Address:</span> <span className="font-semibold">{addressParts.join(', ') || 'N/A'}</span></p>
+                        <div key={idx} onClick={() => router.push(`/applications/${app.application_id}`)} className="p-2 bg-slate-50 rounded border border-slate-200 hover:bg-slate-100 cursor-pointer transition-all text-xs space-y-0.5" style={{ borderLeftWidth: 3, borderLeftColor: color }}>
+                          <p className="font-semibold text-slate-700">{PERMIT_TYPE_LABEL[entry.type.trim().toUpperCase()] ?? entry.type}</p>
+                          <p className="text-slate-600"><span className="font-medium">Permit No.:</span> {app.permit_number || 'Pending'} &nbsp;·&nbsp; <span className="font-medium">Permittee:</span> {app.entity_name}</p>
+                          <p className="text-slate-500 truncate">{location}</p>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400">No applications for this date</p>
+                  <p className="text-xs text-slate-400">No permitted events on this date</p>
                 )}
               </div>
             )}
@@ -440,67 +455,6 @@ export default function DashboardPage() {
               <span className="text-xs text-slate-500">More</span>
             </div>
           </div>
-        </div>
-
-        {/* Disco Calendar */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-purple-50 flex items-center justify-center"><svg className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg></div>
-              <h3 className="text-sm font-semibold text-slate-700">Disco Permitted Dates</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={handleDiscoPrevMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"><svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
-              <span className="text-sm font-medium text-slate-700 min-w-[140px] text-center">{discoCurrentMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}</span>
-              <button onClick={handleDiscoNextMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"><svg className="h-5 w-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
-            </div>
-          </div>
-          <div className="mb-4">
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <div key={day} className="text-center text-xs font-semibold text-slate-500 py-2">{day}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {Array.from({ length: getDaysInMonth(discoCurrentMonth) + getFirstDayOfMonth(discoCurrentMonth) }).map((_, index) => {
-                const day = index - getFirstDayOfMonth(discoCurrentMonth) + 1;
-                if (day < 1 || day > getDaysInMonth(discoCurrentMonth)) return <div key={`empty-${index}`} className="bg-slate-50 border border-slate-100 h-16 rounded-lg" />;
-                const dateKey = formatDateKey(day, discoCurrentMonth.getMonth(), discoCurrentMonth.getFullYear());
-                const hasApplications = discoPermittedDates.has(dateKey);
-                const count = discoPermittedDates.get(dateKey)?.length || 0;
-                const isSelected = discoSelectedDate === dateKey;
-                return (
-                  <div key={day} onClick={() => handleDiscoDayClick(day)} className={`border rounded-lg p-2 h-16 cursor-pointer transition-all flex flex-col justify-between ${hasApplications ? 'border-purple-300 bg-purple-50 hover:bg-purple-100' : 'border-slate-200 bg-white hover:bg-slate-50'} ${isSelected ? 'ring-2 ring-purple-500 ring-inset' : ''}`}>
-                    <div className="text-sm font-semibold text-slate-700">{day}</div>
-                    {hasApplications && <div className="text-xs font-medium text-purple-600">{count} permitted</div>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          {discoSelectedDate && (
-            <div className="border-t border-slate-200 pt-4">
-              <h4 className="text-xs font-semibold text-slate-700 mb-3">Applications for {new Date(discoSelectedDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</h4>
-              {discoDayApplications.length > 0 ? (
-                <div className="space-y-2 max-h-56 overflow-y-auto">
-                  {discoDayApplications.map((app) => {
-                    const dateParam = app.parameters?.find((p: any) => p.param_name === 'Date')?.param_value || 'N/A';
-                    const location = app.parameters?.find((p: any) => p.param_name === 'Location')?.param_value || '';
-                    const addressParts = ['Street/Sitio', 'Barangay', 'Municipality', 'Province'].map(k => app.parameters?.find((p: any) => p.param_name === k)?.param_value || '').filter(Boolean);
-                    const displayAddress = location || addressParts.join(', ') || 'N/A';
-                    return (
-                      <div key={app.application_id} onClick={() => router.push(`/applications/${app.application_id}`)} className="p-2.5 bg-slate-50 rounded border border-slate-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-all text-xs space-y-1">
-                        <p className="text-slate-700"><span className="font-medium">Permit No.:</span> <span className="font-semibold">{app.permit_number || 'Pending'}</span><span className="ml-4 font-medium">Date:</span> <span className="font-semibold">{dateParam}</span></p>
-                        <p className="text-slate-700"><span className="font-medium">Permitee:</span> <span className="font-semibold">{app.entity_name}</span><span className="ml-4 font-medium">Address:</span> <span className="font-semibold">{displayAddress}</span></p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400">No applications for this date</p>
-              )}
-            </div>
-          )}
         </div>
         </>
       )}
