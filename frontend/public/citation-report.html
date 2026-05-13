@@ -18,7 +18,7 @@
     font-family: 'Cambria', 'Noto Serif', 'Georgia', serif;
   }
   #report-container {
-    max-width: 8.5in;
+    max-width: 13in;
     margin: 20px auto;
     background: white;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -100,10 +100,10 @@
     display: block;
   }
 
-  /* Page container — 8.5 × 13 in legal */
+  /* Page container — 13 × 8.5 in legal landscape */
   .page {
-    width: 8.5in;
-    height: 13in;
+    width: 13in;
+    height: 8.5in;
     padding: 0.5in;
     padding-bottom: 0.75in;
     margin: 0 auto 20px auto;
@@ -239,7 +239,7 @@
   }
 
   @page {
-    size: 8.5in 13in portrait;
+    size: 13in 8.5in landscape;
     margin: 0;
   }
   @media print {
@@ -259,8 +259,8 @@
     .page {
       box-shadow: none;
       margin: 0;
-      width: 8.5in;
-      height: 13in;
+      width: 13in;
+      height: 8.5in;
       page-break-after: always;
       overflow: hidden;
     }
@@ -475,19 +475,22 @@ function buildFooterHTML(currentUserName, issuedAt) {
 function tableHeaderRow() {
   return `
     <tr>
-      <th style="width:13%;">Ticket No.</th>
-      <th style="width:10%;">Date</th>
-      <th style="width:22%;">Payor</th>
-      <th style="width:13%;">O.R. No.</th>
-      <th style="width:30%;">Violations</th>
+      <th style="width:8%;">Ticket No.</th>
+      <th style="width:6%;">Date</th>
+      <th style="width:12%;">Driver Name</th>
+      <th style="width:11%;">Address</th>
+      <th style="width:11%;">Violation Location</th>
+      <th style="width:6%;">Violation Time</th>
+      <th style="width:7%;">O.R. No.</th>
+      <th style="width:27%;">Violations</th>
       <th style="width:12%;">Amount</th>
     </tr>
   `;
 }
 
 // ── Page geometry constants (px at 96 DPI) ───────────────────────────────────
-// Page 8.5 × 13 in  |  padding: 0.5 in top, 0.75 in bottom
-const USABLE_H    = (13 - 0.5 - 0.75) * 96; // 1128 px — between top/bottom padding
+// Page 13 × 8.5 in landscape  |  padding: 0.5 in top, 0.75 in bottom
+const USABLE_H    = (8.5 - 0.5 - 0.75) * 96; // 696 px — between top/bottom padding
 const FIRST_HDR_H = 172;  // page-1 overhead: logo block + title/date + dividers
 const CONT_HDR_H  = 66;   // continuation-page overhead: header block
 const THEAD_H     = 28;   // <thead> row
@@ -518,7 +521,7 @@ function measureRowHeights(citations) {
     // Position off-screen but fully rendered so offsetHeight is accurate.
     wrap.style.cssText = [
       'position:absolute', 'top:-99999px', 'left:0',
-      'width:720px',   // 8.5 in − 0.5 in left pad − 0.5 in right pad = 7.5 in = 720 px
+      'width:1152px',  // 13 in − 0.5 in left pad − 0.5 in right pad = 12 in = 1152 px
       'visibility:hidden', 'pointer-events:none', 'overflow:hidden'
     ].join(';');
 
@@ -533,11 +536,14 @@ function measureRowHeights(citations) {
         : (c.violations || 'N/A');
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="center" style="width:13%">${c.ticket_number  || 'N/A'}</td>
-        <td class="center" style="width:10%">${formatDate(c.violation_date)}</td>
-        <td style="width:22%">${c.driver_name  || 'N/A'}</td>
-        <td class="center" style="width:13%">${c.receipt_number || '—'}</td>
-        <td style="width:30%">${violations}</td>
+        <td class="center" style="width:8%">${c.ticket_number  || 'N/A'}</td>
+        <td class="center" style="width:6%">${formatDate(c.violation_date)}</td>
+        <td style="width:12%">${c.driver_name  || 'N/A'}</td>
+        <td style="width:11%">${c.driver_address || '—'}</td>
+        <td style="width:11%">${c.violation_location || '—'}</td>
+        <td class="center" style="width:6%">${c.violation_time || '—'}</td>
+        <td class="center" style="width:7%">${c.receipt_number || '—'}</td>
+        <td style="width:27%">${violations}</td>
         <td class="right"  style="width:12%">${formatCurrency(c.fine_amount)}</td>
       `;
       tbody.appendChild(tr);
@@ -673,6 +679,9 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
           <td class="center">${c.ticket_number || 'N/A'}</td>
           <td class="center">${formatDate(c.violation_date)}</td>
           <td>${c.driver_name || 'N/A'}</td>
+          <td>${c.driver_address || '—'}</td>
+          <td>${c.violation_location || '—'}</td>
+          <td class="center">${c.violation_time || '—'}</td>
           <td class="center">${c.receipt_number || '—'}</td>
           <td>${violations}</td>
           <td class="right">${formatCurrency(c.fine_amount)}</td>
@@ -686,7 +695,7 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
       summaryHTML = `
         <tfoot>
           <tr>
-            <td colspan="5" style="text-align:right;font-weight:bold;">TOTAL AMOUNT:</td>
+            <td colspan="8" style="text-align:right;font-weight:bold;">TOTAL AMOUNT:</td>
             <td class="right" style="font-weight:bold;">${formatCurrency(totalFines)}</td>
           </tr>
         </tfoot>
@@ -818,7 +827,7 @@ ${reportContent.innerHTML}
         'Content-Type': 'application/json',
         ...(authToken && { 'Authorization': `Bearer ${authToken}` })
       },
-      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal' })
+      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal', landscape: true })
     });
 
     if (!response.ok) {

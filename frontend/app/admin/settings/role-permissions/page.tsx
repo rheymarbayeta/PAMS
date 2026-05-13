@@ -52,6 +52,11 @@ const ROLE_PERMISSIONS_MAP: Record<string, { label: string; permissions: string[
     permissions: ['citations', 'create_citations', 'view_citations'],
     description: 'Issue and manage citations',
   },
+  'Citation Manager': {
+    label: 'Citation Manager',
+    permissions: ['citations', 'create_citations', 'view_citations', 'delete_citations'],
+    description: 'Full citation management including deletion',
+  },
   'Application Creator': {
     label: 'Application Creator',
     permissions: ['applications', 'create_applications'],
@@ -69,6 +74,7 @@ const AVAILABLE_PERMISSIONS: Permission[] = [
   { permission_id: 'citations', permission_name: 'Manage Citations', category: 'Citations', description: 'View and manage citations' },
   { permission_id: 'create_citations', permission_name: 'Create Citations', category: 'Citations', description: 'Issue new citations' },
   { permission_id: 'view_citations', permission_name: 'View Citations', category: 'Citations', description: 'View citations' },
+  { permission_id: 'delete_citations', permission_name: 'Delete Citations', category: 'Citations', description: 'Delete existing citations' },
   { permission_id: 'rights_rentals_view', permission_name: 'View Rights & Rentals', category: 'Rights & Rentals', description: 'View lease contracts and payment history' },
   { permission_id: 'rights_rentals_record_payment', permission_name: 'Record R&R Payments', category: 'Rights & Rentals', description: 'Record payments for rights and rentals' },
   { permission_id: 'rights_rentals_view_reports', permission_name: 'View R&R Reports', category: 'Rights & Rentals', description: 'View rights and rentals reports' },
@@ -82,6 +88,7 @@ export default function RolePermissionsPage() {
   const { hasRole } = useAuth();
   const [roles, setRoles] = useState<RolePermission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [editingRole, setEditingRole] = useState<string | null>(null);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
@@ -89,14 +96,22 @@ export default function RolePermissionsPage() {
     loadRoles();
   }, []);
 
-  const loadRoles = () => {
+  const loadRoles = async () => {
     try {
-      const roleList: RolePermission[] = Object.entries(ROLE_PERMISSIONS_MAP).map(([roleId, config]) => ({
-        role_id: roleId,
-        role_name: config.label,
-        permissions: config.permissions,
-        description: config.description,
-      }));
+      setLoading(true);
+      const response = await api.get('/api/roles');
+      const data: Array<{ role_id: string; role_name: string; permissions: string[] }> = response.data;
+
+      // Merge with local label/description metadata
+      const roleList: RolePermission[] = data.map((r) => {
+        const meta = ROLE_PERMISSIONS_MAP[r.role_name] || ROLE_PERMISSIONS_MAP[r.role_id];
+        return {
+          role_id: r.role_id,
+          role_name: meta?.label || r.role_name,
+          permissions: r.permissions || meta?.permissions || [],
+          description: meta?.description || '',
+        };
+      });
       setRoles(roleList);
     } catch (error) {
       console.error('Error loading roles:', error);
@@ -121,8 +136,8 @@ export default function RolePermissionsPage() {
 
   const handleSavePermissions = async () => {
     try {
-      // In a real implementation, this would save to the backend
-      // For now, we'll just update the local state
+      setSaving(true);
+      await api.put(`/api/roles/${editingRole}/permissions`, { permissions: selectedPermissions });
       setRoles(
         roles.map((role) =>
           role.role_id === editingRole
@@ -135,6 +150,8 @@ export default function RolePermissionsPage() {
     } catch (error) {
       console.error('Error saving permissions:', error);
       showAlert('Error saving role permissions', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -243,9 +260,10 @@ export default function RolePermissionsPage() {
                       <div className="flex gap-3 pt-4 border-t border-slate-100">
                         <button
                           onClick={handleSavePermissions}
-                          className="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors"
+                          disabled={saving}
+                          className="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-60 rounded-lg transition-colors"
                         >
-                          Save Changes
+                          {saving ? 'Saving...' : 'Save Changes'}
                         </button>
                         <button
                           onClick={handleCancel}

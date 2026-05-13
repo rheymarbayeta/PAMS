@@ -345,6 +345,7 @@ export default function CitationDetailsPage() {
   };
 
   const isAdmin = hasRole(['Admin', 'SuperAdmin']);
+  const canDelete = hasRole(['Admin', 'SuperAdmin', 'Citation Manager']);
 
   if (loading) {
     return (
@@ -484,7 +485,7 @@ export default function CitationDetailsPage() {
                 >
                   Print
                 </button>
-                {isAdmin && !isEditing && (
+                {canDelete && !isEditing && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     className="px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"

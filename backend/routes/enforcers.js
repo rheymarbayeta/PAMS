@@ -17,32 +17,32 @@ router.get('/', async (req, res) => {
   try {
     const { status, department, station, search, page = 1, limit = 20 } = req.query;
 
-    let query = 'SELECT * FROM enforcers WHERE 1=1';
+    let baseWhere = 'WHERE 1=1';
     const params = [];
 
     if (status) {
-      query += ' AND status = ?';
+      baseWhere += ' AND e.status = ?';
       params.push(status);
     }
 
     if (department) {
-      query += ' AND department = ?';
+      baseWhere += ' AND e.department = ?';
       params.push(department);
     }
 
     if (station) {
-      query += ' AND station = ?';
+      baseWhere += ' AND e.station = ?';
       params.push(station);
     }
 
     if (search) {
-      query += ' AND (full_name LIKE ? OR badge_number LIKE ? OR email LIKE ?)';
+      baseWhere += ' AND (e.full_name LIKE ? OR e.badge_number LIKE ? OR e.email LIKE ?)';
       const searchPattern = `%${search}%`;
       params.push(searchPattern, searchPattern, searchPattern);
     }
 
     // Count total
-    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total');
+    const countQuery = `SELECT COUNT(*) as total FROM enforcers e ${baseWhere}`;
     const [countResult] = await pool.execute(countQuery, params);
     const total = countResult[0]?.total || 0;
 
@@ -51,8 +51,23 @@ router.get('/', async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
     const offset = (pageNum - 1) * limitNum;
 
-    // Add order and limit (use string concatenation for LIMIT values to avoid prepared statement issues)
-    query += ' ORDER BY full_name ASC LIMIT ' + offset + ', ' + limitNum;
+    // Fetch enforcers with live citation count from the citations table
+    const query = `
+      SELECT e.*,
+        COALESCE(c.live_citations, 0) AS citations_issued,
+        COALESCE(c.live_fines, 0) AS total_fines
+      FROM enforcers e
+      LEFT JOIN (
+        SELECT enforcer_id,
+               COUNT(*) AS live_citations,
+               SUM(fine_amount) AS live_fines
+        FROM citations
+        GROUP BY enforcer_id
+      ) c ON c.enforcer_id = e.enforcer_id
+      ${baseWhere}
+      ORDER BY e.full_name ASC
+      LIMIT ${offset}, ${limitNum}
+    `;
     const [enforcers] = await pool.execute(query, params);
 
     res.json({
@@ -177,6 +192,40 @@ router.get('/etracs/search', async (req, res) => {
 });
 
 /**
+ * Recalculate citations_issued and total_fines for all enforcers from live data
+ */
+router.post('/recalculate-stats', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+  try {
+    await pool.execute(`
+      UPDATE enforcers e
+      JOIN (
+        SELECT enforcer_id,
+               COUNT(*) AS live_citations,
+               COALESCE(SUM(fine_amount), 0) AS live_fines
+        FROM citations
+        GROUP BY enforcer_id
+      ) c ON c.enforcer_id = e.enforcer_id
+      SET e.citations_issued = c.live_citations,
+          e.total_fines = c.live_fines
+    `);
+
+    // Zero out enforcers who have no citations at all
+    await pool.execute(`
+      UPDATE enforcers
+      SET citations_issued = 0, total_fines = 0
+      WHERE enforcer_id NOT IN (SELECT DISTINCT enforcer_id FROM citations WHERE enforcer_id IS NOT NULL)
+    `);
+
+    await logAction(req.user.user_id, 'RECALCULATE_ENFORCER_STATS', 'Recalculated citations_issued and total_fines for all enforcers');
+
+    res.json({ message: 'Enforcer stats recalculated successfully' });
+  } catch (error) {
+    console.error('Recalculate enforcer stats error:', error);
+    res.status(500).json({ error: 'Failed to recalculate enforcer stats' });
+  }
+});
+
+/**
  * Get enforcer by ID with statistics
  */
 router.get('/:id', async (req, res) => {
@@ -195,12 +244,13 @@ router.get('/:id', async (req, res) => {
     // Get citations by this enforcer
     const [citations] = await pool.execute(
       `SELECT 
-        citation_id, ticket_number, driver_name, violation_date, 
-        violation_location, fine_amount, payment_status
+        citation_id, ticket_number, driver_name, driver_address, violation_date, 
+        violation_time, violation_location, fine_amount, payment_status
        FROM citations 
        WHERE enforcer_id = ? 
        ORDER BY violation_date DESC 
        LIMIT 100`,
+
       [req.params.id]
     );
 
@@ -460,8 +510,8 @@ router.get('/:id/citations', async (req, res) => {
     // Get citations (filtered + paginated)
     const [citations] = await pool.execute(
       `SELECT 
-        citation_id, ticket_number, driver_name, plate_number, violation_date,
-        violation_location, violations, fine_amount, payment_status, created_at
+        citation_id, ticket_number, driver_name, driver_address, plate_number, violation_date,
+        violation_time, violation_location, violations, fine_amount, payment_status, created_at
        FROM citations 
        ${whereSQL}
        ORDER BY created_at DESC

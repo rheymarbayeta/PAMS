@@ -77,6 +77,7 @@ router.get('/', async (req, res) => {
       SELECT c.citation_id, c.ticket_number, c.driver_name, c.plate_number,
              c.violation_date, c.fine_amount, c.is_completed,
              c.violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name,
+             c.driver_address, c.violation_location, c.violation_time,
              COALESCE(cp.total_paid, 0) as total_paid,
              CASE
                WHEN COALESCE(cp.total_paid, 0) <= 0 THEN
@@ -527,6 +528,34 @@ router.put('/:id', async (req, res) => {
 
     await pool.execute(updateQuery, updateParams);
 
+    // If enforcer_id changed, move the citation count/fine between enforcers
+    if (enforcerId !== undefined) {
+      const oldEnforcerId = citation[0].enforcer_id;
+      const newEnforcerId = enforcerId || null;
+      const fineAmt = parseFloat(fineAmount ?? citation[0].fine_amount) || 0;
+
+      if (oldEnforcerId !== newEnforcerId) {
+        if (oldEnforcerId) {
+          await pool.execute(
+            `UPDATE enforcers
+             SET citations_issued = GREATEST(0, citations_issued - 1),
+                 total_fines = GREATEST(0, total_fines - ?)
+             WHERE enforcer_id = ?`,
+            [fineAmt, oldEnforcerId]
+          );
+        }
+        if (newEnforcerId) {
+          await pool.execute(
+            `UPDATE enforcers
+             SET citations_issued = citations_issued + 1,
+                 total_fines = total_fines + ?
+             WHERE enforcer_id = ?`,
+            [fineAmt, newEnforcerId]
+          );
+        }
+      }
+    }
+
     // Log action
     await logAction(req.user.user_id, 'UPDATE_CITATION', `Updated citation: ${citationId}`, citationId);
 
@@ -538,7 +567,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete citation
-router.delete('/:id', authorize(['Admin', 'SuperAdmin']), async (req, res) => {
+router.delete('/:id', authorize(['Admin', 'SuperAdmin', 'Citation Manager']), async (req, res) => {
   try {
     const citationId = req.params.id;
 
@@ -556,6 +585,17 @@ router.delete('/:id', authorize(['Admin', 'SuperAdmin']), async (req, res) => {
 
     // Then delete the citation
     await pool.execute('DELETE FROM citations WHERE citation_id = ?', [citationId]);
+
+    // Decrement enforcer stats if this citation was linked to an enforcer
+    if (citation[0].enforcer_id) {
+      await pool.execute(
+        `UPDATE enforcers
+         SET citations_issued = GREATEST(0, citations_issued - 1),
+             total_fines = GREATEST(0, total_fines - ?)
+         WHERE enforcer_id = ?`,
+        [parseFloat(citation[0].fine_amount) || 0, citation[0].enforcer_id]
+      );
+    }
 
     // Log action
     await logAction(req.user.user_id, 'DELETE_CITATION', `Deleted citation: ${citationId}`, citationId);
