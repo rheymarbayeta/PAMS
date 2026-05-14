@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showConfirm } from '@/utils/modal';
 
 interface Attribute {
   attribute_id: string;
@@ -85,18 +86,21 @@ export default function AttributesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this attribute?')) {
-      return;
-    }
-
-    try {
-      await api.delete(`/api/attributes/${id}`);
-      setSuccessMessage('Attribute deleted successfully');
-      fetchAttributes();
-    } catch (error: any) {
-      console.error('Error deleting attribute:', error);
-      setError(error.response?.data?.error || 'Failed to delete attribute');
-    }
+    showConfirm(
+      'Are you sure you want to delete this attribute? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/attributes/${id}`);
+          setSuccessMessage('Attribute deleted successfully');
+          fetchAttributes();
+        } catch (error: any) {
+          setError(error.response?.data?.error || 'Failed to delete attribute');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   if (loading) {

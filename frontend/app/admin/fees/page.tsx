@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface FeeCategory {
   category_id: number;
@@ -98,7 +99,7 @@ export default function FeesPage() {
       setCategoryForm({ category_name: '' });
       fetchCategories();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error saving category');
+      showAlert(error.response?.data?.error || 'Error saving category', 'Error');
     }
   };
 
@@ -115,28 +116,42 @@ export default function FeesPage() {
       setFeeForm({ category_id: '', fee_name: '', default_amount: '' });
       fetchFees();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error saving fee');
+      showAlert(error.response?.data?.error || 'Error saving fee', 'Error');
     }
   };
 
   const handleDeleteCategory = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
-    try {
-      await api.delete(`/api/fees/categories/${id}`);
-      fetchCategories();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting category');
-    }
+    showConfirm(
+      'Are you sure you want to delete this category? This will also remove all fees in this category.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/fees/categories/${id}`);
+          fetchCategories();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting category', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const handleDeleteFee = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this fee?')) return;
-    try {
-      await api.delete(`/api/fees/charges/${id}`);
-      fetchFees();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting fee');
-    }
+    showConfirm(
+      'Are you sure you want to delete this fee?',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/fees/charges/${id}`);
+          fetchFees();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting fee', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   if (loading) {
@@ -145,8 +160,11 @@ export default function FeesPage() {
         <Layout>
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-4"></div>
-              <p className="text-gray-500 font-medium">Loading fees...</p>
+              <div className="relative mx-auto mb-4 h-12 w-12">
+                <div className="h-12 w-12 rounded-full border-4 border-slate-100"></div>
+                <div className="absolute top-0 left-0 h-12 w-12 rounded-full border-4 border-slate-600 border-t-transparent animate-spin"></div>
+              </div>
+              <p className="text-slate-500 font-medium">Loading fees...</p>
             </div>
           </div>
         </Layout>

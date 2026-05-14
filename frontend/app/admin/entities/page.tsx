@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import Pagination from '@/components/Pagination';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Entity {
   entity_id: number;
@@ -53,13 +55,20 @@ export default function EntitiesPage() {
   };
 
   const handleDelete = async (entityId: number) => {
-    if (!confirm('Are you sure you want to delete this entity?')) return;
-    try {
-      await api.delete(`/api/entities/${entityId}`);
-      fetchEntities();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting entity');
-    }
+    showConfirm(
+      'Are you sure you want to delete this entity? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/entities/${entityId}`);
+          fetchEntities();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting entity', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   // Check if user can edit entities (all roles except Viewer)
@@ -207,45 +216,8 @@ export default function EntitiesPage() {
               </div>
 
               {/* Page navigation */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-gray-200 pt-4">
-                <div className="text-sm text-gray-600">
-                  Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    aria-label="Previous page"
-                  >
-                    Previous
-                  </button>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                          currentPage === pageNum
-                            ? 'bg-emerald-600 text-white'
-                            : 'border border-gray-200 text-gray-700 bg-white hover:bg-gray-50'
-                        }`}
-                        aria-label={`Go to page ${pageNum}`}
-                        aria-current={currentPage === pageNum ? 'page' : undefined}
-                      >
-                        {pageNum}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    aria-label="Next page"
-                  >
-                    Next
-                  </button>
-                </div>
+              <div className="border-t border-gray-200 pt-4">
+                <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
               </div>
             </div>
           )}

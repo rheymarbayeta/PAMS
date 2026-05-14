@@ -19,10 +19,13 @@ export default function Home() {
   }, [isAuthenticated, loading, router]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+    <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: 'var(--page-bg)' }}>
       <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-4"></div>
-        <p className="text-gray-600 font-medium">Loading...</p>
+        <div className="relative mx-auto mb-4 h-12 w-12">
+          <div className="h-12 w-12 rounded-full border-4 border-slate-100"></div>
+          <div className="absolute top-0 left-0 h-12 w-12 rounded-full border-4 border-t-transparent animate-spin" style={{ borderColor: 'var(--primary) transparent transparent transparent' }}></div>
+        </div>
+        <p className="text-slate-600 font-medium">Loading...</p>
       </div>
     </div>
   );

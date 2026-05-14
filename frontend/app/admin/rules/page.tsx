@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface AssessmentRule {
   rule_id: string;
@@ -95,7 +96,6 @@ export default function RulesPage() {
         // Only auto-populate if rule_name is empty or matches previous auto-generated name
         if (!formData.rule_name || formData.rule_name === autoRuleName || 
             formData.rule_name.startsWith(permitType.permit_type_name + ' - ')) {
-          console.log('[Rules] Auto-populating rule name:', autoRuleName);
           setFormData(prev => ({ ...prev, rule_name: autoRuleName }));
         }
       }
@@ -103,61 +103,41 @@ export default function RulesPage() {
   }, [formData.permit_type_id, formData.attribute_id, permitTypes, attributes, editingRule]);
 
   const fetchRules = async () => {
-    console.log('[Rules] Fetching assessment rules...');
     try {
       const response = await api.get('/api/assessment-rules');
-      console.log('[Rules] Rules fetched:', response.data.length, 'rules');
       setRules(response.data);
     } catch (error: any) {
-      console.error('[Rules] Error fetching rules:', error);
-      console.error('[Rules] Error response:', error.response);
-      console.error('[Rules] Error status:', error.response?.status);
-      console.error('[Rules] Error data:', error.response?.data);
+      console.error('Error fetching rules:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchPermitTypes = async () => {
-    console.log('[Rules] Fetching permit types...');
     try {
       const response = await api.get('/api/permit-types');
       const activePermitTypes = response.data.filter((pt: PermitType) => pt.is_active);
-      console.log('[Rules] Permit types fetched:', activePermitTypes.length, 'active permit types');
       setPermitTypes(activePermitTypes);
     } catch (error: any) {
-      console.error('[Rules] Error fetching permit types:', error);
-      console.error('[Rules] Error response:', error.response);
-      console.error('[Rules] Error status:', error.response?.status);
-      console.error('[Rules] Error data:', error.response?.data);
+      console.error('Error fetching permit types:', error);
     }
   };
 
   const fetchAttributes = async () => {
-    console.log('[Rules] Fetching active attributes...');
     try {
       const response = await api.get('/api/attributes/active');
-      console.log('[Rules] Attributes fetched:', response.data.length, 'attributes');
       setAttributes(response.data);
     } catch (error: any) {
-      console.error('[Rules] Error fetching attributes:', error);
-      console.error('[Rules] Error response:', error.response);
-      console.error('[Rules] Error status:', error.response?.status);
-      console.error('[Rules] Error data:', error.response?.data);
+      console.error('Error fetching attributes:', error);
     }
   };
 
   const fetchAllFees = async () => {
-    console.log('[Rules] Fetching all fees...');
     try {
       const response = await api.get('/api/fees/charges');
-      console.log('[Rules] Fees fetched:', response.data.length, 'fees');
       setAllFees(response.data);
     } catch (error: any) {
-      console.error('[Rules] Error fetching fees:', error);
-      console.error('[Rules] Error response:', error.response);
-      console.error('[Rules] Error status:', error.response?.status);
-      console.error('[Rules] Error data:', error.response?.data);
+      console.error('Error fetching fees:', error);
     }
   };
 
@@ -183,13 +163,9 @@ export default function RulesPage() {
       };
 
       if (editingRule) {
-        console.log('[Rules] Updating rule:', editingRule.rule_id);
-        const response = await api.put(`/api/assessment-rules/${editingRule.rule_id}`, payload);
-        console.log('[Rules] Rule updated:', response.data);
+        await api.put(`/api/assessment-rules/${editingRule.rule_id}`, payload);
       } else {
-        console.log('[Rules] Creating new rule');
-        const response = await api.post('/api/assessment-rules', payload);
-        console.log('[Rules] Rule created:', response.data);
+        await api.post('/api/assessment-rules', payload);
       }
       setShowModal(false);
       setEditingRule(null);
@@ -197,11 +173,8 @@ export default function RulesPage() {
       setRuleFees([]);
       fetchRules();
     } catch (error: any) {
-      console.error('[Rules] Error saving rule:', error);
-      console.error('[Rules] Error response:', error.response);
-      console.error('[Rules] Error status:', error.response?.status);
-      console.error('[Rules] Error data:', error.response?.data);
-      alert(error.response?.data?.error || 'Error saving rule');
+      console.error('Error saving rule:', error);
+      showAlert(error.response?.data?.error || 'Error saving rule', 'Error');
     }
   };
 
@@ -222,13 +195,20 @@ export default function RulesPage() {
   };
 
   const handleDelete = async (ruleId: string | number) => {
-    if (!confirm('Are you sure you want to delete this rule?')) return;
-    try {
-      await api.delete(`/api/assessment-rules/${ruleId}`);
-      fetchRules();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting rule');
-    }
+    showConfirm(
+      'Are you sure you want to delete this rule? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/assessment-rules/${ruleId}`);
+          fetchRules();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting rule', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const addFee = () => {

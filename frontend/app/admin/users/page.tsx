@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface User {
   user_id: number;
@@ -64,7 +65,7 @@ export default function UsersPage() {
     e.preventDefault();
     try {
       if (formData.role_ids.length === 0) {
-        alert('Please select at least one role');
+        showAlert('Please select at least one role', 'Validation Error');
         return;
       }
       if (editingUser) {
@@ -77,7 +78,7 @@ export default function UsersPage() {
       setFormData({ username: '', password: '', full_name: '', role_ids: [] });
       fetchUsers();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error saving user');
+      showAlert(error.response?.data?.error || 'Error saving user', 'Error');
     }
   };
 
@@ -93,16 +94,22 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-    try {
-      await api.delete(`/api/users/${userId}`);
-      alert('User deleted successfully');
-      fetchUsers();
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Error deleting user';
-      alert(errorMessage);
-      console.error('Delete user error:', error.response?.data);
-    }
+    showConfirm(
+      'Are you sure you want to delete this user? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/users/${userId}`);
+          showAlert('User deleted successfully', 'Success');
+          fetchUsers();
+        } catch (error: any) {
+          const errorMessage = error.response?.data?.error || 'Error deleting user';
+          showAlert(errorMessage, 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   if (loading) {

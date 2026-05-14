@@ -306,7 +306,7 @@ export default function Layout({ children }: LayoutProps) {
 
           <div className="hidden md:block mr-auto">
             <h2 className="text-sm font-medium text-slate-600">
-              {navLinks.find(l => isActive(l.href))?.label || adminLinks.find(l => isLinkActive(l.href, l.activePaths))?.label || ''}
+              {navLinks.find(l => pathname === l.href || pathname.startsWith(l.href + '/'))?.label || adminLinks.find(l => isLinkActive(l.href, l.activePaths))?.label || ''}
             </h2>
           </div>
 

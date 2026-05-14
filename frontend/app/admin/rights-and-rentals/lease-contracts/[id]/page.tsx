@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface LeaseContract {
   id: number;
@@ -57,13 +58,20 @@ export default function ViewLeaseContractPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this lease contract?')) return;
-    try {
-      await api.delete(`/api/rights-and-rentals/lease-contracts/${contractId}`);
-      router.push('/admin/rights-and-rentals/lease-contracts');
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting lease contract');
-    }
+    showConfirm(
+      'Are you sure you want to delete this lease contract? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/rights-and-rentals/lease-contracts/${contractId}`);
+          router.push('/admin/rights-and-rentals/lease-contracts');
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting lease contract', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const formatDate = (date: string) => {

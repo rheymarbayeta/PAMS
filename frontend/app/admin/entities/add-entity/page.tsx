@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert } from '@/utils/modal';
 
 interface Entity {
   entity_id: string;
@@ -80,11 +81,6 @@ export default function AddEntityPage() {
     }
   }, [entityId, etracsObjId]);
 
-  // Log form data changes
-  useEffect(() => {
-    console.log('Form Data Updated:', formData);
-  }, [formData]);
-
   // Check if user can edit entities
   const isViewer = user && (user.role_name === 'Viewer' || !user.roles?.some((role: string) => role !== 'Viewer'));
   if (isViewer) {
@@ -110,7 +106,7 @@ export default function AddEntityPage() {
       setFormData(response.data);
     } catch (error) {
       console.error('Error fetching entity:', error);
-      alert('Failed to load entity');
+      showAlert('Failed to load entity', 'Error');
     } finally {
       setLoading(false);
     }
@@ -120,8 +116,6 @@ export default function AddEntityPage() {
     try {
       const response = await api.get(`/api/entities/etracs/${objId}`);
       const entity = response.data;
-      console.log('eTracs Entity Loaded:', entity);
-      console.log('Individual data:', entity.individual);
       const newFormData = {
         entity_id: '',
         firstname: entity.individual?.firstname || '',
@@ -138,11 +132,10 @@ export default function AddEntityPage() {
         etracs_objid: objId,
         etracs_entityno: entity.entityno || '',
       };
-      console.log('Setting form data from eTracs:', newFormData);
       setFormData(newFormData);
     } catch (error) {
       console.error('Error loading eTracs entity:', error);
-      alert('Failed to load entity from eTracs');
+      showAlert('Failed to load entity from eTracs', 'Error');
     } finally {
       setLoading(false);
     }
@@ -170,12 +163,9 @@ export default function AddEntityPage() {
         },
       });
 
-      console.log('eTracs Verification Response:', response.data);
-      console.log('Results:', response.data.results);
+      console.log('eTracs Verification Response received');
       
       if (response.data.results && response.data.results.length > 0) {
-        console.log('First result data:', response.data.results[0]);
-        console.log('Available fields:', Object.keys(response.data.results[0]));
         setVerificationResults(response.data.results);
         setShowVerificationResults(true);
       } else {
@@ -190,14 +180,6 @@ export default function AddEntityPage() {
   };
 
   const handleSelectEtracsResult = (result: VerificationResult) => {
-    console.log('Selected eTracs Result:', result);
-    console.log('Result properties:');
-    console.log('  - gender:', result.gender);
-    console.log('  - address_text:', result.address_text);
-    console.log('  - email:', result.email);
-    console.log('  - middlename:', result.middlename);
-    console.log('  - objid:', result.objid);
-    
     const updatedFormData = {
       firstname: result.firstname,
       middlename: result.middlename || '',
@@ -211,8 +193,6 @@ export default function AddEntityPage() {
       etracs_objid: result.objid,
       etracs_match_score: result.match_score,
     };
-    
-    console.log('Updated Form Data:', updatedFormData);
     
     setFormData(prev => ({
       ...prev,
@@ -276,7 +256,7 @@ export default function AddEntityPage() {
 
       router.push('/admin/entities');
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error saving entity');
+      showAlert(error.response?.data?.error || 'Error saving entity', 'Error');
     } finally {
       setSubmitting(false);
     }

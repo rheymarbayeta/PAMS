@@ -7,6 +7,7 @@ import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
+import { showAlert } from '@/utils/modal';
 
 interface Message {
   message_id: number;
@@ -156,7 +157,7 @@ export default function ChatPage() {
       setNewMessage('');
       scrollToBottom();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error sending message');
+      showAlert(error.response?.data?.error || 'Error sending message', 'Error');
     }
   };
 

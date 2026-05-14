@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import Pagination from '@/components/Pagination';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Property {
   id: number;
@@ -43,13 +45,20 @@ export default function PropertiesPage() {
   };
 
   const handleDelete = async (propertyId: number) => {
-    if (!confirm('Are you sure you want to delete this property?')) return;
-    try {
-      await api.delete(`/api/rights-and-rentals/properties/${propertyId}`);
-      fetchProperties();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting property');
-    }
+    showConfirm(
+      'Are you sure you want to delete this property? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/rights-and-rentals/properties/${propertyId}`);
+          fetchProperties();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting property', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   // Check if user can edit
@@ -242,37 +251,9 @@ export default function PropertiesPage() {
           )}
 
           {/* Pagination controls */}
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2 mt-6">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
-              >
-                Previous
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 ${
-                    currentPage === page
-                      ? 'bg-orange-600 text-white'
-                      : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
-              >
-                Next
-              </button>
-            </div>
-          )}
+          <div className="mt-6">
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+          </div>
         </div>
       </Layout>
     </ProtectedRoute>

@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import Link from 'next/link';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Template {
   template_id: string;
@@ -134,13 +135,13 @@ export default function TemplatesPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      alert('Template uploaded successfully');
+      showAlert('Template uploaded successfully', 'Success');
       setShowUploadModal(false);
       setSelectedFile(null);
       setUploadForm({ template_name: '', permit_type_id: '', description: '', is_default: false });
       fetchTemplates();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error uploading template');
+      showAlert(error.response?.data?.error || 'Error uploading template', 'Error');
     } finally {
       setUploading(false);
     }
@@ -151,21 +152,25 @@ export default function TemplatesPage() {
       await api.put(`/api/templates/${templateId}/set-default`);
       fetchTemplates();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error setting default template');
+      showAlert(error.response?.data?.error || 'Error setting default template', 'Error');
     }
   };
 
   const handleDelete = async (templateId: string, templateName: string) => {
-    if (!confirm(`Are you sure you want to delete the template "${templateName}"?`)) {
-      return;
-    }
-
-    try {
-      await api.delete(`/api/templates/${templateId}`);
-      fetchTemplates();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting template');
-    }
+    showConfirm(
+      `Are you sure you want to delete the template "${templateName}"? This action cannot be undone.`,
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/templates/${templateId}`);
+          fetchTemplates();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting template', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const handleDownload = async (templateId: string, fileName: string) => {

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import Pagination from '@/components/Pagination';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -77,14 +78,10 @@ export default function ApplicationsPage() {
   const fetchPermitTypes = async () => {
     try {
       const response = await api.get('/api/permit-types');
-      console.log('Permit types response:', response.data);
-      // Extract permit type names from the response
       const typeNames = response.data.map((pt: any) => pt.permit_type_name).sort() as string[];
-      console.log('Extracted permit type names:', typeNames);
       setPermitTypes(typeNames);
     } catch (error) {
       console.error('Error fetching permit types:', error);
-      // Fallback to empty array if fetch fails
       setPermitTypes([]);
     }
   };
@@ -349,45 +346,8 @@ export default function ApplicationsPage() {
               </div>
 
               {/* Page navigation */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
-                <div className="text-sm text-slate-600">
-                  Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    aria-label="Previous page"
-                  >
-                    Previous
-                  </button>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                          currentPage === pageNum
-                            ? 'bg-teal-600 text-white'
-                            : 'border border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
-                        }`}
-                        aria-label={`Go to page ${pageNum}`}
-                        aria-current={currentPage === pageNum ? 'page' : undefined}
-                      >
-                        {pageNum}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    aria-label="Next page"
-                  >
-                    Next
-                  </button>
-                </div>
+              <div className="border-t border-slate-200 pt-4">
+                <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
               </div>
             </div>
           )}

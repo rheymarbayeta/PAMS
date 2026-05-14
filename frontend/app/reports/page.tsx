@@ -368,8 +368,6 @@ export default function ReportsPage() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-
-      console.log(`✅ Report generated successfully in ${format.toUpperCase()} format`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to generate report';
       setReportError(`Error generating ${format.toUpperCase()} report: ${errorMsg}`);

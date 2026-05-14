@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import Link from 'next/link';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface AssessmentRule {
   rule_id: string;
@@ -170,27 +171,33 @@ export default function QuantityFeesPage() {
       newConfigs.set(selectedRule, configRes.data);
       setConfigs(newConfigs);
 
-      alert('Quantity fee configuration saved successfully');
+      showAlert('Quantity fee configuration saved successfully', 'Success');
       setShowModal(false);
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error saving configuration');
+      showAlert(error.response?.data?.error || 'Error saving configuration', 'Error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (ruleId: string) => {
-    if (!confirm('Delete this quantity fee configuration?')) return;
-
-    try {
-      await api.delete(`/api/quantity-fees/${ruleId}`);
-      const newConfigs = new Map(configs);
-      newConfigs.delete(ruleId);
-      setConfigs(newConfigs);
-      alert('Configuration deleted');
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting configuration');
-    }
+    showConfirm(
+      'Are you sure you want to delete this quantity fee configuration?',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/quantity-fees/${ruleId}`);
+          const newConfigs = new Map(configs);
+          newConfigs.delete(ruleId);
+          setConfigs(newConfigs);
+          showAlert('Configuration deleted successfully', 'Success');
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting configuration', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const ruleList = rules.filter(r => ruleFees.has(r.rule_id) && ruleFees.get(r.rule_id)!.length > 0);

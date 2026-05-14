@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import enforcerService from '@/services/enforcerService';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Enforcer {
   enforcer_id: string;
@@ -196,27 +197,32 @@ export default function EnforcersPage() {
       }
     } catch (error) {
       console.error('Error fetching enforcer details:', error);
-      alert('Error loading enforcer details');
+      showAlert('Error loading enforcer details', 'Error');
     }
   };
 
   const handleDelete = async (enforcerId: string) => {
-    if (!confirm('Are you sure you want to delete this enforcer? This will remove their record and citations association.')) {
-      return;
-    }
-    try {
-      await enforcerService.deleteEnforcer(enforcerId);
-      alert('Enforcer deleted successfully');
-      fetchData();
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Error deleting enforcer';
-      alert(errorMessage);
-    }
+    showConfirm(
+      'Are you sure you want to delete this enforcer? This will remove their record and citations association.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await enforcerService.deleteEnforcer(enforcerId);
+          showAlert('Enforcer deleted successfully', 'Success');
+          fetchData();
+        } catch (error: any) {
+          const errorMessage = error.response?.data?.error || 'Error deleting enforcer';
+          showAlert(errorMessage, 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const handleVerifyName = async () => {
     if (!formData.full_name?.trim()) {
-      alert('Please enter a name to verify');
+      showAlert('Please enter a name to verify', 'Validation Error');
       return;
     }
 
@@ -246,11 +252,11 @@ export default function EnforcersPage() {
         setEtracsResults(results.all_results);
         setShowEtracsModal(true);
       } else {
-        alert('No matches found in eTracs system');
+        showAlert('No matches found in eTracs system', 'No Results');
       }
     } catch (error) {
       console.error('Error verifying name:', error);
-      alert('Error searching eTracs system');
+      showAlert('Error searching eTracs system', 'Error');
     } finally {
       setEtracsSearching(false);
     }

@@ -618,13 +618,14 @@ export default function AssessApplicationPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <button
                             onClick={async () => {
-                              if (!confirm('Remove this fee?')) return;
-                              try {
-                                await api.delete(`/api/applications/${params.id}/fees/${fee.assessed_fee_id}`);
-                                fetchData();
-                              } catch (error: any) {
-                                alert(error.response?.data?.error || 'Error removing fee');
-                              }
+                              showConfirm('Remove this fee?', 'Confirm', async () => {
+                                try {
+                                  await api.delete(`/api/applications/${params.id}/fees/${fee.assessed_fee_id}`);
+                                  fetchData();
+                                } catch (error: any) {
+                                  showAlert(error.response?.data?.error || 'Error removing fee', 'Error');
+                                }
+                              }, undefined, { isDangerous: true });
                             }}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-lg border border-red-200 hover:border-red-600 transition-all duration-200"
                           >

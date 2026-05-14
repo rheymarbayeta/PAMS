@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showConfirm } from '@/utils/modal';
 import AceEditor from 'react-ace';
 import 'ace-builds/src-noconflict/mode-html';
 import 'ace-builds/src-noconflict/theme-github';
@@ -190,25 +191,28 @@ export default function ReportTemplatesPage() {
       return;
     }
 
-    if (!confirm(`Delete this template? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError('');
-      await api.delete(`/api/report-templates/${currentTemplate.template_id}`);
-      setSuccess('Template deleted successfully!');
-      setCurrentTemplate(null);
-      setTemplateHtml('');
-      await loadTemplates();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError('Failed to delete template');
-      console.error(err);
-    } finally {
-      setSaving(false);
-    }
+    showConfirm(
+      'Are you sure you want to delete this template? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          setSaving(true);
+          setError('');
+          await api.delete(`/api/report-templates/${currentTemplate.template_id}`);
+          setSuccess('Template deleted successfully!');
+          setCurrentTemplate(null);
+          setTemplateHtml('');
+          await loadTemplates();
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (err) {
+          setError('Failed to delete template');
+        } finally {
+          setSaving(false);
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   }
 
   function insertVariable(varName: string) {

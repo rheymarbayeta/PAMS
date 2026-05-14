@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import Pagination from '@/components/Pagination';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface LeaseContract {
   id: number;
@@ -48,13 +50,20 @@ export default function LeaseContractsPage() {
   };
 
   const handleDelete = async (contractId: number) => {
-    if (!confirm('Are you sure you want to delete this lease contract?')) return;
-    try {
-      await api.delete(`/api/rights-and-rentals/lease-contracts/${contractId}`);
-      fetchContracts();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting lease contract');
-    }
+    showConfirm(
+      'Are you sure you want to delete this lease contract? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/rights-and-rentals/lease-contracts/${contractId}`);
+          fetchContracts();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting lease contract', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const userRoles = user?.roles || [user?.role_name];
@@ -273,39 +282,9 @@ export default function LeaseContractsPage() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-between">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <div className="flex gap-2">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                      currentPage === page
-                        ? 'bg-indigo-600 text-white'
-                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-          )}
+          <div className="mt-6">
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+          </div>
         </div>
       </Layout>
     </ProtectedRoute>

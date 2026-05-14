@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface PermitType {
   permit_type_id: number;
@@ -71,32 +72,22 @@ export default function PermitTypesPage() {
   }, []);
 
   const fetchPermitTypes = async () => {
-    console.log('[PermitTypes] Fetching permit types...');
     try {
       const response = await api.get('/api/permit-types');
-      console.log('[PermitTypes] Permit types fetched:', response.data);
       setPermitTypes(response.data);
     } catch (error: any) {
-      console.error('[PermitTypes] Error fetching permit types:', error);
-      console.error('[PermitTypes] Error response:', error.response);
-      console.error('[PermitTypes] Error status:', error.response?.status);
-      console.error('[PermitTypes] Error data:', error.response?.data);
+      console.error('Error fetching permit types:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchAllFees = async () => {
-    console.log('[PermitTypes] Fetching all fees...');
     try {
       const response = await api.get('/api/fees/charges');
-      console.log('[PermitTypes] Fees fetched:', response.data.length, 'fees');
       setAllFees(response.data);
     } catch (error: any) {
-      console.error('[PermitTypes] Error fetching fees:', error);
-      console.error('[PermitTypes] Error response:', error.response);
-      console.error('[PermitTypes] Error status:', error.response?.status);
-      console.error('[PermitTypes] Error data:', error.response?.data);
+      console.error('Error fetching fees:', error);
     }
   };
 
@@ -131,22 +122,17 @@ export default function PermitTypesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('[PermitTypes] Submitting permit type:', { formData, fees: permitTypeFees });
     try {
       const payload = {
         ...formData,
-        attribute_id: null, // No longer using attribute on permit types
+        attribute_id: null,
         fees: permitTypeFees,
       };
 
       if (editingPermitType) {
-        console.log('[PermitTypes] Updating permit type:', editingPermitType.permit_type_id);
-        const response = await api.put(`/api/permit-types/${editingPermitType.permit_type_id}`, payload);
-        console.log('[PermitTypes] Permit type updated:', response.data);
+        await api.put(`/api/permit-types/${editingPermitType.permit_type_id}`, payload);
       } else {
-        console.log('[PermitTypes] Creating new permit type');
-        const response = await api.post('/api/permit-types', payload);
-        console.log('[PermitTypes] Permit type created:', response.data);
+        await api.post('/api/permit-types', payload);
       }
       setShowModal(false);
       setEditingPermitType(null);
@@ -156,9 +142,8 @@ export default function PermitTypesPage() {
     } catch (error: any) {
       console.error('[PermitTypes] Error saving permit type:', error);
       console.error('[PermitTypes] Error response:', error.response);
-      console.error('[PermitTypes] Error status:', error.response?.status);
-      console.error('[PermitTypes] Error data:', error.response?.data);
-      alert(error.response?.data?.error || 'Error saving permit type');
+      console.error('Error saving permit type:', error);
+      showAlert(error.response?.data?.error || 'Error saving permit type', 'Error');
     }
   };
 
@@ -205,20 +190,27 @@ export default function PermitTypesPage() {
       setShowFeesModal(false);
       setCurrentPermitTypeId(null);
       fetchPermitTypes();
-      alert('Fees updated successfully');
+      showAlert('Fees updated successfully', 'Success');
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error saving fees');
+      showAlert(error.response?.data?.error || 'Error saving fees', 'Error');
     }
   };
 
   const handleDelete = async (permitTypeId: number) => {
-    if (!confirm('Are you sure you want to delete this permit type?')) return;
-    try {
-      await api.delete(`/api/permit-types/${permitTypeId}`);
-      fetchPermitTypes();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting permit type');
-    }
+    showConfirm(
+      'Are you sure you want to delete this permit type? This action cannot be undone.',
+      'Confirm Delete',
+      async () => {
+        try {
+          await api.delete(`/api/permit-types/${permitTypeId}`);
+          fetchPermitTypes();
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error deleting permit type', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const addFeeToPermitType = () => {
