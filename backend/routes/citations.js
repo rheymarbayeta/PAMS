@@ -567,7 +567,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete citation
-router.delete('/:id', authorize(['Admin', 'SuperAdmin', 'Citation Manager']), async (req, res) => {
+router.delete('/:id', authorize('Admin', 'SuperAdmin', 'Citation Manager'), async (req, res) => {
   try {
     const citationId = req.params.id;
 
