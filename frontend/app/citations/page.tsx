@@ -105,6 +105,7 @@ export default function CitationsPage() {
     violations: '',
   });
   const [citationReportHeader, setCitationReportHeader] = useState('permit');
+  const [groupByEnforcer, setGroupByEnforcer] = useState(false);
 
   // Citation report modal
   const [showCitationReportModal, setShowCitationReportModal] = useState(false);
@@ -434,6 +435,7 @@ export default function CitationsPage() {
 
   const handleResetFilters = () => {
     setReportCurrentPage(1);
+    setGroupByEnforcer(false);
     setReportFilters({
       paymentStatus: 'all',
       dateFrom: '',
@@ -451,6 +453,7 @@ export default function CitationsPage() {
     if (reportFilters.dateFrom) params.set('dateFrom', reportFilters.dateFrom);
     if (reportFilters.dateTo)   params.set('dateTo', reportFilters.dateTo);
     if (reportFilters.violations) params.set('violations', reportFilters.violations);
+    if (groupByEnforcer) params.set('groupByEnforcer', '1');
     if (token) params.set('token', token);
     params.set('header', citationReportHeader);
     setCitationReportUrl(`/citation-report.html?${params.toString()}`);
@@ -1315,6 +1318,22 @@ export default function CitationsPage() {
                       📄 Preview Report
                     </button>
                   </div>
+                </div>
+
+                {/* Group by Enforcer toggle */}
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={groupByEnforcer}
+                      onChange={(e) => setGroupByEnforcer(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 accent-slate-800"
+                    />
+                    <span className="text-sm font-medium text-slate-700">
+                      Group by Enforcer&nbsp;
+                      <span className="text-slate-400 font-normal">(show subtotal per enforcer in the report)</span>
+                    </span>
+                  </label>
                 </div>
               </div>
 

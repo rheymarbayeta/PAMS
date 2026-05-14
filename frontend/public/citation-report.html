@@ -238,6 +238,25 @@
     color: #1a56db;
   }
 
+  /* Enforcer group header row */
+  .enforcer-group-header td {
+    background: #dce5f3;
+    font-weight: bold;
+    font-size: 10.5px;
+    padding: 5px 8px;
+    border: 1px solid #333;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Enforcer subtotal row */
+  .enforcer-subtotal td {
+    background: #eef3e8;
+    font-weight: bold;
+    font-size: 10.5px;
+    border: 1px solid #555;
+  }
+
   @page {
     size: 13in 8.5in landscape;
     margin: 0;
@@ -298,6 +317,8 @@ const violationFilter = urlParams.get('violations')  || '';
 const authToken     = urlParams.get('token') || localStorage.getItem('token') || '';
 // Header group: 'permit' | 'assessment' | 'disco'  (default: permit)
 const headerGroup   = urlParams.get('header') || 'permit';
+// Group citations by enforcer in the report
+const groupByEnforcer = urlParams.get('groupByEnforcer') === '1';
 
 // ── API base URL ─────────────────────────────────────────────────────────────
 let apiBaseUrl = '';
@@ -383,10 +404,13 @@ async function loadReport() {
 
 // ── Render ───────────────────────────────────────────────────────────────────
 async function renderReport(citations, settings, currentUserName) {
-  // Measure actual row heights in the browser before paginating so every page
-  // uses the maximum available space without overflow or large blank gaps.
-  const rowHeights = await measureRowHeights(citations);
-  const html = buildReportHTML(citations, rowHeights, settings, currentUserName);
+  let html;
+  if (groupByEnforcer) {
+    html = buildGroupedReportHTML(citations, settings, currentUserName);
+  } else {
+    const rowHeights = await measureRowHeights(citations);
+    html = buildReportHTML(citations, rowHeights, settings, currentUserName);
+  }
   document.getElementById('report-content').innerHTML = html;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('report-content').classList.remove('hidden');
@@ -756,6 +780,248 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
             <thead>${tableHeaderRow()}</thead>
             <tbody>${rowsHTML}</tbody>
             ${summaryHTML}
+          </table>
+          ${statsBlock}
+          ${signatoryBlock}
+        </div>
+        <div class="page-footer">${footerHTML}</div>
+      </div>
+    `;
+  });
+
+  return pagesHTML;
+}
+
+// ── HTML-escape helper ────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Group-by-enforcer helpers ─────────────────────────────────────────────────
+
+/** Group a citations array into [{name, citations}] ordered by first appearance. */
+function groupCitationsByEnforcer(citations) {
+  const map = {}, order = [];
+  citations.forEach(c => {
+    const name = c.enforcer_name || c.issued_by_name || 'Unknown Enforcer';
+    if (!map[name]) { map[name] = []; order.push(name); }
+    map[name].push(c);
+  });
+  return order.map(n => ({ name: n, citations: map[n] }));
+}
+
+/**
+ * Build a flat list of renderable items (group-header, citation, subtotal),
+ * measuring each item's actual height via synchronous forced reflow.
+ * Returns {html, h, type}[]  (synchronous — no Promise needed)
+ */
+function buildGroupedItems(groups) {
+  const items  = [];
+  const domTrs = [];
+  let globalRowNum = 0;
+
+  groups.forEach(g => {
+    const subtotal = g.citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
+    const eName = escapeHtml(g.name);
+    const cnt   = g.citations.length;
+
+    // ── Group header ──
+    const ghHtml = `<tr class="enforcer-group-header"><td colspan="10">` +
+      `${eName} &nbsp;&mdash;&nbsp; ${cnt} citation${cnt !== 1 ? 's' : ''}</td></tr>`;
+    items.push({ html: ghHtml, type: 'group-header' });
+    const ghTr = document.createElement('tr');
+    ghTr.className = 'enforcer-group-header';
+    ghTr.innerHTML = `<td colspan="10">${eName}</td>`;
+    domTrs.push(ghTr);
+
+    // ── Citation rows ──
+    g.citations.forEach(c => {
+      globalRowNum++;
+      const violations = Array.isArray(c.violations) ? c.violations.join('; ') : (c.violations || 'N/A');
+      const rowHtml = `<tr>` +
+        `<td class="center" style="width:3%">${globalRowNum}</td>` +
+        `<td class="center" style="width:8%">${escapeHtml(c.ticket_number || 'N/A')}</td>` +
+        `<td class="center" style="width:6%">${formatDate(c.violation_date)}</td>` +
+        `<td style="width:11%">${escapeHtml(c.driver_name || 'N/A')}</td>` +
+        `<td style="width:10%">${escapeHtml(c.driver_address || '\u2014')}</td>` +
+        `<td style="width:10%">${escapeHtml(c.violation_location || '\u2014')}</td>` +
+        `<td class="center" style="width:6%">${escapeHtml(c.violation_time || '\u2014')}</td>` +
+        `<td class="center" style="width:7%">${escapeHtml(c.receipt_number || '\u2014')}</td>` +
+        `<td style="width:27%">${escapeHtml(violations)}</td>` +
+        `<td class="right" style="width:12%">${formatCurrency(c.fine_amount)}</td>` +
+        `</tr>`;
+      items.push({ html: rowHtml, type: 'citation' });
+      const tr = document.createElement('tr');
+      tr.innerHTML = rowHtml.slice(4, -5); // strip leading <tr> and trailing </tr>
+      domTrs.push(tr);
+    });
+
+    // ── Enforcer subtotal ──
+    const stHtml = `<tr class="enforcer-subtotal">` +
+      `<td colspan="9" class="right">Subtotal \u2014 ${eName} (${cnt} citation${cnt !== 1 ? 's' : ''}):</td>` +
+      `<td class="right">${formatCurrency(subtotal)}</td></tr>`;
+    items.push({ html: stHtml, type: 'subtotal' });
+    const stTr = document.createElement('tr');
+    stTr.className = 'enforcer-subtotal';
+    stTr.innerHTML = `<td colspan="9" class="right">Subtotal \u2014 ${eName}:</td>` +
+      `<td class="right">${formatCurrency(subtotal)}</td>`;
+    domTrs.push(stTr);
+  });
+
+  // Measure all rows in a single hidden table (forced synchronous reflow)
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;top:-99999px;left:-9999px;width:1152px;visibility:hidden;pointer-events:none;';
+  const tbl  = document.createElement('table');
+  tbl.className = 'citation-table';
+  tbl.style.width = '100%';
+  const thead = document.createElement('thead');
+  thead.innerHTML = tableHeaderRow();
+  tbl.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  domTrs.forEach(tr => tbody.appendChild(tr));
+  tbl.appendChild(tbody);
+  wrap.appendChild(tbl);
+  document.body.appendChild(wrap);
+
+  // Reading offsetHeight forces synchronous layout — gives accurate row heights
+  domTrs.forEach((tr, i) => { items[i].h = tr.offsetHeight || 28; });
+
+  document.body.removeChild(wrap);
+  return items; // synchronous
+}
+
+/**
+ * Paginate flat grouped items.
+ * Prevents orphaned group-headers (requires at least one following row on the same page).
+ */
+function paginateGroupedItems(items, reserveH) {
+  if (items.length === 0) return [{ isFirst: true, items: [] }];
+
+  const pages = [];
+  let i = 0;
+
+  while (i < items.length) {
+    const isFirst = pages.length === 0;
+    const cap = availH(isFirst, 0);
+    let used = 0;
+    const pageItems = [];
+
+    while (i < items.length) {
+      const item = items[i];
+      // Orphan protection: group-header needs at least one more row after it
+      if (item.type === 'group-header' && pageItems.length > 0) {
+        const nextH = items[i + 1] ? items[i + 1].h : 0;
+        if (used + item.h + nextH > cap) break;
+      }
+      if (pageItems.length > 0 && used + item.h > cap) break;
+      pageItems.push(item);
+      used += item.h;
+      i++;
+    }
+
+    // Safety: always admit at least one item to avoid infinite loop
+    if (pageItems.length === 0 && i < items.length) {
+      pageItems.push(items[i++]);
+    }
+
+    pages.push({ isFirst, items: pageItems });
+  }
+
+  // Pass 2: ensure last page has room for grand-total + summary
+  const last = pages[pages.length - 1];
+  const lastCap = availH(last.isFirst, reserveH);
+  let usedLast = 0, fitCount = 0;
+  for (let j = 0; j < last.items.length; j++) {
+    if (usedLast + last.items[j].h > lastCap) break;
+    usedLast += last.items[j].h;
+    fitCount++;
+  }
+  if (fitCount < last.items.length) {
+    const overflow = last.items.splice(fitCount);
+    pages.push({ isFirst: false, items: overflow });
+  }
+
+  return pages;
+}
+
+/**
+ * Build paginated HTML for the grouped-by-enforcer layout (synchronous).
+ */
+function buildGroupedReportHTML(citations, settings, currentUserName) {
+  const now = new Date();
+  const issuedAt = now.toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  const headerHTML  = buildHeaderHTML(settings);
+  const footerHTML  = buildFooterHTML(currentUserName, issuedAt);
+  const filterLabel = buildFilterLabel() + (groupByEnforcer ? '  |  Grouped by Enforcer' : '');
+
+  const signatoryEnabled = settings.citation_signatory_enabled?.value !== 'false';
+  const reserveH = SUMMARY_H + (signatoryEnabled ? SIGNATORY_H : 0);
+
+  // Grand totals
+  const totalFines   = citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
+  const paidCount    = citations.filter(c => c.payment_status === 'Paid').length;
+  const pendingCount = citations.filter(c => c.payment_status === 'Pending').length;
+  const partialCount = citations.filter(c => c.payment_status === 'Partially Paid').length;
+
+  const groups = groupCitationsByEnforcer(citations);
+  const items  = buildGroupedItems(groups);   // synchronous — forced reflow
+  const pages  = paginateGroupedItems(items, reserveH);
+
+  let pagesHTML = '';
+  pages.forEach((page, pageIdx) => {
+    const isLast = pageIdx === pages.length - 1;
+
+    const rowsHTML = page.items.map(it => it.html).join('');
+
+    const tfootHTML = isLast ? `
+      <tfoot>
+        <tr>
+          <td colspan="9" style="text-align:right;font-weight:bold;">GRAND TOTAL:</td>
+          <td class="right" style="font-weight:bold;">${formatCurrency(totalFines)}</td>
+        </tr>
+      </tfoot>` : '';
+
+    const pageHeading = page.isFirst ? `
+      ${headerHTML}
+      <div style="text-align:center;margin-bottom:4px;">
+        <div style="font-size:16px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">CITATION TICKET REPORT</div>
+        <div style="font-size:10px;color:#555;margin-top:4px;">${filterLabel}</div>
+        <div style="font-size:10px;color:#555;">As of: ${issuedAt}</div>
+      </div>
+      <div style="border-bottom:1px solid #ccc;margin-bottom:10px;"></div>
+    ` : `
+      <div class="continuation-header">
+        <h3>CITATION TICKET REPORT — Continuation (Page ${pageIdx + 1})</h3>
+        <div style="font-size:9px;color:#555;">${filterLabel}</div>
+      </div>
+    `;
+
+    const statsBlock = isLast ? `
+      <div class="summary-box">
+        <strong>Total Citations:</strong> ${citations.length} &nbsp;&nbsp;
+        <strong>Paid:</strong> ${paidCount} &nbsp;&nbsp;
+        <strong>Pending:</strong> ${pendingCount} &nbsp;&nbsp;
+        <strong>Partially Paid:</strong> ${partialCount} &nbsp;&nbsp;
+        <strong>Total Fine Amount:</strong> ${formatCurrency(totalFines)}
+      </div>` : '';
+
+    const signatoryBlock = isLast ? buildSignatoryHTML(settings, currentUserName) : '';
+
+    pagesHTML += `
+      <div class="page" id="page-${pageIdx + 1}">
+        <div class="page-content">
+          ${pageHeading}
+          <table class="citation-table">
+            <thead>${tableHeaderRow()}</thead>
+            <tbody>${rowsHTML}</tbody>
+            ${tfootHTML}
           </table>
           ${statsBlock}
           ${signatoryBlock}

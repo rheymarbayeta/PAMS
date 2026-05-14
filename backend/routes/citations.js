@@ -77,6 +77,7 @@ router.get('/', async (req, res) => {
       SELECT c.citation_id, c.ticket_number, c.driver_name, c.plate_number,
              c.violation_date, c.fine_amount, c.is_completed,
              c.violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name,
+             COALESCE(c.enforcer_name, e.full_name) as enforcer_name,
              c.driver_address, c.violation_location, c.violation_time,
              COALESCE(cp.total_paid, 0) as total_paid,
              CASE
@@ -88,6 +89,7 @@ router.get('/', async (req, res) => {
              cr.receipt_number
       FROM citations c
       LEFT JOIN users u ON c.issued_by_user_id = u.user_id
+      LEFT JOIN enforcers e ON c.enforcer_id = e.enforcer_id
       LEFT JOIN (SELECT citation_id, SUM(amount_paid) as total_paid FROM citation_payments GROUP BY citation_id) cp ON cp.citation_id = c.citation_id
       LEFT JOIN (SELECT citation_id, MAX(receipt_number) as receipt_number FROM citation_payments GROUP BY citation_id) cr ON cr.citation_id = c.citation_id${whereSQL}
       ORDER BY c.created_at DESC
