@@ -400,6 +400,8 @@ router.put('/:id', async (req, res) => {
       enforcerId,
       witnessName,
       supervisorName,
+      violations,
+      otherViolations,
     } = req.body;
 
     const [citation] = await pool.execute(
@@ -519,6 +521,14 @@ router.put('/:id', async (req, res) => {
     if (supervisorName !== undefined) {
       updateFields.push('supervisor_name = ?');
       updateParams.push(supervisorName);
+    }
+    if (violations !== undefined) {
+      updateFields.push('violations = ?');
+      updateParams.push(JSON.stringify(violations));
+    }
+    if (otherViolations !== undefined) {
+      updateFields.push('other_violations = ?');
+      updateParams.push(otherViolations || null);
     }
 
     if (updateFields.length === 0) {

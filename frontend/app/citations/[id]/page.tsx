@@ -65,6 +65,31 @@ interface AuditTrailRecord {
   user_email: string;
 }
 
+const VIOLATIONS = [
+  "No Driver's License",
+  'Over Pricing (Allowable Fare Rates)',
+  'Not in Proper Clothes/Personal Hygiene',
+  'Under the Influence of Liquor or Drugs',
+  'Smoking while Driving',
+  'Use of Cellular Phone or Other Gadgets',
+  'Failure to Convey Passenger',
+  'Disregarding Traffic Signs, Signals & Markings',
+  'Over Speeding',
+  'Drag Racing',
+  'Counter Flow',
+  'No Protective Helmet',
+  'Arrogant Driver',
+  'No Registration',
+  'Out of Route/Line',
+  'Entering National Highway',
+  'No Reflector, Side Mirror and Horn or Bell',
+  'Obstruction to Traffic',
+  'Overloading',
+  'Illegal Parking/Loading/Unloading',
+  'Cutting Trip/Not Following Route',
+  'Others',
+];
+
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     Paid: 'bg-green-100 text-green-800 border-green-200',
@@ -139,6 +164,8 @@ export default function CitationDetailsPage() {
     enforcerBadge: string;
     witnessName: string;
     supervisorName: string;
+    violations: string[];
+    otherViolations: string;
   }>({
     ticketNumber: '',
     driverName: '',
@@ -166,6 +193,8 @@ export default function CitationDetailsPage() {
     enforcerBadge: '',
     witnessName: '',
     supervisorName: '',
+    violations: [],
+    otherViolations: '',
   });
 
   // Payment form state
@@ -225,6 +254,10 @@ export default function CitationDetailsPage() {
         enforcerBadge: data.enforcer_badge || '',
         witnessName: data.witness_name || '',
         supervisorName: data.supervisor_name || '',
+        violations: Array.isArray(data.violations)
+          ? data.violations
+          : (() => { try { return JSON.parse(data.violations as string) || []; } catch { return []; } })(),
+        otherViolations: data.other_violations || '',
       });
       setPayments(response.data.payments || []);
       setError('');
@@ -277,6 +310,8 @@ export default function CitationDetailsPage() {
         enforcerBadge: editData.enforcerBadge,
         witnessName: editData.witnessName,
         supervisorName: editData.supervisorName,
+        violations: editData.violations,
+        otherViolations: editData.otherViolations,
       });
       await fetchCitationDetails();
       await fetchAuditTrail();
@@ -695,7 +730,7 @@ export default function CitationDetailsPage() {
                 {/* Violation Information */}
                 <div>
                   <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3 pb-2 border-b border-amber-200">Violation Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                     <input
                       type="text"
                       placeholder="Violation Location"
@@ -710,6 +745,36 @@ export default function CitationDetailsPage() {
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
                     />
                   </div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-2 uppercase">Violations Committed</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mb-3">
+                    {VIOLATIONS.map((v) => (
+                      <label key={v} className="flex items-center gap-2 cursor-pointer py-1">
+                        <input
+                          type="checkbox"
+                          checked={editData.violations.includes(v)}
+                          onChange={() =>
+                            setEditData((p) => ({
+                              ...p,
+                              violations: p.violations.includes(v)
+                                ? p.violations.filter((x) => x !== v)
+                                : [...p.violations, v],
+                            }))
+                          }
+                          className="w-4 h-4 rounded border-slate-300 text-amber-600"
+                        />
+                        <span className="text-sm text-slate-700">{v}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {editData.violations.includes('Others') && (
+                    <input
+                      type="text"
+                      placeholder="Describe other violations"
+                      value={editData.otherViolations}
+                      onChange={(e) => setEditData((p) => ({ ...p, otherViolations: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  )}
                 </div>
 
                 {/* Enforcer Information */}
