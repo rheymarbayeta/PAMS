@@ -263,6 +263,13 @@ export default function CitationsPage() {
       setSaveModal('saving');
       setSaveModalMessage('Saving citation record...');
 
+      // Replace "Others" in the violations array with the specified text so it's properly recorded
+      const resolvedViolations = formData.violations.map((v) =>
+        v === 'Others' && formData.otherViolations.trim()
+          ? `Others: ${formData.otherViolations.trim().toUpperCase()}`
+          : v
+      );
+
       await api.post('/api/citations', {
         ticketNumber: formData.ticketNumber,
         driverName: formData.driverName,
@@ -275,7 +282,7 @@ export default function CitationsPage() {
         vehicleOwner: formData.vehicleOwner,
         ownerName: formData.ownerName,
         ownerAddress: formData.ownerAddress,
-        violations: formData.violations,
+        violations: resolvedViolations,
         otherViolations: formData.otherViolations,
         remarks: formData.remarks,
         violationLocation: formData.placeViolation,
