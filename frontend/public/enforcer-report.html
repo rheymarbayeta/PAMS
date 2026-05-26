@@ -95,14 +95,7 @@ var authToken    = urlP.get('token')      || localStorage.getItem('token') || ''
 // Header group: 'permit' | 'assessment' | 'disco'  (default: permit)
 var headerGroup  = urlP.get('header')     || 'permit';
 
-var apiBase = '';
-(function() {
-  var h = window.location.hostname, o = window.location.origin;
-  if (h === 'localhost' || h === '127.0.0.1') apiBase = 'http://localhost:5000';
-  else if (o.indexOf(':6070') >= 0)           apiBase = o.replace(':6070', ':5040');
-  else if (o.indexOf(':3000') >= 0)           apiBase = o.replace(':3000', ':5000');
-  else                                         apiBase = o.replace(/:\d+$/, ':5000');
-})();
+var apiBase = window.location.origin;
 
 // Page geometry (96 dpi)
 var DPI     = 96;

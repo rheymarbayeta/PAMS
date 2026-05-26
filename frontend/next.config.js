@@ -5,6 +5,16 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
   },
+  async headers() {
+    return [
+      {
+        source: '/:path*.html',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, must-revalidate' },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return {
       fallback: [

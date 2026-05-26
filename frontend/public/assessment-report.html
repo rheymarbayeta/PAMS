@@ -358,23 +358,7 @@ let currentContent = {};
 let userRole = null;
 
 // Determine API base URL
-let apiBaseUrl = '';
-if (typeof window !== 'undefined') {
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    apiBaseUrl = 'http://localhost:5000';
-  } else {
-    // Handle different port mappings (frontend:6070 -> backend:5040, frontend:3000 -> backend:5000)
-    const origin = window.location.origin;
-    if (origin.includes(':6070')) {
-      apiBaseUrl = origin.replace(':6070', ':5040');
-    } else if (origin.includes(':3000')) {
-      apiBaseUrl = origin.replace(':3000', ':5000');
-    } else {
-      // Default: assume backend is on port 5000
-      apiBaseUrl = origin.replace(/:\d+$/, ':5000');
-    }
-  }
-}
+const apiBaseUrl = window.location.origin;
 
 console.log('App ID:', applicationId);
 console.log('API Base URL:', apiBaseUrl);
@@ -1129,7 +1113,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
   const currentUserName = data.prepared_by_name || 'PAMS';
 
   // Get API base URL for logo URLs
-  const apiBaseUrl = typeof window !== 'undefined' ? (window.location.origin.includes(':6070') ? window.location.origin.replace(':6070', ':5040') : window.location.origin.replace(/:\d+$/, ':5000')) : '';
+  const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   
   // Get header settings
   const getLogoUrl = (url) => {

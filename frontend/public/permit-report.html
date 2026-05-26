@@ -257,23 +257,7 @@ const applicationId = urlParams.get('id') || urlParams.get('applicationId');
 const authToken = urlParams.get('token') || localStorage.getItem('token') || '';
 
 // Determine API base URL
-let apiBaseUrl = '';
-if (typeof window !== 'undefined') {
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    apiBaseUrl = 'http://localhost:5000';
-  } else {
-    // Handle different port mappings (frontend:6070 -> backend:5040, frontend:3000 -> backend:5000)
-    const origin = window.location.origin;
-    if (origin.includes(':6070')) {
-      apiBaseUrl = origin.replace(':6070', ':5040');
-    } else if (origin.includes(':3000')) {
-      apiBaseUrl = origin.replace(':3000', ':5000');
-    } else {
-      // Default: assume backend is on port 5000
-      apiBaseUrl = origin.replace(/:\d+$/, ':5000');
-    }
-  }
-}
+const apiBaseUrl = window.location.origin;
 
 console.log('App ID:', applicationId);
 console.log('API Base URL:', apiBaseUrl);
@@ -415,15 +399,35 @@ async function fetchPermitReport() {
     // Fetch settings
     let settings = {};
     try {
+      console.log('\n========== FETCH SETTINGS ==========');
+      console.log('Settings URL:', settingsUrl);
+      console.log('Auth token present:', !!authToken);
       const settingsResponse = await fetch(settingsUrl, {
         method: 'GET',
         headers: headers,
         credentials: 'include'
       });
+      console.log('Settings response status:', settingsResponse.status, settingsResponse.statusText);
       if (settingsResponse.ok) {
         settings = await settingsResponse.json();
-        console.log('✅ Settings loaded:', settings);
+        console.log('✅ Settings loaded (all keys):', Object.keys(settings));
+        console.log('--- Signatory settings ---');
+        console.log('  permit_signatory_name    :', settings.permit_signatory_name?.value);
+        console.log('  permit_signatory_position:', settings.permit_signatory_position?.value);
+        console.log('  permit_by_signatory_name :', settings.permit_by_signatory_name?.value);
+        console.log('  permit_by_signatory_title:', settings.permit_by_signatory_title?.value);
+        console.log('  permit_by_signatory_enabled:', settings.permit_by_signatory_enabled?.value);
+        console.log('--- Header settings ---');
+        console.log('  permit_header_line_1:', settings.permit_header_line_1?.value);
+        console.log('  permit_header_line_2:', settings.permit_header_line_2?.value);
+        console.log('  permit_header_line_3:', settings.permit_header_line_3?.value);
+        console.log('  permit_header_line_4:', settings.permit_header_line_4?.value);
+        console.log('Full settings object:', settings);
+      } else {
+        const errText = await settingsResponse.text();
+        console.error('❌ Settings fetch failed:', settingsResponse.status, errText);
       }
+      console.log('====================================\n');
     } catch (settingsError) {
       console.warn('Could not fetch settings, using defaults:', settingsError);
     }
@@ -473,7 +477,39 @@ async function fetchPermitReport() {
     }
     
     renderReport(assessmentData, settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName);
-  } catch (error) {
+
+    // ── DEBUG OVERLAY (visible in the page, remove after fix is confirmed) ────
+    const debugDiv = document.createElement('div');
+    debugDiv.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e1e1e;color:#0f0;font:12px monospace;padding:8px 12px;z-index:9999;max-height:160px;overflow:auto;border-top:2px solid #0f0;';
+    debugDiv.innerHTML = `
+      <strong style="color:#ff0">DEBUG — Settings API Response</strong><br>
+      Settings response status: <span id="dbg-status">fetching…</span><br>
+      permit_signatory_name = <strong id="dbg-name">—</strong><br>
+      permit_signatory_position = <strong id="dbg-pos">—</strong><br>
+      permit_signatory_title (old key) = <strong id="dbg-title">—</strong><br>
+      Auth token: <span id="dbg-token">—</span>
+    `;
+    document.body.appendChild(debugDiv);
+
+    // Re-fetch settings just for the debug overlay
+    try {
+      const dbgResp = await fetch(`${apiBaseUrl}/api/settings`, {
+        method: 'GET',
+        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+        credentials: 'include'
+      });
+      document.getElementById('dbg-status').textContent = dbgResp.status + ' ' + dbgResp.statusText;
+      if (dbgResp.ok) {
+        const dbgData = await dbgResp.json();
+        document.getElementById('dbg-name').textContent  = JSON.stringify(dbgData.permit_signatory_name)  || 'KEY MISSING';
+        document.getElementById('dbg-pos').textContent   = JSON.stringify(dbgData.permit_signatory_position) || 'KEY MISSING';
+        document.getElementById('dbg-title').textContent = JSON.stringify(dbgData.permit_signatory_title) || 'KEY MISSING';
+      }
+    } catch(e) {
+      document.getElementById('dbg-status').textContent = 'ERROR: ' + e.message;
+    }
+    document.getElementById('dbg-token').textContent = authToken ? 'PRESENT (' + authToken.substring(0,20) + '…)' : 'MISSING';
+    // ─────────────────────────────────────────────────────────────────────────
     console.error('Error fetching permit data:', error);
     showError(`Failed to load permit report: ${error.message}`);
   }
@@ -1090,7 +1126,7 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
           <div style="margin-top: 30px; margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
           <div style="margin-bottom: 5px; line-height: 1.2;">
             <div style="font-weight: bold;">${settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA'}</div>
-            <div style="font-weight: normal; font-size: 14px;">${settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR'}</div>
+            <div style="font-weight: normal; font-size: 14px;">${settings.permit_signatory_position?.value || 'MUNICIPAL MAYOR'}</div>
           </div>
           <div style="margin-top: 20px; font-size: 14px; line-height: 1.2;">
             <div>PAID: ₱ ${paymentData.amount ? parseFloat(paymentData.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '18,700.00'}</div>

@@ -171,19 +171,7 @@ const authToken     = urlParams.get('token') || (typeof localStorage !== 'undefi
 const headerGroup   = urlParams.get('header') || 'permit';
 
 // ── API base URL ──────────────────────────────────────────────────────────────
-let apiBaseUrl = '';
-{
-  const origin = window.location.origin;
-  if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-    apiBaseUrl = 'http://localhost:5000';
-  } else if (origin.includes(':6070')) {
-    apiBaseUrl = origin.replace(':6070', ':5040');
-  } else if (origin.includes(':3000')) {
-    apiBaseUrl = origin.replace(':3000', ':5000');
-  } else {
-    apiBaseUrl = origin.replace(/:\d+$/, ':5000');
-  }
-}
+const apiBaseUrl = window.location.origin;
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', loadReport);
