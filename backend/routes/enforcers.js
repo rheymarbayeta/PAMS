@@ -51,11 +51,12 @@ router.get('/', async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
     const offset = (pageNum - 1) * limitNum;
 
-    // Fetch enforcers with live citation count from the citations table
+    // Fetch enforcers with live citation count and actual paid amounts
     const query = `
       SELECT e.*,
         COALESCE(c.live_citations, 0) AS citations_issued,
-        COALESCE(c.live_fines, 0) AS total_fines
+        COALESCE(c.live_fines, 0) AS total_fines,
+        COALESCE(p.total_paid, 0) AS total_paid
       FROM enforcers e
       LEFT JOIN (
         SELECT enforcer_id,
@@ -64,6 +65,13 @@ router.get('/', async (req, res) => {
         FROM citations
         GROUP BY enforcer_id
       ) c ON c.enforcer_id = e.enforcer_id
+      LEFT JOIN (
+        SELECT ci.enforcer_id,
+               SUM(cp.amount_paid) AS total_paid
+        FROM citation_payments cp
+        JOIN citations ci ON ci.citation_id = cp.citation_id
+        GROUP BY ci.enforcer_id
+      ) p ON p.enforcer_id = e.enforcer_id
       ${baseWhere}
       ORDER BY e.full_name ASC
       LIMIT ${offset}, ${limitNum}
@@ -254,15 +262,28 @@ router.get('/:id', async (req, res) => {
       [req.params.id]
     );
 
-    // Get statistics
+    // Get statistics using effective payment_status (mirrors citations list logic)
     const [stats] = await pool.execute(
       `SELECT 
         COUNT(*) as total_citations,
         SUM(fine_amount) as total_fines,
-        COUNT(CASE WHEN payment_status = 'Paid' THEN 1 END) as paid_count,
-        COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_count
-       FROM citations 
-       WHERE enforcer_id = ?`,
+        COUNT(CASE WHEN eff_status = 'Paid' THEN 1 END) as paid_count,
+        COUNT(CASE WHEN eff_status = 'Pending' THEN 1 END) as pending_count
+       FROM (
+         SELECT c.fine_amount,
+           CASE
+             WHEN COALESCE(cp_agg.total_paid, 0) <= 0 THEN
+               CASE WHEN c.payment_status = 'Paid' THEN 'Pending' ELSE c.payment_status END
+             WHEN COALESCE(cp_agg.total_paid, 0) >= c.fine_amount THEN 'Paid'
+             ELSE 'Partially Paid'
+           END AS eff_status
+         FROM citations c
+         LEFT JOIN (
+           SELECT citation_id, SUM(amount_paid) AS total_paid
+           FROM citation_payments GROUP BY citation_id
+         ) cp_agg ON cp_agg.citation_id = c.citation_id
+         WHERE c.enforcer_id = ?
+       ) sub`,
       [req.params.id]
     );
 
@@ -489,19 +510,38 @@ router.get('/:id/citations', async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
     const offset = (pageNum - 1) * limitNum;
 
-    // Build where clause (enforcer_id always, status optional)
-    let whereSQL = 'WHERE enforcer_id = ?';
+    // Build the effective payment_status expression (mirrors GET /api/citations logic)
+    const effectiveStatus = `CASE
+      WHEN COALESCE(cp_agg.total_paid, 0) <= 0 THEN
+        CASE WHEN c.payment_status = 'Paid' THEN 'Pending' ELSE c.payment_status END
+      WHEN COALESCE(cp_agg.total_paid, 0) >= c.fine_amount THEN 'Paid'
+      ELSE 'Partially Paid'
+    END`;
+
+    // Subquery so we can filter on the computed status
+    const statusCondition = status ? `AND eff_status = ?` : '';
     const baseParams = [enforcerId];
-    if (status) {
-      whereSQL += ' AND payment_status = ?';
-      baseParams.push(status);
-    }
+    if (status) baseParams.push(status);
 
-    console.log('[GET /:id/citations] whereSQL:', whereSQL, 'params:', baseParams);
+    const innerSQL = `
+      SELECT 
+        c.citation_id, c.ticket_number, c.driver_name, c.driver_address, c.plate_number,
+        c.violation_date, c.violation_time, c.violation_location, c.violations,
+        c.fine_amount, c.created_at, COALESCE(cp_agg.total_paid, 0) AS amount_paid,
+        ${effectiveStatus} AS eff_status
+      FROM citations c
+      LEFT JOIN (
+        SELECT citation_id, SUM(amount_paid) AS total_paid
+        FROM citation_payments GROUP BY citation_id
+      ) cp_agg ON cp_agg.citation_id = c.citation_id
+      WHERE c.enforcer_id = ?
+    `;
 
-    // Get total count (filtered)
+    console.log('[GET /:id/citations] statusCondition:', statusCondition, 'params:', baseParams);
+
+    // Get total count (filtered by effective status)
     const [countResult] = await pool.execute(
-      `SELECT COUNT(*) as total FROM citations ${whereSQL}`,
+      `SELECT COUNT(*) AS total FROM (${innerSQL}) sub WHERE 1=1 ${statusCondition}`,
       baseParams
     );
     const total = countResult[0]?.total || 0;
@@ -509,11 +549,11 @@ router.get('/:id/citations', async (req, res) => {
 
     // Get citations (filtered + paginated)
     const [citations] = await pool.execute(
-      `SELECT 
-        citation_id, ticket_number, driver_name, driver_address, plate_number, violation_date,
-        violation_time, violation_location, violations, fine_amount, payment_status, created_at
-       FROM citations 
-       ${whereSQL}
+      `SELECT citation_id, ticket_number, driver_name, driver_address, plate_number,
+              violation_date, violation_time, violation_location, violations,
+              fine_amount, created_at, amount_paid, eff_status AS payment_status
+       FROM (${innerSQL}) sub
+       WHERE 1=1 ${statusCondition}
        ORDER BY created_at DESC
        LIMIT ${offset}, ${limitNum}`,
       baseParams
@@ -531,27 +571,29 @@ router.get('/:id/citations', async (req, res) => {
 
     console.log('[GET /:id/citations] rows returned:', citations.length);
 
-    // Get summary statistics — respect the same filter applied to the list
-    const [stats] = await pool.execute(
+    // Summary statistics using effective status
+    const [statsRows] = await pool.execute(
       `SELECT 
-        COUNT(*) as total_issued,
-        COALESCE(SUM(fine_amount), 0) as total_fines,
-        COUNT(CASE WHEN payment_status = 'Paid' THEN 1 END) as paid_count,
-        COUNT(CASE WHEN payment_status = 'Pending' THEN 1 END) as pending_count,
-        COUNT(CASE WHEN payment_status IN ('Installment', 'Partially Paid') THEN 1 END) as installment_count
-       FROM citations 
-       ${whereSQL}`,
+        COUNT(*) AS total_issued,
+        COALESCE(SUM(fine_amount), 0) AS total_fines,
+        COALESCE(SUM(amount_paid), 0) AS total_collected,
+        COUNT(CASE WHEN eff_status = 'Paid' THEN 1 END) AS paid_count,
+        COUNT(CASE WHEN eff_status = 'Pending' THEN 1 END) AS pending_count,
+        COUNT(CASE WHEN eff_status IN ('Installment', 'Partially Paid') THEN 1 END) AS installment_count
+       FROM (${innerSQL}) sub
+       WHERE 1=1 ${statusCondition}`,
       baseParams
     );
 
-    console.log('[GET /:id/citations] stats:', stats[0]);
+    console.log('[GET /:id/citations] stats:', statsRows[0]);
 
     res.json({
       enforcer: enforcer[0],
       citations: citations || [],
-      statistics: stats[0] || {
+      statistics: statsRows[0] || {
         total_issued: 0,
         total_fines: 0,
+        total_collected: 0,
         paid_count: 0,
         pending_count: 0,
         installment_count: 0

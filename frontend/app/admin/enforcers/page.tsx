@@ -20,6 +20,7 @@ interface Enforcer {
   status: 'Active' | 'Inactive' | 'Suspended' | 'On Leave';
   citations_issued: number;
   total_fines: number;
+  total_paid: number;
   date_hired?: string;
 }
 
@@ -75,6 +76,7 @@ export default function EnforcersPage() {
   });
 
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('grid');
+  const [sortBy, setSortBy] = useState<'name' | 'citations' | 'paid'>('name');
 
   useEffect(() => {
     const saved = localStorage.getItem('enforcersViewMode') as 'list' | 'grid' | 'table' | null;
@@ -300,6 +302,44 @@ export default function EnforcersPage() {
     }
   };
 
+  const sortedEnforcers = [...enforcers].sort((a, b) => {
+    if (sortBy === 'citations') return b.citations_issued - a.citations_issued;
+    if (sortBy === 'paid') return (b.total_paid || 0) - (a.total_paid || 0);
+    return a.full_name.localeCompare(b.full_name);
+  });
+
+  const topThreeIds = [...enforcers]
+    .filter((e) => (e.total_paid || 0) > 0)
+    .sort((a, b) => (b.total_paid || 0) - (a.total_paid || 0))
+    .slice(0, 3)
+    .map((e) => e.enforcer_id);
+
+  const getRank = (id: string) => topThreeIds.indexOf(id) + 1; // 1, 2, 3 or 0
+
+  const rankCrown = (rank: number) =>
+    rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+
+  const rankCardClass = (rank: number) =>
+    rank === 1
+      ? 'border-yellow-400 ring-2 ring-yellow-200'
+      : rank === 2
+      ? 'border-slate-400 ring-2 ring-slate-200'
+      : rank === 3
+      ? 'border-orange-400 ring-2 ring-orange-200'
+      : 'border-slate-200 hover:border-teal-200';
+
+  const rankRowClass = (rank: number) =>
+    rank === 1
+      ? 'bg-yellow-50/60'
+      : rank === 2
+      ? 'bg-slate-50/80'
+      : rank === 3
+      ? 'bg-orange-50/50'
+      : '';
+
+  const formatPeso = (amount: number) =>
+    (amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   const totalPages = Math.ceil(pagination.total / pagination.limit);
 
   if (loading && enforcers.length === 0) {
@@ -434,7 +474,7 @@ export default function EnforcersPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Total Fines</p>
-                    <p className="mt-2 text-3xl font-bold text-amber-600">₱{(stats.total_fines || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}</p>
+                    <p className="mt-2 text-3xl font-bold text-amber-600">₱{(stats.total_fines || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                   <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
                     <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -531,7 +571,7 @@ export default function EnforcersPage() {
                 </select>
               </div>
 
-              {/* Reset Filters + View Mode Toggle */}
+              {/* Reset Filters + Sort + View Mode Toggle */}
               <div className="flex items-end gap-2">
                 <button
                   onClick={() => {
@@ -542,6 +582,16 @@ export default function EnforcersPage() {
                 >
                   Reset Filters
                 </button>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'name' | 'citations' | 'paid')}
+                  className="border border-slate-200 rounded-lg px-2 py-2 text-sm text-slate-700 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none"
+                  title="Sort enforcers"
+                >
+                  <option value="name">Sort: Name</option>
+                  <option value="citations">Sort: Citations</option>
+                  <option value="paid">Sort: Top Earners</option>
+                </select>
                 <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                   <button onClick={() => { setViewMode('list'); localStorage.setItem('enforcersViewMode', 'list'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'list' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`} title="List view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg></button>
                   <button onClick={() => { setViewMode('grid'); localStorage.setItem('enforcersViewMode', 'grid'); }} className={`p-2 rounded-md transition-all duration-200 ${viewMode === 'grid' ? 'bg-white shadow-sm text-teal-600' : 'text-slate-500 hover:text-slate-700'}`} title="Grid view"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg></button>
@@ -561,11 +611,14 @@ export default function EnforcersPage() {
               </div>
             ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {enforcers.map((enforcer) => (
-                  <div key={enforcer.enforcer_id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md hover:border-teal-200 transition-all duration-200 flex flex-col gap-3">
+                {sortedEnforcers.map((enforcer) => (
+                  <div key={enforcer.enforcer_id} className={`bg-white rounded-xl border p-4 hover:shadow-md transition-all duration-200 flex flex-col gap-3 ${rankCardClass(getRank(enforcer.enforcer_id))}`}>
                     <div className="flex items-center gap-3">
-                      <div className="h-11 w-11 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                      <div className="h-11 w-11 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 relative">
                         <span className="text-base font-semibold text-slate-600">{enforcer.full_name.charAt(0).toUpperCase()}</span>
+                        {rankCrown(getRank(enforcer.enforcer_id)) && (
+                          <span className="absolute -top-1.5 -right-1.5 text-sm" title={getRank(enforcer.enforcer_id) === 1 ? 'Top Earner' : getRank(enforcer.enforcer_id) === 2 ? '2nd Earner' : '3rd Earner'}>{rankCrown(getRank(enforcer.enforcer_id))}</span>
+                        )}
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-800 truncate">{enforcer.full_name}</p>
@@ -581,7 +634,17 @@ export default function EnforcersPage() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusBadgeColor(enforcer.status)}`}>{enforcer.status}</span>
                       <span className="text-xs text-slate-500">{enforcer.citations_issued} citations</span>
                     </div>
-                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400">Fines Levied</p>
+                        <p className="text-xs font-semibold text-slate-700">₱{formatPeso(enforcer.total_fines)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400">Amount Collected</p>
+                        <p className="text-xs font-semibold text-green-700">₱{formatPeso(enforcer.total_paid)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <button onClick={() => router.push(`/admin/enforcers/${enforcer.enforcer_id}`)} className="flex-1 px-2 py-1.5 text-xs font-medium text-blue-600 hover:text-white hover:bg-blue-600 rounded-md border border-blue-200 hover:border-blue-600 transition-all duration-200 text-center">View</button>
                       {(hasRole('Admin') || hasRole('SuperAdmin')) && <button onClick={() => handleEdit(enforcer)} className="flex-1 px-2 py-1.5 text-xs font-medium text-teal-600 hover:text-white hover:bg-teal-600 rounded-md border border-teal-200 hover:border-teal-600 transition-all duration-200 text-center">Edit</button>}
                       {hasRole('SuperAdmin') && <button onClick={() => handleDelete(enforcer.enforcer_id)} className="flex-1 px-2 py-1.5 text-xs font-medium text-red-600 hover:text-white hover:bg-red-600 rounded-md border border-red-200 hover:border-red-600 transition-all duration-200 text-center">Delete</button>}
@@ -592,12 +655,15 @@ export default function EnforcersPage() {
             ) : viewMode === 'list' ? (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <ul className="divide-y divide-slate-100">
-                  {enforcers.map((enforcer) => (
+                  {sortedEnforcers.map((enforcer) => (
                     <li key={enforcer.enforcer_id} className="px-4 sm:px-6 py-4 hover:bg-slate-50 transition-colors group">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 relative">
                             <span className="text-sm font-semibold text-slate-600">{enforcer.full_name.charAt(0).toUpperCase()}</span>
+                            {rankCrown(getRank(enforcer.enforcer_id)) && (
+                              <span className="absolute -top-1.5 -right-1.5 text-xs">{rankCrown(getRank(enforcer.enforcer_id))}</span>
+                            )}
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
@@ -612,7 +678,9 @@ export default function EnforcersPage() {
                               <span className="text-slate-300">•</span>
                               <span>{enforcer.citations_issued} citations</span>
                               <span className="text-slate-300">•</span>
-                              <span>₱{(enforcer.total_fines || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}</span>
+                              <span>Levied: ₱{formatPeso(enforcer.total_fines)}</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-green-700 font-medium">Collected: ₱{formatPeso(enforcer.total_paid)}</span>
                             </div>
                           </div>
                         </div>
@@ -639,19 +707,23 @@ export default function EnforcersPage() {
                         <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">Station</th>
                         <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">Status</th>
                         <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">Citations</th>
-                        <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">Fines</th>
+                        <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">Fines Levied</th>
+                        <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">Amount Collected</th>
                         <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {enforcers.map((enforcer) => (
-                        <tr key={enforcer.enforcer_id} className="hover:bg-slate-50/80 transition-colors">
+                      {sortedEnforcers.map((enforcer) => (
+                        <tr key={enforcer.enforcer_id} className={`hover:bg-slate-50/80 transition-colors ${rankRowClass(getRank(enforcer.enforcer_id))}`}>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                              <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 relative">
                                 <span className="text-sm font-semibold text-slate-600">
                                   {enforcer.full_name.charAt(0).toUpperCase()}
                                 </span>
+                                {rankCrown(getRank(enforcer.enforcer_id)) && (
+                                  <span className="absolute -top-1.5 -right-1.5 text-xs">{rankCrown(getRank(enforcer.enforcer_id))}</span>
+                                )}
                               </div>
                               <div>
                                 <div className="text-sm font-semibold text-slate-800">{enforcer.full_name}</div>
@@ -684,7 +756,12 @@ export default function EnforcersPage() {
                           </td>
                           <td className="px-6 py-4 text-center">
                             <span className="text-sm font-semibold text-slate-800">
-                              ₱{(enforcer.total_fines || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+                              ₱{formatPeso(enforcer.total_fines)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="text-sm font-semibold text-green-700">
+                              ₱{formatPeso(enforcer.total_paid)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-center">
