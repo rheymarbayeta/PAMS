@@ -123,7 +123,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) && !canAccess(['Rights and Rentals Manager']) },
     { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin', 'Rights and Rentals Manager']) },
     { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && !canAccess(['Rights and Rentals Manager']) },
-    { href: '/solar', label: 'Solar Designer', show: true },
+    { href: '/solar', label: 'Solar Designer', show: canAccess(['SuperAdmin']) },
   ];
 
   const adminLinks: { href: string; label: string; activePaths?: string[] }[] = [
