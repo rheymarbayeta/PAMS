@@ -64,6 +64,9 @@ const navIcons: Record<string, JSX.Element> = {
   '/solar': (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m8.66-9h-1M4.34 12h-1m15.07-6.07-.7.7M5.63 18.37l-.7.7m12.74 0-.7-.7M5.63 5.63l-.7-.7M12 8a4 4 0 100 8 4 4 0 000-8z" /></svg>
   ),
+  '/price-monitoring': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+  ),
 };
 
 export default function Layout({ children }: LayoutProps) {
@@ -124,6 +127,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin', 'Rights and Rentals Manager']) },
     { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && !canAccess(['Rights and Rentals Manager']) },
     { href: '/solar', label: 'Solar Designer', show: canAccess(['SuperAdmin']) },
+    { href: '/price-monitoring', label: 'Price Monitoring', show: canAccess(['SuperAdmin', 'Admin', 'Assessor']) && !canAccess(['Rights and Rentals Manager']) },
   ];
 
   const adminLinks: { href: string; label: string; activePaths?: string[] }[] = [
