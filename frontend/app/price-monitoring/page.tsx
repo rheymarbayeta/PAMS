@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
@@ -100,6 +100,226 @@ export default function PriceMonitoringPage() {
   );
 }
 
+// ─── COMMODITY PRICE CHART ────────────────────────────────────────────────────
+const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+const CP = { x: 68, y: 14, w: 592, h: 214, vW: 700, vH: 276 };
+
+function CommodityPriceChart() {
+  const [commodities, setCommodities] = useState<Commodity[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [days, setDays] = useState(30);
+  const [records, setRecords] = useState<PriceRecord[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [tip, setTip] = useState<{ x: number; y: number; idx: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    api.get('/api/price-monitoring/commodities?active=true')
+      .then(r => {
+        const comms: Commodity[] = r.data;
+        setCommodities(comms);
+        setSelected(comms.slice(0, 4).map(c => c.commodity_id));
+      }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (!selected.length) { setRecords([]); return; }
+    setChartLoading(true);
+    const dateFrom = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+    api.get(`/api/price-monitoring/records?date_from=${dateFrom}&limit=1000`)
+      .then(r => setRecords((r.data as PriceRecord[]).filter(rec => selected.includes(rec.commodity_id))))
+      .catch(console.error)
+      .finally(() => setChartLoading(false));
+  }, [selected, days]);
+
+  const allDates = Array.from(new Set(records.map(r => (r.recorded_date as string).split('T')[0]))).sort();
+
+  const series = selected.map((cid, idx) => {
+    const comm = commodities.find(c => c.commodity_id === cid);
+    const byDate: Record<string, number[]> = {};
+    records.filter(r => r.commodity_id === cid).forEach(r => {
+      const d = (r.recorded_date as string).split('T')[0];
+      (byDate[d] = byDate[d] || []).push(Number(r.price));
+    });
+    const points = allDates.map(d => ({
+      date: d,
+      price: byDate[d] ? byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length : null,
+    }));
+    return { cid, name: comm?.commodity_name ?? '', unit: comm?.unit ?? '', color: CHART_COLORS[idx % CHART_COLORS.length], points };
+  });
+
+  const allPrices = records.map(r => Number(r.price)).filter(p => !isNaN(p));
+  const rawMin = allPrices.length ? Math.min(...allPrices) : 0;
+  const rawMax = allPrices.length ? Math.max(...allPrices) : 100;
+  const pad = (rawMax - rawMin) * 0.12 || 10;
+  const minY = Math.max(0, rawMin - pad);
+  const maxY = rawMax + pad;
+  const yRange = maxY - minY || 1;
+  const xS = (i: number) => CP.x + (i / Math.max(allDates.length - 1, 1)) * CP.w;
+  const yS = (p: number) => CP.y + CP.h - ((p - minY) / yRange) * CP.h;
+  const yTicks = Array.from({ length: 5 }, (_, i) => minY + (yRange / 4) * i);
+  const xStep = Math.max(1, Math.ceil(allDates.length / 7));
+  const showDots = allDates.length <= 40;
+
+  const toggle = (cid: string) =>
+    setSelected(prev => prev.includes(cid) ? prev.filter(id => id !== cid) : prev.length < 8 ? [...prev, cid] : prev);
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">📊</span>
+          <h3 className="font-semibold text-slate-800">Commodity Price Trends</h3>
+          <span className="text-xs text-slate-400">daily avg · all establishments</span>
+        </div>
+        <div className="flex gap-0.5 bg-slate-100 rounded-lg p-0.5">
+          {[7, 14, 30, 60, 90].map(d => (
+            <button key={d} onClick={() => setDays(d)}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                days === d ? 'bg-white text-blue-700 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'
+              }`}>{d}d</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Commodity selector */}
+      <div className="px-5 py-2.5 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-2 items-center min-h-[44px]">
+        <span className="text-xs font-medium text-slate-400 shrink-0">Select:</span>
+        {commodities.length === 0 && (
+          <span className="text-xs text-slate-400">No commodities yet — add them in the Commodities tab.</span>
+        )}
+        {commodities.map((c) => {
+          const on = selected.includes(c.commodity_id);
+          const ci = selected.indexOf(c.commodity_id);
+          const color = CHART_COLORS[ci % CHART_COLORS.length];
+          return (
+            <button key={c.commodity_id} onClick={() => toggle(c.commodity_id)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border transition-all ${
+                on ? 'border-transparent text-white shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+              }`}
+              style={on ? { backgroundColor: color } : {}}>
+              <span className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: on ? 'rgba(255,255,255,0.7)' : '#cbd5e1' }} />
+              {c.commodity_name}
+            </button>
+          );
+        })}
+        {selected.length > 0 && (
+          <button onClick={() => setSelected([])} className="text-xs text-slate-400 hover:text-red-500 ml-auto">Clear all</button>
+        )}
+      </div>
+
+      {/* Chart */}
+      <div className="px-5 py-4">
+        {chartLoading && (
+          <div className="flex items-center justify-center h-52">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        {!chartLoading && !selected.length && (
+          <div className="flex items-center justify-center h-52 text-slate-400 text-sm">Select at least one commodity above to view the chart.</div>
+        )}
+        {!chartLoading && !!selected.length && !allDates.length && (
+          <div className="flex items-center justify-center h-52 text-slate-400 text-sm">No price records in the last {days} days for the selected commodities.</div>
+        )}
+        {!chartLoading && allDates.length > 0 && (
+          <div className="relative" onMouseLeave={() => setTip(null)}>
+            <svg ref={svgRef} viewBox={`0 0 ${CP.vW} ${CP.vH}`} width="100%" className="overflow-visible"
+              onMouseMove={(e) => {
+                if (!svgRef.current) return;
+                const rect = svgRef.current.getBoundingClientRect();
+                const svgX = ((e.clientX - rect.left) / rect.width) * CP.vW;
+                const idx = Math.round(((svgX - CP.x) / CP.w) * (allDates.length - 1));
+                setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top, idx: Math.max(0, Math.min(allDates.length - 1, idx)) });
+              }}>
+              {/* Horizontal grid + Y labels */}
+              {yTicks.map((tick, i) => (
+                <g key={i}>
+                  <line x1={CP.x} y1={yS(tick)} x2={CP.x + CP.w} y2={yS(tick)} stroke="#f1f5f9" strokeWidth="1" />
+                  <text x={CP.x - 5} y={yS(tick) + 4} textAnchor="end" fill="#94a3b8" fontSize="9.5">
+                    ₱{tick >= 1000 ? (tick / 1000).toFixed(1) + 'k' : tick.toFixed(0)}
+                  </text>
+                </g>
+              ))}
+              {/* Axes */}
+              <line x1={CP.x} y1={CP.y} x2={CP.x} y2={CP.y + CP.h} stroke="#e2e8f0" strokeWidth="1" />
+              <line x1={CP.x} y1={CP.y + CP.h} x2={CP.x + CP.w} y2={CP.y + CP.h} stroke="#e2e8f0" strokeWidth="1" />
+              {/* X labels */}
+              {allDates.map((d, i) => {
+                if (i % xStep !== 0 && i !== allDates.length - 1) return null;
+                return (
+                  <text key={i} x={xS(i)} y={CP.y + CP.h + 15} textAnchor="middle" fill="#94a3b8" fontSize="9">
+                    {new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                  </text>
+                );
+              })}
+              {/* Lines per commodity */}
+              {series.map((s) => {
+                let seg = ''; const parts: string[] = [];
+                s.points.forEach((p, i) => {
+                  if (p.price === null) { if (seg) { parts.push(seg); seg = ''; } return; }
+                  const x = xS(i), y = yS(p.price);
+                  seg += seg ? ` L ${x} ${y}` : `M ${x} ${y}`;
+                });
+                if (seg) parts.push(seg);
+                return (
+                  <g key={s.cid}>
+                    <path d={parts.join(' ')} fill="none" stroke={s.color} strokeWidth="2.5"
+                      strokeLinecap="round" strokeLinejoin="round" />
+                    {showDots && s.points.map((p, i) =>
+                      p.price !== null
+                        ? <circle key={i} cx={xS(i)} cy={yS(p.price!)} r="3.5" fill={s.color} stroke="white" strokeWidth="1.5" />
+                        : null
+                    )}
+                  </g>
+                );
+              })}
+              {/* Hover guide */}
+              {tip && (
+                <line x1={xS(tip.idx)} y1={CP.y} x2={xS(tip.idx)} y2={CP.y + CP.h}
+                  stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 3" />
+              )}
+            </svg>
+            {/* Tooltip */}
+            {tip && allDates[tip.idx] && (
+              <div className="absolute bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2.5 pointer-events-none z-20 text-xs min-w-[160px]"
+                style={{ left: tip.x + 14, top: Math.max(4, tip.y - 20), transform: tip.x > 550 ? 'translateX(-115%)' : 'none' }}>
+                <p className="font-semibold text-slate-600 pb-1.5 mb-1.5 border-b border-slate-100">
+                  {new Date(allDates[tip.idx] + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+                {series.map(s => {
+                  const pt = s.points[tip.idx];
+                  return pt?.price != null ? (
+                    <div key={s.cid} className="flex items-center gap-1.5 py-0.5">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                      <span className="text-slate-600 truncate max-w-[90px]">{s.name}</span>
+                      <span className="font-semibold text-slate-800 ml-auto pl-2">{formatCurrency(pt.price)}/{s.unit}</span>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Legend */}
+      {!!selected.length && allDates.length > 0 && (
+        <div className="px-5 py-3 border-t border-slate-100 flex flex-wrap gap-4">
+          {series.map(s => (
+            <div key={s.cid} className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="inline-block w-6 h-0.5 rounded-full" style={{ backgroundColor: s.color }} />
+              <span className="font-medium">{s.name}</span>
+              <span className="text-slate-400">({s.unit})</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── OVERVIEW TAB ─────────────────────────────────────────────────────────────
 function OverviewTab() {
   const [data, setData] = useState<OverviewData | null>(null);
@@ -138,6 +358,9 @@ function OverviewTab() {
           </div>
         ))}
       </div>
+
+      {/* Commodity Price Chart */}
+      <CommodityPriceChart />
 
       {/* Top Risers & Fallers */}
       {globalSummary && (
