@@ -674,6 +674,81 @@ router.post('/:id/payment', async (req, res) => {
   }
 });
 
+// Update an existing payment record (receipt number, amount, payment date)
+router.put('/:id/payment/:paymentId', async (req, res) => {
+  try {
+    const { id: citationId, paymentId } = req.params;
+    const { receiptNumber, amountPaid, paymentDate } = req.body;
+
+    // Verify citation exists
+    const [citations] = await pool.execute(
+      'SELECT * FROM citations WHERE citation_id = ?',
+      [citationId]
+    );
+    if (citations.length === 0) {
+      return res.status(404).json({ error: 'Citation not found' });
+    }
+
+    // Verify payment belongs to this citation
+    const [payments] = await pool.execute(
+      'SELECT * FROM citation_payments WHERE payment_id = ? AND citation_id = ?',
+      [paymentId, citationId]
+    );
+    if (payments.length === 0) {
+      return res.status(404).json({ error: 'Payment record not found' });
+    }
+
+    const fields = [];
+    const values = [];
+
+    if (receiptNumber !== undefined) {
+      fields.push('receipt_number = ?');
+      values.push(receiptNumber || null);
+    }
+    if (amountPaid !== undefined) {
+      const amount = parseFloat(amountPaid);
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'Invalid amount' });
+      }
+      fields.push('amount_paid = ?');
+      values.push(amount);
+    }
+    if (paymentDate !== undefined) {
+      fields.push('payment_date = ?');
+      values.push(new Date(paymentDate).toISOString().split('T')[0]);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(paymentId, citationId);
+    await pool.execute(
+      `UPDATE citation_payments SET ${fields.join(', ')} WHERE payment_id = ? AND citation_id = ?`,
+      values
+    );
+
+    // Recompute citation payment_status based on current total
+    const [totals] = await pool.execute(
+      'SELECT SUM(amount_paid) as total_paid FROM citation_payments WHERE citation_id = ?',
+      [citationId]
+    );
+    const totalPaid = totals[0].total_paid || 0;
+    const newStatus = totalPaid >= citations[0].fine_amount ? 'Paid' : 'Partially Paid';
+    await pool.execute(
+      'UPDATE citations SET payment_status = ?, updated_at = NOW() WHERE citation_id = ?',
+      [newStatus, citationId]
+    );
+
+    await logAction(req.user.user_id, 'UPDATE_CITATION_PAYMENT', `Updated payment ${paymentId} for citation: ${citationId}`, citationId);
+
+    res.json({ message: 'Payment updated successfully', status: newStatus });
+  } catch (error) {
+    console.error('Update payment error:', error);
+    res.status(500).json({ error: 'Failed to update payment' });
+  }
+});
+
 // Get audit trail for a citation
 router.get('/:id/audit-trail', async (req, res) => {
   try {

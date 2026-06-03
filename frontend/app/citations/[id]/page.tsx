@@ -208,6 +208,15 @@ export default function CitationDetailsPage() {
   });
   const [paymentSaving, setPaymentSaving] = useState(false);
 
+  // Payment edit state
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [editPaymentForm, setEditPaymentForm] = useState({
+    receipt_number: '',
+    amount_paid: '',
+    payment_date: '',
+  });
+  const [editPaymentSaving, setEditPaymentSaving] = useState(false);
+
   useEffect(() => {
     if (citationId) {
       fetchCitationDetails();
@@ -347,6 +356,39 @@ export default function CitationDetailsPage() {
       setError(err.response?.data?.error || 'Failed to record payment');
     } finally {
       setPaymentSaving(false);
+    }
+  };
+
+  const startEditPayment = (payment: PaymentRecord) => {
+    setEditingPaymentId(payment.payment_id);
+    setEditPaymentForm({
+      receipt_number: payment.receipt_number || '',
+      amount_paid: String(payment.amount_paid),
+      payment_date: payment.payment_date ? payment.payment_date.split('T')[0] : '',
+    });
+  };
+
+  const handleSaveEditPayment = async () => {
+    if (!editingPaymentId) return;
+    if (!editPaymentForm.amount_paid || parseFloat(editPaymentForm.amount_paid) <= 0) {
+      setError('Please enter a valid payment amount');
+      return;
+    }
+    try {
+      setEditPaymentSaving(true);
+      await api.put(`/api/citations/${citationId}/payment/${editingPaymentId}`, {
+        receiptNumber: editPaymentForm.receipt_number,
+        amountPaid: parseFloat(editPaymentForm.amount_paid),
+        paymentDate: editPaymentForm.payment_date,
+      });
+      setEditingPaymentId(null);
+      await fetchCitationDetails();
+      await fetchAuditTrail();
+      showSuccess('Payment updated successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update payment');
+    } finally {
+      setEditPaymentSaving(false);
     }
   };
 
@@ -1147,30 +1189,95 @@ export default function CitationDetailsPage() {
                       <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Method</th>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Receipt #</th>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600 uppercase">Notes</th>
+                      {isAdmin && <th className="px-4 py-2 text-center text-xs font-semibold text-slate-600 uppercase">Action</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {payments.map((payment) => (
-                      <tr key={payment.payment_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-slate-600">
-                          {new Date(payment.payment_date).toLocaleDateString('en-US', {
-                            month: 'short', day: 'numeric', year: 'numeric',
-                          })}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-green-700">
-                          ₱{formatCurrency(Number(payment.amount_paid))}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{payment.payment_method}</td>
-                        <td className="px-4 py-3 text-slate-600">{payment.receipt_number || '—'}</td>
-                        <td className="px-4 py-3 text-slate-600">{payment.notes || '—'}</td>
-                      </tr>
-                    ))}
+                    {payments.map((payment) =>
+                      editingPaymentId === payment.payment_id ? (
+                        /* Inline edit row */
+                        <tr key={payment.payment_id} className="bg-amber-50">
+                          <td className="px-2 py-2">
+                            <input
+                              type="date"
+                              value={editPaymentForm.payment_date}
+                              onChange={(e) => setEditPaymentForm((p) => ({ ...p, payment_date: e.target.value }))}
+                              className="w-full px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={editPaymentForm.amount_paid}
+                              onChange={(e) => setEditPaymentForm((p) => ({ ...p, amount_paid: e.target.value }))}
+                              className="w-full px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-slate-500 text-xs italic">{payment.payment_method}</td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              value={editPaymentForm.receipt_number}
+                              onChange={(e) => setEditPaymentForm((p) => ({ ...p, receipt_number: e.target.value }))}
+                              placeholder="Receipt #"
+                              className="w-full px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-slate-500 text-xs italic">{payment.notes || '—'}</td>
+                          <td className="px-2 py-2 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={handleSaveEditPayment}
+                                disabled={editPaymentSaving}
+                                className="px-2 py-1 text-xs font-semibold bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+                              >
+                                {editPaymentSaving ? '...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => setEditingPaymentId(null)}
+                                disabled={editPaymentSaving}
+                                className="px-2 py-1 text-xs font-semibold bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        /* Normal display row */
+                        <tr key={payment.payment_id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 text-slate-600">
+                            {new Date(payment.payment_date).toLocaleDateString('en-US', {
+                              month: 'short', day: 'numeric', year: 'numeric',
+                            })}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-green-700">
+                            ₱{formatCurrency(Number(payment.amount_paid))}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">{payment.payment_method}</td>
+                          <td className="px-4 py-3 text-slate-600">{payment.receipt_number || '—'}</td>
+                          <td className="px-4 py-3 text-slate-600">{payment.notes || '—'}</td>
+                          {isAdmin && (
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => startEditPayment(payment)}
+                                className="px-2 py-1 text-xs font-semibold text-amber-700 bg-amber-100 rounded hover:bg-amber-200 transition-colors border border-amber-200"
+                              >
+                                Edit
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    )}
                   </tbody>
                   <tfoot>
                     <tr className="bg-slate-50 border-t-2 border-slate-200">
                       <td className="px-4 py-2 text-xs font-bold text-slate-600 uppercase">Total</td>
                       <td className="px-4 py-2 font-bold text-green-700">₱{formatCurrency(totalPaid)}</td>
-                      <td colSpan={3} />
+                      <td colSpan={isAdmin ? 4 : 3} />
                     </tr>
                   </tfoot>
                 </table>
