@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Price Monitoring Report — PAMS</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  body{ font-family:Arial,Helvetica,sans-serif; font-size:11px; color:#222; background:#e8edf2; }
+
+  .controls{
+    background:#1F4788; padding:9px 20px; display:flex; align-items:center;
+    gap:10px; position:sticky; top:0; z-index:200;
+  }
+  .controls span{ color:#acd; font-size:12px; flex:1; }
+  .btn{ padding:7px 18px; border:none; border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; }
+  .btn-print{ background:#28a745; color:#fff; }
+  .btn-close{ background:#6c757d; color:#fff; }
+  .btn:hover{ opacity:.87; }
+
+  .page{
+    width:8.5in; min-height:13in;
+    padding:0.45in 0.55in 0.75in 0.55in;
+    margin:20px auto; background:#fff;
+    box-shadow:0 2px 12px rgba(0,0,0,.14);
+    position:relative; page-break-after:always; box-sizing:border-box;
+  }
+  .page:last-child{ page-break-after:avoid; }
+
+  .lgu-header{ text-align:center; margin-bottom:12px; padding-bottom:10px; border-bottom:2px solid #1F4788; }
+  .lgu-header .logo-row{ display:flex; justify-content:center; align-items:center; gap:18px; margin-bottom:6px; }
+  .lgu-header .text-block{ text-align:center; line-height:1.35; }
+
+  .rpt-band{ background:#1F4788; color:#fff; text-align:center; padding:10px 16px; border-radius:3px; margin-bottom:8px; }
+  .rpt-band h1{ font-size:15px; font-weight:bold; letter-spacing:.5px; }
+  .rpt-band .sub{ font-size:9.5px; opacity:.82; margin-top:2px; }
+
+  .rpt-meta{ background:#f0f4fb; border:1px solid #c8d4e8; padding:5px 12px; font-size:9.5px; color:#555;
+    display:flex; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:4px; }
+
+  .section{ margin-bottom:16px; }
+  .sec-title{ font-size:11px; font-weight:bold; color:#fff; background:#1F4788; padding:5px 10px;
+    border-radius:3px; margin-bottom:8px; text-transform:uppercase; letter-spacing:.5px; }
+
+  .tiles{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .tile{ flex:1; min-width:90px; background:#f5f8ff; border:1px solid #d0daea; border-radius:6px; padding:9px 12px; text-align:center; }
+  .tile .lbl{ font-size:9px; color:#6b7a99; text-transform:uppercase; letter-spacing:.3px; }
+  .tile .val{ font-size:20px; font-weight:bold; color:#1F4788; margin-top:2px; }
+  .tile .sub{ font-size:8.5px; color:#888; margin-top:1px; line-height:1.3; }
+
+  .explain{ background:#fffbeb; border:1px solid #fcd34d; border-left:4px solid #f59e0b;
+    border-radius:4px; padding:8px 12px; font-size:9.5px; color:#78350f;
+    margin-bottom:10px; line-height:1.5; }
+  .explain strong{ color:#92400e; }
+
+  table{ width:100%; border-collapse:collapse; font-size:10px; margin-bottom:10px; }
+  thead tr{ background:#1F4788; color:#fff; }
+  thead th{ padding:6px 8px; text-align:left; white-space:nowrap; font-size:9.5px; }
+  tbody tr:nth-child(even){ background:#f5f7fa; }
+  tbody td{ padding:5px 8px; border-bottom:1px solid #e8ecf4; vertical-align:middle; }
+  .best-row td:first-child{ border-left:3px solid #16a34a; }
+  .high-row td:first-child{ border-left:3px solid #dc2626; }
+  .anom-row{ background:#fff7ed !important; }
+
+  .tag{ display:inline-block; padding:2px 7px; border-radius:3px; font-size:8.5px; font-weight:bold; }
+  .tag-rising{ background:#fee2e2; color:#991b1b; }
+  .tag-falling{ background:#dcfce7; color:#166534; }
+  .tag-stable{ background:#e0e7ff; color:#3730a3; }
+  .tag-anom{ background:#fef3c7; color:#92400e; }
+  .tag-best{ background:#dcfce7; color:#166534; }
+  .tag-high{ background:#fee2e2; color:#991b1b; }
+
+  .insights{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:10px; }
+  .insight{ border-radius:5px; padding:8px 11px; display:flex; gap:7px; align-items:flex-start; font-size:10px; }
+  .insight-warning{ background:#fffbeb; border-left:4px solid #f59e0b; }
+  .insight-positive{ background:#f0fdf4; border-left:4px solid #22c55e; }
+  .insight-info{ background:#eff6ff; border-left:4px solid #3b82f6; }
+  .insight-alert{ background:#fef2f2; border-left:4px solid #ef4444; }
+  .insight-forecast{ background:#faf5ff; border-left:4px solid #a855f7; }
+  .insight .ico{ font-size:15px; flex-shrink:0; margin-top:1px; }
+  .insight .ititle{ font-weight:bold; margin-bottom:2px; font-size:10px; }
+  .insight .idetail{ color:#444; line-height:1.45; }
+  .insight .inote{ color:#888; font-size:8.5px; margin-top:3px; font-style:italic; }
+
+  .stats-row{ display:flex; gap:7px; flex-wrap:wrap; margin-bottom:10px; }
+  .stat-box{ flex:1; min-width:70px; background:#f5f8ff; border:1px solid #dde5f4; border-radius:5px; padding:7px 10px; text-align:center; }
+  .stat-box .sv{ font-size:14px; font-weight:bold; color:#1F4788; }
+  .stat-box .sl{ font-size:8.5px; color:#6b7a99; text-transform:uppercase; margin-top:1px; }
+  .stat-box .sn{ font-size:8px; color:#999; margin-top:2px; font-style:italic; }
+
+  .forecast-row{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .fc-box{ flex:1; min-width:58px; background:#faf5ff; border:1px solid #d8b4fe; border-radius:5px; padding:6px 8px; text-align:center; }
+  .fc-box .fd{ font-size:8.5px; color:#7c3aed; font-weight:bold; }
+  .fc-box .fp{ font-size:12px; font-weight:bold; color:#4c1d95; }
+
+  .comm-heading{ background:#1F4788; color:#fff; padding:9px 14px; border-radius:4px 4px 0 0;
+    display:flex; justify-content:space-between; align-items:center; }
+  .comm-heading .cn{ font-size:13px; font-weight:bold; }
+  .comm-heading .cm{ font-size:9.5px; opacity:.8; margin-top:1px; }
+
+  .chart-wrap{ margin-bottom:10px; }
+
+  .sig-area{ display:flex; justify-content:space-between; gap:40px; margin-top:24px; padding-top:12px; border-top:1px solid #ddd; }
+  .sig-box{ flex:1; text-align:center; }
+  .sig-line{ border-bottom:1px solid #333; margin-bottom:4px; height:36px; }
+  .sig-name{ font-weight:bold; font-size:10px; }
+  .sig-title{ font-size:9px; color:#555; }
+
+  .page-footer{ position:absolute; bottom:0.3in; left:0.55in; right:0.55in;
+    border-top:1px solid #ccc; padding-top:5px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:8px; color:#888; }
+
+  .error-box{ margin:40px auto; max-width:500px; padding:20px; background:#fff3cd;
+    border:1px solid #ffc107; border-radius:6px; color:#856404; }
+
+  @page{ size:8.5in 13in portrait; margin:0; }
+  @media print{
+    body{ background:#fff; }
+    .controls{ display:none!important; }
+    .page{ box-shadow:none; margin:0; padding:0.45in 0.55in 0.7in 0.55in; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span id="loadStatus">&#8987; Loading report&hellip;</span>
+  <button class="btn btn-print" onclick="window.print()" id="btnPrint" style="display:none">&#128424; Print / Save as PDF</button>
+  <button class="btn btn-close" onclick="window.close()">&#10005; Close</button>
+</div>
+
+<div id="report-root"></div>
+
+<script>
+var p   = new URLSearchParams(location.search);
+var TOK = p.get('token') || localStorage.getItem('token') || '';
+var API = location.origin;
+
+var COMMODITY_IDS = (p.get('commodities') || '').split(',').filter(Boolean);
+var MARKET_IDS    = (p.get('markets')     || '').split(',').filter(Boolean);
+var DATE_FROM     = p.get('dateFrom') || '';
+var DATE_TO       = p.get('dateTo')   || '';
+
+var root     = document.getElementById('report-root');
+var loadStat = document.getElementById('loadStatus');
+var btnPrint = document.getElementById('btnPrint');
+
+function php(v){
+  var n = parseFloat(v);
+  return isNaN(n) ? '\u20b10.00' : '\u20b1' + n.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtDate(d){
+  if(!d) return '\u2014';
+  return new Date(d.split('T')[0]+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'});
+}
+function fmtShort(d){
+  if(!d) return '';
+  return new Date(d.split('T')[0]+'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'});
+}
+function fmtMktType(t){
+  return (t||'').replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+function insIcon(t){
+  return {warning:'\u26a0\ufe0f',positive:'\u2705',info:'\u2139\ufe0f',alert:'\u{1f6a8}',forecast:'\u{1f52e}'}[t]||'\u2022';
+}
+function insClass(t){ return 'insight insight-'+(t||'info'); }
+function trendTag(d,pct){
+  if(d==='rising')  return '<span class="tag tag-rising">\u25b2 Rising ('+Math.abs(pct)+'%)</span>';
+  if(d==='falling') return '<span class="tag tag-falling">\u25bc Falling ('+Math.abs(pct)+'%)</span>';
+  return '<span class="tag tag-stable">\u2014 Stable ('+Math.abs(pct)+'%)</span>';
+}
+function insNote(t){
+  return {
+    warning:  'Prices went up during this period. The local government may need to check if there are supply problems or if intervention is needed.',
+    positive: 'Good news: prices are lower than before, meaning goods are more affordable for residents.',
+    info:     'Prices are not changing much. This is a normal and stable market situation.',
+    alert:    'Some prices were unusually high or low on certain days. These may be due to data entry errors or sudden market events and should be verified.',
+    forecast: 'This is a computer estimate based on recent trends. Actual prices may be different.',
+  }[t]||'';
+}
+
+function sparkline(history,W,H){
+  W=W||640; H=H||90;
+  if(!history||!history.length) return '<p style="color:#bbb;font-size:9px;text-align:center;padding:10px 0">No chart data</p>';
+  var prices=history.map(function(r){return r.price;});
+  var ma7=history.map(function(r){return r.ma7||0;});
+  var rawMin=Math.min.apply(null,prices),rawMax=Math.max.apply(null,prices);
+  var pad=(rawMax-rawMin)*0.1||5;
+  var minY=Math.max(0,rawMin-pad),maxY=rawMax+pad;
+  var range=maxY-minY||1;
+  var n=prices.length;
+  function xS(i){return (i/Math.max(n-1,1))*W;}
+  function yS(v){return H-((v-minY)/range)*H;}
+
+  var pricePath=prices.map(function(v,i){return (i===0?'M':' L')+xS(i).toFixed(1)+','+yS(v).toFixed(1);}).join('');
+  var areaPath=pricePath+' L'+xS(n-1).toFixed(1)+','+H+' L0,'+H+' Z';
+  var ma7Path=ma7.map(function(v,i){return (i===0?'M':' L')+xS(i).toFixed(1)+','+yS(v).toFixed(1);}).join('');
+
+  var anomDots=history.map(function(r,i){
+    return r.is_anomaly?'<circle cx="'+xS(i).toFixed(1)+'" cy="'+yS(r.price).toFixed(1)+'" r="3.5" fill="#ef4444" stroke="#fff" stroke-width="1.5"/>':'';
+  }).join('');
+
+  var step=Math.max(1,Math.ceil(n/8));
+  var xLabels=history.map(function(r,i){
+    if(i%step!==0&&i!==n-1) return '';
+    return '<text x="'+xS(i).toFixed(1)+'" y="'+(H+14)+'" text-anchor="middle" fill="#aaa" font-size="7.5">'+fmtShort(r.date)+'</text>';
+  }).join('');
+
+  var yTicks=[minY,(minY+maxY)/2,maxY];
+  var yLabels=yTicks.map(function(v){
+    return '<text x="-4" y="'+(yS(v)+3).toFixed(1)+'" text-anchor="end" fill="#aaa" font-size="7.5">'+php(v)+'</text>';
+  }).join('');
+
+  return '<svg viewBox="-50 -14 '+(W+62)+' '+(H+30)+'" width="100%" style="display:block;overflow:visible">'
+    +yTicks.map(function(v){return '<line x1="0" y1="'+yS(v).toFixed(1)+'" x2="'+W+'" y2="'+yS(v).toFixed(1)+'" stroke="#f0f4f8" stroke-width="1"/>';}).join('')
+    +'<path d="'+areaPath+'" fill="#3b82f622"/>'
+    +'<path d="'+pricePath+'" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    +(ma7Path?'<path d="'+ma7Path+'" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>'  :'')
+    +anomDots
+    +'<line x1="0" y1="0" x2="0" y2="'+H+'" stroke="#dde5f4" stroke-width="1"/>'
+    +'<line x1="0" y1="'+H+'" x2="'+W+'" y2="'+H+'" stroke="#dde5f4" stroke-width="1"/>'
+    +yLabels+xLabels
+    +'<line x1="'+(W-155)+'" y1="-8" x2="'+(W-143)+'" y2="-8" stroke="#3b82f6" stroke-width="2"/>'
+    +'<text x="'+(W-139)+'" y="-5" fill="#666" font-size="7.5">Actual Price</text>'
+    +'<line x1="'+(W-88)+'" y1="-8" x2="'+(W-76)+'" y2="-8" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 3"/>'
+    +'<text x="'+(W-72)+'" y="-5" fill="#666" font-size="7.5">7-Day Average</text>'
+    +'<circle cx="'+(W-14)+'" cy="-8" r="3" fill="#ef4444" stroke="#fff" stroke-width="1"/>'
+    +'<text x="'+(W-9)+'" y="-5" fill="#666" font-size="7.5">Unusual Price</text>'
+    +'</svg>';
+}
+
+function buildLguHeader(settings){
+  function getLogoUrl(url){
+    if(!url) return null;
+    if(url.startsWith('http')) return url;
+    if(url.startsWith('/api/')) return API+url;
+    return url;
+  }
+  var logoL=getLogoUrl(settings.permit_header_logo_left&&settings.permit_header_logo_left.value)||'/dalaguete-logo.png';
+  var logoR=getLogoUrl(settings.permit_header_logo_right&&settings.permit_header_logo_right.value)||null;
+  var hH=Math.max(20,Math.min(120,parseFloat((settings.permit_header_logo_size&&settings.permit_header_logo_size.value)||'54')||54));
+  var base=Math.max(7,Math.min(18,parseFloat((settings.permit_header_font_size&&settings.permit_header_font_size.value)||'11')||11));
+  var l1=(settings.permit_header_line_1&&settings.permit_header_line_1.value)||'REPUBLIC OF THE PHILIPPINES';
+  var l2=(settings.permit_header_line_2&&settings.permit_header_line_2.value)||'MUNICIPALITY OF DALAGUETE';
+  var l3=(settings.permit_header_line_3&&settings.permit_header_line_3.value)||'PROVINCE OF CEBU';
+  var l4=(settings.permit_header_line_4&&settings.permit_header_line_4.value)||'OFFICE OF THE MUNICIPAL MAYOR';
+  var l5=(settings.permit_header_line_5&&settings.permit_header_line_5.value)||'Tel. # 520 4141 loc. 315';
+  return '<div class="lgu-header">'
+    +'<div class="logo-row">'
+    +(logoL?'<img src="'+logoL+'" alt="Logo" style="height:'+hH+'px;width:auto;object-fit:contain">':'')
+    +'<div class="text-block">'
+    +(l1?'<div style="font-size:'+base+'px;font-weight:bold">'+l1+'</div>':'')
+    +(l2?'<div style="font-size:'+base+'px;font-weight:bold">'+l2+'</div>':'')
+    +(l3?'<div style="font-size:'+base+'px;font-weight:bold">'+l3+'</div>':'')
+    +(l4?'<div style="font-size:'+Math.round(base*1.45)+'px;font-weight:bold;margin-top:2px">'+l4+'</div>':'')
+    +(l5?'<div style="font-size:'+base+'px;font-weight:bold;margin-top:2px">'+l5+'</div>':'')
+    +'</div>'
+    +(logoR?'<img src="'+logoR+'" alt="Logo 2" style="height:'+hH+'px;width:auto;object-fit:contain">':'')
+    +'</div></div>';
+}
+
+function pageFooter(label,total,generatedAt){
+  return '<div class="page-footer">'
+    +'<span>Price Monitoring Report &mdash; PAMS, Dalaguete, Cebu</span>'
+    +'<span>'+label+' of '+total+'</span>'
+    +'<span>Generated: '+new Date(generatedAt).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})+'</span>'
+    +'</div>';
+}
+
+function buildReport(data,settings){
+  var lguH=buildLguHeader(settings);
+  var withData=data.commodities.filter(function(c){return c.has_data;});
+  var totalPgs=1+withData.length;
+  var pg=0;
+  var html='';
+
+  // PAGE 1
+  pg++;
+  var totalComms=data.commodities.length;
+  var totalRecs=data.commodities.reduce(function(s,c){return s+(c.record_count||0);},0);
+  var risers=data.commodities.filter(function(c){return c.has_data&&c.statistics.trend_direction==='rising';}).length;
+  var fallers=data.commodities.filter(function(c){return c.has_data&&c.statistics.trend_direction==='falling';}).length;
+  var estList=data.selected_establishments.map(function(m){return m.market_name;}).join(', ')||'All Establishments';
+
+  html+='<div class="page">'+lguH
+    +'<div class="rpt-band"><h1>PRICE MONITORING REPORT</h1><div class="sub">Commodity Price Surveillance &amp; Market Analysis &mdash; Dalaguete, Cebu</div></div>'
+    +'<div class="rpt-meta">'
+    +'<span><strong>Period:</strong> '+data.date_filter.label+'</span>'
+    +'<span><strong>Establishments:</strong> '+estList+'</span>'
+    +'<span><strong>Prepared by:</strong> '+data.generated_by+'</span>'
+    +'<span><strong>Date:</strong> '+new Date(data.generated_at).toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})+'</span>'
+    +'</div>'
+    +'<div class="explain"><strong>About This Report:</strong> This report shows the prices of basic commodities (goods) monitored in selected establishments within the municipality. '
+    +'It helps local officials, residents, and market vendors understand how prices are moving &mdash; whether going up, going down, or staying the same. '
+    +'All prices are in Philippine Peso (&thinsp;&peso;&thinsp;) per unit.</div>'
+
+    +'<div class="section"><div class="sec-title">At a Glance</div>'
+    +'<div class="tiles">'
+    +'<div class="tile"><div class="lbl">Commodities Checked</div><div class="val">'+totalComms+'</div><div class="sub">'+withData.length+' with price data</div></div>'
+    +'<div class="tile"><div class="lbl">Price Records</div><div class="val">'+totalRecs.toLocaleString()+'</div><div class="sub">entries in this period</div></div>'
+    +'<div class="tile"><div class="lbl">Prices Going Up</div><div class="val" style="color:#dc2626">'+risers+'</div><div class="sub">commodit'+(risers===1?'y':'ies')+' with rising prices</div></div>'
+    +'<div class="tile"><div class="lbl">Prices Going Down</div><div class="val" style="color:#16a34a">'+fallers+'</div><div class="sub">commodit'+(fallers===1?'y':'ies')+' with falling prices</div></div>'
+    +'<div class="tile"><div class="lbl">Monitored Locations</div><div class="val">'+data.selected_establishments.length+'</div><div class="sub">establishment'+(data.selected_establishments.length===1?'':'s')+'</div></div>'
+    +'</div></div>'
+
+    +'<div class="section"><div class="sec-title">Monitored Establishments</div>'
+    +'<table><thead><tr><th>#</th><th>Name</th><th>Type</th><th>Barangay</th><th>Address</th></tr></thead><tbody>'
+    +data.selected_establishments.map(function(m,i){
+      return '<tr><td>'+(i+1)+'</td><td><strong>'+m.market_name+'</strong></td><td>'+fmtMktType(m.market_type)+'</td><td>'+(m.barangay||'&mdash;')+'</td><td>'+(m.address||'&mdash;')+'</td></tr>';
+    }).join('')
+    +'</tbody></table></div>'
+
+    +'<div class="section"><div class="sec-title">Commodity Price Overview</div>'
+    +'<div class="explain"><strong>How to read this table:</strong> '
+    +'<strong>Average Price</strong> = the typical price during the period. '
+    +'<strong>Lowest/Highest</strong> = cheapest and most expensive recorded prices. '
+    +'<strong>Price Change</strong> = whether the price went up &uarr;, went down &darr;, or stayed the same compared to the start of the period.</div>'
+    +'<table><thead><tr><th>#</th><th>Commodity</th><th>Category</th><th>Unit</th>'
+    +'<th>Average Price</th><th>Lowest</th><th>Highest</th><th>Price Change</th><th>Records</th></tr></thead><tbody>'
+    +data.commodities.map(function(c,i){
+      if(!c.has_data) return '<tr><td>'+(i+1)+'</td><td><strong>'+c.commodity.commodity_name+'</strong></td>'
+        +'<td>'+c.commodity.category_name+'</td><td>'+c.commodity.unit+'</td>'
+        +'<td colspan="5" style="color:#aaa;font-style:italic">No records for this period</td></tr>';
+      var s=c.statistics;
+      return '<tr><td>'+(i+1)+'</td><td><strong>'+c.commodity.commodity_name+'</strong></td>'
+        +'<td>'+c.commodity.category_name+'</td><td>'+c.commodity.unit+'</td>'
+        +'<td><strong>'+php(s.mean)+'</strong></td>'
+        +'<td style="color:#16a34a">'+php(s.min)+'</td>'
+        +'<td style="color:#dc2626">'+php(s.max)+'</td>'
+        +'<td>'+trendTag(s.trend_direction,s.trend_pct)+'</td>'
+        +'<td>'+c.record_count+'</td></tr>';
+    }).join('')
+    +'</tbody></table></div>'
+
+    +'<div class="sig-area">'
+    +'<div class="sig-box"><div class="sig-line"></div><div class="sig-name">Prepared by</div><div class="sig-title">Market Inspector / Data Encoder</div></div>'
+    +'<div class="sig-box"><div class="sig-line"></div><div class="sig-name">Reviewed by</div><div class="sig-title">Municipal Agriculture / Trade Officer</div></div>'
+    +'<div class="sig-box"><div class="sig-line"></div><div class="sig-name">Approved by</div><div class="sig-title">Municipal Mayor</div></div>'
+    +'</div>'
+    +pageFooter('Page 1',totalPgs,data.generated_at)
+    +'</div>';
+
+  // PER-COMMODITY DETAIL PAGES
+  withData.forEach(function(c){
+    pg++;
+    var s=c.statistics;
+
+    var volatNote=s.volatility>20?'Prices fluctuated a lot during this period.':s.volatility>10?'Prices had moderate fluctuation.':'Prices were mostly steady.';
+
+    html+='<div class="page">'+lguH
+      +'<div class="comm-heading">'
+      +'<div><div class="cn">'+c.commodity.commodity_name+' &nbsp;&middot;&nbsp; <span style="font-weight:normal">Price per '+c.commodity.unit+'</span></div>'
+      +'<div class="cm">Category: '+c.commodity.category_name+' &nbsp;&middot;&nbsp; Records in period: '+c.record_count+'</div></div>'
+      +'<div>'+trendTag(s.trend_direction,s.trend_pct)+'</div>'
+      +'</div>'
+      +'<div style="background:#e8edf6;padding:4px 14px 6px;margin-bottom:10px;border-radius:0 0 4px 4px;font-size:9px;color:#555">'
+      +'Period: '+data.date_filter.label+' &nbsp;&middot;&nbsp; Establishments: '+data.selected_establishments.map(function(m){return m.market_name;}).join(', ')
+      +'</div>'
+
+      +'<div class="section"><div class="sec-title">Key Price Numbers</div>'
+      +'<div class="stats-row">'
+      +'<div class="stat-box"><div class="sv">'+php(s.mean)+'</div><div class="sl">Average Price</div><div class="sn">Typical price this period</div></div>'
+      +'<div class="stat-box"><div class="sv" style="color:#16a34a">'+php(s.min)+'</div><div class="sl">Lowest Price</div><div class="sn">Cheapest price recorded</div></div>'
+      +'<div class="stat-box"><div class="sv" style="color:#dc2626">'+php(s.max)+'</div><div class="sl">Highest Price</div><div class="sn">Most expensive recorded</div></div>'
+      +'<div class="stat-box"><div class="sv">'+php(s.first_price)+'</div><div class="sl">Price at Start</div><div class="sn">First price in period</div></div>'
+      +'<div class="stat-box"><div class="sv">'+php(s.latest_price)+'</div><div class="sl">Latest Price</div><div class="sn">Most recent price</div></div>'
+      +'<div class="stat-box"><div class="sv">'+s.volatility+'%</div><div class="sl">Price Variation</div><div class="sn">'+volatNote+'</div></div>'
+      +'</div></div>'
+
+      +'<div class="section"><div class="sec-title">Findings &amp; Analysis</div>'
+      +'<div class="explain">The following findings are automatically generated based on recorded price data. '
+      +'They help local officials and market personnel understand what is happening with prices.</div>'
+      +'<div class="insights">'
+      +c.insights.map(function(ins){
+        var note=insNote(ins.type);
+        return '<div class="'+insClass(ins.type)+'">'
+          +'<div class="ico">'+insIcon(ins.type)+'</div>'
+          +'<div><div class="ititle">'+ins.title+'</div>'
+          +'<div class="idetail">'+ins.detail+'</div>'
+          +(note?'<div class="inote">What this means: '+note+'</div>':'')
+          +'</div></div>';
+      }).join('')
+      +'</div></div>'
+
+      +'<div class="section"><div class="sec-title">Price Trend Chart</div>'
+      +'<div class="explain" style="margin-bottom:6px">'
+      +'The chart shows how the price of <strong>'+c.commodity.commodity_name+'</strong> changed over time. '
+      +'The <span style="color:#3b82f6;font-weight:bold">blue line</span> is the actual recorded price. '
+      +'The <span style="color:#f59e0b;font-weight:bold">dashed orange line</span> is the 7-day average (smoothed trend). '
+      +'<span style="color:#ef4444;font-weight:bold">Red dots</span> mark unusual prices worth investigating.'
+      +'</div>'
+      +'<div class="chart-wrap">'+sparkline(c.price_history)+'</div>'
+      +'</div>';
+
+    if(c.establishment_stats&&c.establishment_stats.length){
+      html+='<div class="section"><div class="sec-title">Price Comparison by Establishment</div>'
+        +'<div class="explain" style="margin-bottom:6px">This table compares the average price of <strong>'+c.commodity.commodity_name+'</strong> across establishments. '
+        +'The establishment with the <span style="color:#16a34a;font-weight:bold">lowest average price</span> is the most affordable option for buyers.</div>'
+        +'<table><thead><tr><th>#</th><th>Establishment</th><th>Type</th><th>Avg Price</th><th>Lowest</th><th>Highest</th><th>Records</th><th>Remark</th></tr></thead><tbody>'
+        +c.establishment_stats.map(function(m,mi){
+          var rowClass=mi===0?'best-row':(mi===c.establishment_stats.length-1&&c.establishment_stats.length>1?'high-row':'');
+          var tag=mi===0?'<span class="tag tag-best">Best Value</span>':(mi===c.establishment_stats.length-1&&c.establishment_stats.length>1?'<span class="tag tag-high">Highest</span>':'&mdash;');
+          return '<tr class="'+rowClass+'"><td>'+(mi+1)+'</td><td><strong>'+m.market_name+'</strong></td>'
+            +'<td>'+fmtMktType(m.market_type)+'</td>'
+            +'<td><strong>'+php(m.avg_price)+'</strong></td>'
+            +'<td style="color:#16a34a">'+php(m.min_price)+'</td>'
+            +'<td style="color:#dc2626">'+php(m.max_price)+'</td>'
+            +'<td>'+m.record_count+'</td><td>'+tag+'</td></tr>';
+        }).join('')
+        +'</tbody></table></div>';
+    }
+
+    if(c.forecast&&c.forecast.length){
+      html+='<div class="section"><div class="sec-title">7-Day Price Forecast</div>'
+        +'<div class="explain" style="margin-bottom:6px">Based on recent price trends, the system estimates what the price may be in the next 7 days. '
+        +'<strong>This is only an estimate.</strong> Actual prices depend on supply, demand, and other factors that cannot be predicted.</div>'
+        +'<div class="forecast-row">'
+        +c.forecast.map(function(f){
+          return '<div class="fc-box"><div class="fd">Day '+f.day+'</div><div class="fp">'+php(f.price)+'</div></div>';
+        }).join('')
+        +'</div></div>';
+    }
+
+    if(c.price_history&&c.price_history.length){
+      var recent=c.price_history.slice(-15).reverse();
+      html+='<div class="section"><div class="sec-title">Recent Price Records (Last '+recent.length+' Entries)</div>'
+        +'<table><thead><tr><th>Date</th><th>Price per '+c.commodity.unit+'</th><th>7-Day Average</th><th>Establishment</th><th>Remark</th></tr></thead><tbody>'
+        +recent.map(function(r){
+          var anom=r.is_anomaly?'anom-row':'';
+          var tag=r.is_anomaly?'<span class="tag tag-anom">&#9888; Unusual &mdash; please verify</span>':'&mdash;';
+          return '<tr class="'+anom+'"><td>'+fmtDate(r.date)+'</td><td><strong>'+php(r.price)+'</strong></td>'
+            +'<td>'+php(r.ma7)+'</td><td>'+(r.market||'&mdash;')+'</td><td>'+tag+'</td></tr>';
+        }).join('')
+        +'</tbody></table></div>';
+    }
+
+    html+=pageFooter('Page '+pg,totalPgs,data.generated_at)+'</div>';
+  });
+
+  return html;
+}
+
+async function run(){
+  if(!COMMODITY_IDS.length){
+    root.innerHTML='<div class="error-box">No commodities selected. Please generate the report from the Price Monitoring module.</div>';
+    loadStat.textContent='';
+    return;
+  }
+  try{
+    var headers={'Content-Type':'application/json','Authorization':'Bearer '+TOK};
+    var body={commodity_ids:COMMODITY_IDS};
+    if(MARKET_IDS.length) body.market_ids=MARKET_IDS;
+    if(DATE_FROM) body.date_from=DATE_FROM;
+    if(DATE_TO)   body.date_to=DATE_TO;
+
+    var [settingsResp,reportResp]=await Promise.all([
+      fetch(API+'/api/settings',{headers:headers}),
+      fetch(API+'/api/price-monitoring/report',{method:'POST',headers:headers,body:JSON.stringify(body)}),
+    ]);
+
+    var settings={};
+    if(settingsResp.ok){
+      try{
+        var raw=await settingsResp.json();
+        var arr=raw.settings||raw||[];
+        arr.forEach(function(s){settings[s.setting_key]=s;});
+      }catch(e){}
+    }
+
+    if(!reportResp.ok){
+      var e=await reportResp.json().catch(function(){return {error:reportResp.statusText};});
+      throw new Error(e.error||'Failed to load report data');
+    }
+    var data=await reportResp.json();
+
+    root.innerHTML=buildReport(data,settings);
+    loadStat.textContent='\u2713 Report ready';
+    btnPrint.style.display='inline-block';
+  }catch(err){
+    root.innerHTML='<div class="error-box"><strong>Failed to load report:</strong> '+err.message+'</div>';
+    loadStat.textContent='\u2717 Error';
+    console.error(err);
+  }
+}
+
+run();
+</script>
+</body>
+</html>

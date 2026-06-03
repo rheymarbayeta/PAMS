@@ -47,6 +47,7 @@ export default function PriceMonitoringPage() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole(['SuperAdmin', 'Admin']);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const tabs: { key: Tab; label: string; icon: JSX.Element }[] = [
     { key: 'overview', label: 'Overview', icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> },
@@ -62,10 +63,21 @@ export default function PriceMonitoringPage() {
       <Layout>
         <div className="p-4 sm:p-6 max-w-screen-xl mx-auto">
           {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-slate-800">Price Monitoring</h1>
-            <p className="text-slate-500 text-sm mt-1">Monitor commodity prices, detect trends, and receive AI-powered insights</p>
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800">Price Monitoring</h1>
+              <p className="text-slate-500 text-sm mt-1">Monitor commodity prices, detect trends, and receive AI-powered insights</p>
+            </div>
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 whitespace-nowrap shadow-sm"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Generate Report
+            </button>
           </div>
+
+          {showReportModal && <ReportModal onClose={() => setShowReportModal(false)} />}
 
           {/* Tabs */}
           <div className="border-b border-slate-200 mb-6">
@@ -97,6 +109,148 @@ export default function PriceMonitoringPage() {
         </div>
       </Layout>
     </ProtectedRoute>
+  );
+}
+
+// ─── REPORT MODAL ─────────────────────────────────────────────────────────────
+function ReportModal({ onClose }: { onClose: () => void }) {
+  const [commodities, setCommodities] = useState<Commodity[]>([]);
+  const [markets, setMarkets] = useState<Market[]>([]);
+  const [selectedCommodities, setSelectedCommodities] = useState<string[]>([]);
+  const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/api/price-monitoring/commodities?active=true'),
+      api.get('/api/price-monitoring/markets'),
+    ]).then(([cc, mm]) => {
+      setCommodities(cc.data);
+      setMarkets(mm.data);
+      setSelectedCommodities(cc.data.map((c: Commodity) => c.commodity_id));
+      setSelectedMarkets(mm.data.map((m: Market) => m.market_id));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const toggleAll = (ids: string[], selected: string[], setFn: (v: string[]) => void) =>
+    setFn(selected.length === ids.length ? [] : ids);
+
+  const generate = () => {
+    if (!selectedCommodities.length) return showAlert('Select at least one commodity.', 'Validation');
+    const token = localStorage.getItem('token') || '';
+    const params = new URLSearchParams();
+    params.set('commodities', selectedCommodities.join(','));
+    if (selectedMarkets.length && selectedMarkets.length < markets.length)
+      params.set('markets', selectedMarkets.join(','));
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo)   params.set('dateTo', dateTo);
+    params.set('token', token);
+    window.open(`/price-monitoring-report.html?${params.toString()}`, '_blank');
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <svg className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            <h2 className="font-semibold text-slate-800 text-lg">Generate Price Monitoring Report</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-5">
+          {loading ? <LoadingSpinner /> : <>
+            {/* Date Range */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Date Range</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">From</label>
+                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">To</label>
+                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* Commodities */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-slate-700">Commodities</label>
+                <button onClick={() => toggleAll(commodities.map(c => c.commodity_id), selectedCommodities, setSelectedCommodities)}
+                  className="text-xs text-indigo-600 hover:underline">
+                  {selectedCommodities.length === commodities.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="border border-slate-200 rounded-lg max-h-44 overflow-y-auto divide-y divide-slate-100">
+                {commodities.length === 0 && <p className="px-3 py-4 text-slate-400 text-sm text-center">No commodities found</p>}
+                {commodities.map(c => (
+                  <label key={c.commodity_id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" checked={selectedCommodities.includes(c.commodity_id)}
+                      onChange={() => setSelectedCommodities(prev =>
+                        prev.includes(c.commodity_id) ? prev.filter(id => id !== c.commodity_id) : [...prev, c.commodity_id]
+                      )}
+                      className="rounded border-slate-300 text-indigo-600" />
+                    <span className="text-sm text-slate-700 flex-1">{c.commodity_name}</span>
+                    <span className="text-xs text-slate-400">{c.unit} · {c.category_name}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">{selectedCommodities.length} of {commodities.length} selected</p>
+            </div>
+
+            {/* Establishments */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-slate-700">Establishments</label>
+                <button onClick={() => toggleAll(markets.map(m => m.market_id), selectedMarkets, setSelectedMarkets)}
+                  className="text-xs text-indigo-600 hover:underline">
+                  {selectedMarkets.length === markets.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+                {markets.length === 0 && <p className="px-3 py-4 text-slate-400 text-sm text-center">No establishments found</p>}
+                {markets.map(m => (
+                  <label key={m.market_id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" checked={selectedMarkets.includes(m.market_id)}
+                      onChange={() => setSelectedMarkets(prev =>
+                        prev.includes(m.market_id) ? prev.filter(id => id !== m.market_id) : [...prev, m.market_id]
+                      )}
+                      className="rounded border-slate-300 text-indigo-600" />
+                    <span className="text-sm text-slate-700 flex-1">{m.market_name}</span>
+                    <span className="text-xs text-slate-400">{formatMarketType(m.market_type)}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                {selectedMarkets.length === markets.length ? 'All establishments' : `${selectedMarkets.length} of ${markets.length} selected`}
+              </p>
+            </div>
+
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 text-xs text-indigo-700">
+              The report will open in a new tab as a printable document with AI-powered trend analysis, price statistics, establishment comparisons, anomaly detection, and 7-day forecasts for each selected commodity.
+            </div>
+          </>}
+        </div>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium">Cancel</button>
+          <button onClick={generate} disabled={loading || !selectedCommodities.length}
+            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+            Open Report
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

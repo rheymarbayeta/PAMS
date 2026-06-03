@@ -969,4 +969,175 @@ router.get('/analysis/summary/global', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PRICE MONITORING REPORT (AI-powered document data)
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/report', async (req, res) => {
+  try {
+    const { commodity_ids = [], market_ids = [], date_from, date_to } = req.body;
+    if (!commodity_ids.length) return res.status(400).json({ error: 'At least one commodity_id is required' });
+
+    const dateFilter = date_from && date_to
+      ? { label: `${date_from} to ${date_to}`, from: date_from, to: date_to }
+      : date_from
+        ? { label: `From ${date_from}`, from: date_from, to: null }
+        : { label: 'All time', from: null, to: null };
+
+    // Compute days for AI analysis
+    const diffDays = (date_from && date_to)
+      ? Math.max(1, Math.ceil((new Date(date_to) - new Date(date_from)) / 86400000))
+      : 90;
+
+    const reportCommodities = [];
+
+    for (const cid of commodity_ids) {
+      // Commodity info
+      const [[commodity]] = await pool.execute(
+        `SELECT com.*, cat.category_name FROM pm_commodities com
+         JOIN pm_commodity_categories cat ON cat.category_id = com.category_id
+         WHERE com.commodity_id=?`, [cid]
+      );
+      if (!commodity) continue;
+
+      // Build WHERE for records
+      const where = ['pr.commodity_id = ?'];
+      const params = [cid];
+      if (market_ids.length) {
+        where.push(`pr.market_id IN (${market_ids.map(() => '?').join(',')})`);
+        params.push(...market_ids);
+      }
+      if (date_from) { where.push('pr.recorded_date >= ?'); params.push(date_from); }
+      if (date_to)   { where.push('pr.recorded_date <= ?'); params.push(date_to); }
+
+      const [records] = await pool.execute(
+        `SELECT pr.price, pr.recorded_date, pr.is_verified, mkt.market_name, mkt.market_type
+         FROM pm_price_records pr
+         JOIN pm_markets mkt ON mkt.market_id = pr.market_id
+         WHERE ${where.join(' AND ')}
+         ORDER BY pr.recorded_date ASC`,
+        params
+      );
+
+      if (!records.length) {
+        reportCommodities.push({ commodity, has_data: false, insights: [] });
+        continue;
+      }
+
+      const prices = records.map(r => parseFloat(r.price));
+      const mean  = prices.reduce((a, b) => a + b, 0) / prices.length;
+      const min   = Math.min(...prices);
+      const max   = Math.max(...prices);
+      const std   = Math.sqrt(prices.reduce((s, p) => s + (p - mean) ** 2, 0) / prices.length);
+      const volatility = mean > 0 ? (std / mean) * 100 : 0;
+      const { slope, r2 } = computeLinearTrend(prices);
+      const trendPct = prices.length > 1 ? ((prices[prices.length - 1] - prices[0]) / prices[0]) * 100 : 0;
+      const trendDirection = slope > 0.01 ? 'rising' : slope < -0.01 ? 'falling' : 'stable';
+      const anomalyFlags = detectAnomalies(prices);
+      const anomalies = records.filter((_, i) => anomalyFlags[i]).map(r => ({
+        date: r.recorded_date, price: parseFloat(r.price), market: r.market_name,
+      }));
+      const forecast = forecastNext(prices, 7);
+      const ma7  = movingAverage(prices, 7);
+
+      const insights = [];
+      if (trendDirection === 'rising') {
+        insights.push({ type: 'warning', title: 'Price Increase Detected',
+          detail: `${commodity.commodity_name} prices trended upward by ${Math.abs(trendPct).toFixed(1)}% over the report period. Monitor supply chain issues.` });
+      } else if (trendDirection === 'falling') {
+        insights.push({ type: 'positive', title: 'Price Decrease Detected',
+          detail: `${commodity.commodity_name} prices decreased by ${Math.abs(trendPct).toFixed(1)}% over the report period, indicating good market supply.` });
+      } else {
+        insights.push({ type: 'info', title: 'Price Stable',
+          detail: `${commodity.commodity_name} prices were relatively stable with ${Math.abs(trendPct).toFixed(1)}% change over the period.` });
+      }
+      if (volatility > 20) {
+        insights.push({ type: 'warning', title: 'High Price Volatility',
+          detail: `Volatility is ${volatility.toFixed(1)}% — prices are fluctuating significantly, which may indicate supply instability.` });
+      }
+      if (anomalies.length > 0) {
+        insights.push({ type: 'alert', title: `${anomalies.length} Price Anomaly${anomalies.length > 1 ? 'ies' : ''} Detected`,
+          detail: `Unusual prices on: ${anomalies.map(a => new Date(a.date).toLocaleDateString('en-PH')).join(', ')}. These deviate significantly from the average (₱${mean.toFixed(2)}).` });
+      }
+      const forecastMax = Math.max(...forecast), forecastMin = Math.min(...forecast);
+      insights.push({ type: 'forecast', title: '7-Day Price Forecast',
+        detail: `Based on trend, prices are expected to range ₱${forecastMin.toFixed(2)}–₱${forecastMax.toFixed(2)} in the next 7 days.` });
+      if (r2 < 0.3 && records.length >= 5) {
+        insights.push({ type: 'info', title: 'Irregular Price Pattern',
+          detail: 'No clear linear trend. Prices may be influenced by seasonal or external factors.' });
+      }
+
+      // Per-establishment stats
+      const mktMap = {};
+      records.forEach(r => {
+        if (!mktMap[r.market_name]) mktMap[r.market_name] = { prices: [], type: r.market_type };
+        mktMap[r.market_name].prices.push(parseFloat(r.price));
+      });
+      const establishmentStats = Object.entries(mktMap).map(([name, v]) => ({
+        market_name: name,
+        market_type: v.type,
+        avg_price: parseFloat((v.prices.reduce((a, b) => a + b, 0) / v.prices.length).toFixed(2)),
+        min_price: parseFloat(Math.min(...v.prices).toFixed(2)),
+        max_price: parseFloat(Math.max(...v.prices).toFixed(2)),
+        record_count: v.prices.length,
+      })).sort((a, b) => a.avg_price - b.avg_price);
+
+      // Best/worst establishment insight
+      if (establishmentStats.length >= 2) {
+        const best = establishmentStats[0], worst = establishmentStats[establishmentStats.length - 1];
+        const diff = worst.avg_price - best.avg_price;
+        const diffPct = (diff / best.avg_price) * 100;
+        insights.push({ type: 'info', title: 'Best Value Establishment',
+          detail: `${best.market_name} has the lowest average price at ₱${best.avg_price}/${commodity.unit}${diffPct > 5 ? ` — ${diffPct.toFixed(1)}% less than ${worst.market_name} (₱${worst.avg_price})` : ''}.` });
+      }
+
+      reportCommodities.push({
+        commodity,
+        has_data: true,
+        record_count: records.length,
+        statistics: {
+          mean: parseFloat(mean.toFixed(2)), min: parseFloat(min.toFixed(2)),
+          max: parseFloat(max.toFixed(2)), std: parseFloat(std.toFixed(2)),
+          volatility: parseFloat(volatility.toFixed(2)),
+          trend_direction: trendDirection,
+          trend_pct: parseFloat(trendPct.toFixed(2)),
+          r2: parseFloat(r2.toFixed(4)),
+          latest_price: prices[prices.length - 1],
+          first_price: prices[0],
+        },
+        price_history: records.map((r, i) => ({
+          date: r.recorded_date, price: parseFloat(r.price),
+          market: r.market_name, ma7: parseFloat((ma7[i] || 0).toFixed(2)),
+          is_anomaly: anomalyFlags[i],
+        })),
+        forecast: forecast.map((p, i) => ({ day: i + 1, price: parseFloat(p.toFixed(2)) })),
+        anomalies,
+        establishment_stats: establishmentStats,
+        insights,
+      });
+    }
+
+    // Selected establishments
+    let selectedMarkets = [];
+    if (market_ids.length) {
+      const ph = market_ids.map(() => '?').join(',');
+      const [mkts] = await pool.execute(`SELECT * FROM pm_markets WHERE market_id IN (${ph})`, market_ids);
+      selectedMarkets = mkts;
+    } else {
+      const [mkts] = await pool.execute('SELECT * FROM pm_markets WHERE is_active=1');
+      selectedMarkets = mkts;
+    }
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      generated_by: req.user?.full_name || 'System',
+      date_filter: dateFilter,
+      selected_establishments: selectedMarkets,
+      commodities: reportCommodities,
+    });
+  } catch (err) {
+    console.error('Report error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
