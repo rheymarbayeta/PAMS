@@ -19,11 +19,12 @@
   .btn:hover{ opacity:.87; }
 
   .page{
-    width:8.5in; min-height:13in;
+    width:8.5in; height:13in;
     padding:0.45in 0.55in 0.75in 0.55in;
     margin:20px auto; background:#fff;
     box-shadow:0 2px 12px rgba(0,0,0,.14);
     position:relative; page-break-after:always; box-sizing:border-box;
+    overflow:hidden;
   }
   .page:last-child{ page-break-after:avoid; }
 
@@ -270,107 +271,152 @@ function pageFooter(label,total,generatedAt){
 
 function buildReport(data,settings){
   var lguH=buildLguHeader(settings);
-  var withData=data.commodities.filter(function(c){return c.has_data;});
-  var totalPgs=1+withData.length;
-  var pg=0;
-  var html='';
 
-  // PAGE 1
-  pg++;
+  // ── Measurement div (hidden, same content width as page) ──────────────
+  var measDiv=document.createElement('div');
+  measDiv.style.cssText='position:fixed;top:-99999px;left:0;width:7.4in;'
+    +'font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#222;'
+    +'visibility:hidden;pointer-events:none;box-sizing:border-box;';
+  document.body.appendChild(measDiv);
+
+  function mH(html){ measDiv.innerHTML=html; return measDiv.offsetHeight+4; }
+
+  // Page geometry (CSS px at 96 dpi)
+  var PAGE_PX  = Math.round(13   * 96);  // 1248
+  var PAD_T_PX = Math.round(0.45 * 96);  //   43
+  var PAD_B_PX = Math.round(0.75 * 96);  //   72
+  var HDR_H    = mH(lguH);               // measured LGU header height
+  var AVAIL    = PAGE_PX - PAD_T_PX - PAD_B_PX - HDR_H - 35; // 35px safety
+
+  // ── Pager ─────────────────────────────────────────────────────────────
+  var pages=[];   // array of section-HTML arrays
+  var cur=[];     // current page sections
+  var curH=0;
+
+  function closePage(){ if(cur.length){pages.push(cur.slice());cur=[];curH=0;} }
+  function addSection(html,forceNew){
+    var h=mH(html);
+    if(forceNew&&cur.length>0){ closePage(); }
+    else if(cur.length>0&&curH+h>AVAIL){ closePage(); }
+    cur.push(html); curH+=h;
+  }
+  function flush(){ closePage(); }
+
+  // ── SUMMARY PAGE SECTIONS ─────────────────────────────────────────────
   var totalComms=data.commodities.length;
+  var withData=data.commodities.filter(function(c){return c.has_data;});
   var totalRecs=data.commodities.reduce(function(s,c){return s+(c.record_count||0);},0);
   var risers=data.commodities.filter(function(c){return c.has_data&&c.statistics.trend_direction==='rising';}).length;
   var fallers=data.commodities.filter(function(c){return c.has_data&&c.statistics.trend_direction==='falling';}).length;
   var estList=data.selected_establishments.map(function(m){return m.market_name;}).join(', ')||'All Establishments';
 
-  html+='<div class="page">'+lguH
-    +'<div class="rpt-band"><h1>PRICE MONITORING REPORT</h1><div class="sub">Commodity Price Surveillance &amp; Market Analysis &mdash; Dalaguete, Cebu</div></div>'
+  addSection(
+    '<div class="rpt-band"><h1>PRICE MONITORING REPORT</h1>'
+    +'<div class="sub">Commodity Price Surveillance &amp; Market Analysis &mdash; Dalaguete, Cebu</div></div>'
     +'<div class="rpt-meta">'
     +'<span><strong>Period:</strong> '+data.date_filter.label+'</span>'
     +'<span><strong>Establishments:</strong> '+estList+'</span>'
     +'<span><strong>Prepared by:</strong> '+data.generated_by+'</span>'
     +'<span><strong>Date:</strong> '+new Date(data.generated_at).toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})+'</span>'
     +'</div>'
-    +'<div class="explain"><strong>About This Report:</strong> This report shows the prices of basic commodities (goods) monitored in selected establishments within the municipality. '
-    +'It helps local officials, residents, and market vendors understand how prices are moving &mdash; whether going up, going down, or staying the same. '
-    +'All prices are in Philippine Peso (&thinsp;&peso;&thinsp;) per unit.</div>'
+    +'<div class="explain"><strong>About This Report:</strong> This report shows the prices of basic commodities (goods) monitored in '
+    +'selected establishments within the municipality. It helps local officials, residents, and market vendors understand how prices are '
+    +'moving &mdash; whether going up, going down, or staying the same. All prices are in Philippine Peso (&thinsp;&peso;&thinsp;) per unit.</div>'
+  );
 
-    +'<div class="section"><div class="sec-title">At a Glance</div>'
-    +'<div class="tiles">'
+  addSection(
+    '<div class="section"><div class="sec-title">At a Glance</div><div class="tiles">'
     +'<div class="tile"><div class="lbl">Commodities Checked</div><div class="val">'+totalComms+'</div><div class="sub">'+withData.length+' with price data</div></div>'
     +'<div class="tile"><div class="lbl">Price Records</div><div class="val">'+totalRecs.toLocaleString()+'</div><div class="sub">entries in this period</div></div>'
     +'<div class="tile"><div class="lbl">Prices Going Up</div><div class="val" style="color:#dc2626">'+risers+'</div><div class="sub">commodit'+(risers===1?'y':'ies')+' with rising prices</div></div>'
     +'<div class="tile"><div class="lbl">Prices Going Down</div><div class="val" style="color:#16a34a">'+fallers+'</div><div class="sub">commodit'+(fallers===1?'y':'ies')+' with falling prices</div></div>'
     +'<div class="tile"><div class="lbl">Monitored Locations</div><div class="val">'+data.selected_establishments.length+'</div><div class="sub">establishment'+(data.selected_establishments.length===1?'':'s')+'</div></div>'
     +'</div></div>'
+  );
 
-    +'<div class="section"><div class="sec-title">Monitored Establishments</div>'
+  addSection(
+    '<div class="section"><div class="sec-title">Monitored Establishments</div>'
     +'<table><thead><tr><th>#</th><th>Name</th><th>Type</th><th>Barangay</th><th>Address</th></tr></thead><tbody>'
     +data.selected_establishments.map(function(m,i){
-      return '<tr><td>'+(i+1)+'</td><td><strong>'+m.market_name+'</strong></td><td>'+fmtMktType(m.market_type)+'</td><td>'+(m.barangay||'&mdash;')+'</td><td>'+(m.address||'&mdash;')+'</td></tr>';
+      return '<tr><td>'+(i+1)+'</td><td><strong>'+m.market_name+'</strong></td><td>'+fmtMktType(m.market_type)+'</td>'
+        +'<td>'+(m.barangay||'&mdash;')+'</td><td>'+(m.address||'&mdash;')+'</td></tr>';
     }).join('')
     +'</tbody></table></div>'
+  );
 
-    +'<div class="section"><div class="sec-title">Commodity Price Overview</div>'
-    +'<div class="explain"><strong>How to read this table:</strong> '
-    +'<strong>Average Price</strong> = the typical price during the period. '
+  // Overview table — chunked by rows so long lists paginate properly
+  var ovExplain='<div class="explain"><strong>How to read this table:</strong> '
+    +'<strong>Average Price</strong> = typical price for the period. '
     +'<strong>Lowest/Highest</strong> = cheapest and most expensive recorded prices. '
-    +'<strong>Price Change</strong> = whether the price went up &uarr;, went down &darr;, or stayed the same compared to the start of the period.</div>'
-    +'<table><thead><tr><th>#</th><th>Commodity</th><th>Category</th><th>Unit</th>'
-    +'<th>Average Price</th><th>Lowest</th><th>Highest</th><th>Price Change</th><th>Records</th></tr></thead><tbody>'
-    +data.commodities.map(function(c,i){
-      if(!c.has_data) return '<tr><td>'+(i+1)+'</td><td><strong>'+c.commodity.commodity_name+'</strong></td>'
-        +'<td>'+c.commodity.category_name+'</td><td>'+c.commodity.unit+'</td>'
-        +'<td colspan="5" style="color:#aaa;font-style:italic">No records for this period</td></tr>';
-      var s=c.statistics;
-      return '<tr><td>'+(i+1)+'</td><td><strong>'+c.commodity.commodity_name+'</strong></td>'
-        +'<td>'+c.commodity.category_name+'</td><td>'+c.commodity.unit+'</td>'
-        +'<td><strong>'+php(s.mean)+'</strong></td>'
-        +'<td style="color:#16a34a">'+php(s.min)+'</td>'
-        +'<td style="color:#dc2626">'+php(s.max)+'</td>'
-        +'<td>'+trendTag(s.trend_direction,s.trend_pct)+'</td>'
-        +'<td>'+c.record_count+'</td></tr>';
-    }).join('')
-    +'</tbody></table></div>'
+    +'<strong>Price Change</strong> = whether the price went up &uarr;, went down &darr;, or stayed the same.</div>';
+  var ovRows=data.commodities.map(function(c,i){
+    if(!c.has_data) return '<tr><td>'+(i+1)+'</td><td><strong>'+c.commodity.commodity_name+'</strong></td>'
+      +'<td>'+c.commodity.category_name+'</td><td>'+c.commodity.unit+'</td>'
+      +'<td colspan="5" style="color:#aaa;font-style:italic">No records for this period</td></tr>';
+    var s=c.statistics;
+    return '<tr><td>'+(i+1)+'</td><td><strong>'+c.commodity.commodity_name+'</strong></td>'
+      +'<td>'+c.commodity.category_name+'</td><td>'+c.commodity.unit+'</td>'
+      +'<td><strong>'+php(s.mean)+'</strong></td>'
+      +'<td style="color:#16a34a">'+php(s.min)+'</td>'
+      +'<td style="color:#dc2626">'+php(s.max)+'</td>'
+      +'<td>'+trendTag(s.trend_direction,s.trend_pct)+'</td>'
+      +'<td>'+c.record_count+'</td></tr>';
+  });
+  var ovTblHdr='<table><thead><tr><th>#</th><th>Commodity</th><th>Category</th><th>Unit</th>'
+    +'<th>Average Price</th><th>Lowest</th><th>Highest</th><th>Price Change</th><th>Records</th></tr></thead><tbody>';
+  var OV_CHUNK=15;
+  for(var oi=0;oi<ovRows.length;oi+=OV_CHUNK){
+    var chunk=ovRows.slice(oi,oi+OV_CHUNK);
+    var isFirst=oi===0;
+    addSection(
+      '<div class="section">'
+      +(isFirst?'<div class="sec-title">Commodity Price Overview</div>'+ovExplain:'<div class="sec-title">Commodity Price Overview (continued)</div>')
+      +ovTblHdr+chunk.join('')+'</tbody></table></div>'
+    );
+  }
 
-    +'<div class="sig-area">'
+  addSection(
+    '<div class="sig-area">'
     +'<div class="sig-box"><div class="sig-line"></div><div class="sig-name">Prepared by</div><div class="sig-title">Market Inspector / Data Encoder</div></div>'
     +'<div class="sig-box"><div class="sig-line"></div><div class="sig-name">Reviewed by</div><div class="sig-title">Municipal Agriculture / Trade Officer</div></div>'
     +'<div class="sig-box"><div class="sig-line"></div><div class="sig-name">Approved by</div><div class="sig-title">Municipal Mayor</div></div>'
     +'</div>'
-    +pageFooter('Page 1',totalPgs,data.generated_at)
-    +'</div>';
+  );
+  flush();
 
-  // PER-COMMODITY DETAIL PAGES
+  // ── PER-COMMODITY SECTIONS ────────────────────────────────────────────
   withData.forEach(function(c){
-    pg++;
     var s=c.statistics;
+    var volatNote=s.volatility>20?'Prices fluctuated a lot.':s.volatility>10?'Moderate fluctuation.':'Prices were mostly steady.';
 
-    var volatNote=s.volatility>20?'Prices fluctuated a lot during this period.':s.volatility>10?'Prices had moderate fluctuation.':'Prices were mostly steady.';
-
-    html+='<div class="page">'+lguH
-      +'<div class="comm-heading">'
-      +'<div><div class="cn">'+c.commodity.commodity_name+' &nbsp;&middot;&nbsp; <span style="font-weight:normal">Price per '+c.commodity.unit+'</span></div>'
-      +'<div class="cm">Category: '+c.commodity.category_name+' &nbsp;&middot;&nbsp; Records in period: '+c.record_count+'</div></div>'
+    // Commodity heading — always force a new page
+    addSection(
+      '<div class="comm-heading">'
+      +'<div><div class="cn">'+c.commodity.commodity_name+'&nbsp;&middot;&nbsp;<span style="font-weight:normal">Price per '+c.commodity.unit+'</span></div>'
+      +'<div class="cm">Category: '+c.commodity.category_name+'&nbsp;&middot;&nbsp;Records in period: '+c.record_count+'</div></div>'
       +'<div>'+trendTag(s.trend_direction,s.trend_pct)+'</div>'
       +'</div>'
       +'<div style="background:#e8edf6;padding:4px 14px 6px;margin-bottom:10px;border-radius:0 0 4px 4px;font-size:9px;color:#555">'
-      +'Period: '+data.date_filter.label+' &nbsp;&middot;&nbsp; Establishments: '+data.selected_establishments.map(function(m){return m.market_name;}).join(', ')
-      +'</div>'
+      +'Period: '+data.date_filter.label+'&nbsp;&middot;&nbsp;Establishments: '
+      +data.selected_establishments.map(function(m){return m.market_name;}).join(', ')
+      +'</div>',
+      true
+    );
 
-      +'<div class="section"><div class="sec-title">Key Price Numbers</div>'
-      +'<div class="stats-row">'
+    addSection(
+      '<div class="section"><div class="sec-title">Key Price Numbers</div><div class="stats-row">'
       +'<div class="stat-box"><div class="sv">'+php(s.mean)+'</div><div class="sl">Average Price</div><div class="sn">Typical price this period</div></div>'
-      +'<div class="stat-box"><div class="sv" style="color:#16a34a">'+php(s.min)+'</div><div class="sl">Lowest Price</div><div class="sn">Cheapest price recorded</div></div>'
+      +'<div class="stat-box"><div class="sv" style="color:#16a34a">'+php(s.min)+'</div><div class="sl">Lowest Price</div><div class="sn">Cheapest recorded</div></div>'
       +'<div class="stat-box"><div class="sv" style="color:#dc2626">'+php(s.max)+'</div><div class="sl">Highest Price</div><div class="sn">Most expensive recorded</div></div>'
       +'<div class="stat-box"><div class="sv">'+php(s.first_price)+'</div><div class="sl">Price at Start</div><div class="sn">First price in period</div></div>'
       +'<div class="stat-box"><div class="sv">'+php(s.latest_price)+'</div><div class="sl">Latest Price</div><div class="sn">Most recent price</div></div>'
       +'<div class="stat-box"><div class="sv">'+s.volatility+'%</div><div class="sl">Price Variation</div><div class="sn">'+volatNote+'</div></div>'
       +'</div></div>'
+    );
 
-      +'<div class="section"><div class="sec-title">Findings &amp; Analysis</div>'
-      +'<div class="explain">The following findings are automatically generated based on recorded price data. '
-      +'They help local officials and market personnel understand what is happening with prices.</div>'
+    addSection(
+      '<div class="section"><div class="sec-title">Findings &amp; Analysis</div>'
+      +'<div class="explain">These findings are automatically generated based on recorded price data.</div>'
       +'<div class="insights">'
       +c.insights.map(function(ins){
         var note=insNote(ins.type);
@@ -382,25 +428,26 @@ function buildReport(data,settings){
           +'</div></div>';
       }).join('')
       +'</div></div>'
+    );
 
-      +'<div class="section"><div class="sec-title">Price Trend Chart</div>'
+    addSection(
+      '<div class="section"><div class="sec-title">Price Trend Chart</div>'
       +'<div class="explain" style="margin-bottom:6px">'
-      +'The chart shows how the price of <strong>'+c.commodity.commodity_name+'</strong> changed over time. '
-      +'The <span style="color:#3b82f6;font-weight:bold">blue line</span> is the actual recorded price. '
-      +'The <span style="color:#f59e0b;font-weight:bold">dashed orange line</span> is the 7-day average (smoothed trend). '
-      +'<span style="color:#ef4444;font-weight:bold">Red dots</span> mark unusual prices worth investigating.'
-      +'</div>'
-      +'<div class="chart-wrap">'+sparkline(c.price_history)+'</div>'
-      +'</div>';
+      +'<span style="color:#3b82f6;font-weight:bold">Blue line</span> = actual price each day. '
+      +'<span style="color:#f59e0b;font-weight:bold">Dashed orange</span> = 7-day average (smoothed trend). '
+      +'<span style="color:#ef4444;font-weight:bold">Red dots</span> = unusual prices worth investigating.</div>'
+      +'<div class="chart-wrap">'+sparkline(c.price_history)+'</div></div>'
+    );
 
     if(c.establishment_stats&&c.establishment_stats.length){
-      html+='<div class="section"><div class="sec-title">Price Comparison by Establishment</div>'
-        +'<div class="explain" style="margin-bottom:6px">This table compares the average price of <strong>'+c.commodity.commodity_name+'</strong> across establishments. '
-        +'The establishment with the <span style="color:#16a34a;font-weight:bold">lowest average price</span> is the most affordable option for buyers.</div>'
+      addSection(
+        '<div class="section"><div class="sec-title">Price Comparison by Establishment</div>'
+        +'<div class="explain" style="margin-bottom:6px">The establishment with the lowest average price is the most affordable option for buyers.</div>'
         +'<table><thead><tr><th>#</th><th>Establishment</th><th>Type</th><th>Avg Price</th><th>Lowest</th><th>Highest</th><th>Records</th><th>Remark</th></tr></thead><tbody>'
         +c.establishment_stats.map(function(m,mi){
-          var rowClass=mi===0?'best-row':(mi===c.establishment_stats.length-1&&c.establishment_stats.length>1?'high-row':'');
-          var tag=mi===0?'<span class="tag tag-best">Best Value</span>':(mi===c.establishment_stats.length-1&&c.establishment_stats.length>1?'<span class="tag tag-high">Highest</span>':'&mdash;');
+          var isLast=mi===c.establishment_stats.length-1&&c.establishment_stats.length>1;
+          var rowClass=mi===0?'best-row':(isLast?'high-row':'');
+          var tag=mi===0?'<span class="tag tag-best">Best Value</span>':(isLast?'<span class="tag tag-high">Highest</span>':'&mdash;');
           return '<tr class="'+rowClass+'"><td>'+(mi+1)+'</td><td><strong>'+m.market_name+'</strong></td>'
             +'<td>'+fmtMktType(m.market_type)+'</td>'
             +'<td><strong>'+php(m.avg_price)+'</strong></td>'
@@ -408,36 +455,82 @@ function buildReport(data,settings){
             +'<td style="color:#dc2626">'+php(m.max_price)+'</td>'
             +'<td>'+m.record_count+'</td><td>'+tag+'</td></tr>';
         }).join('')
-        +'</tbody></table></div>';
+        +'</tbody></table></div>'
+      );
     }
 
     if(c.forecast&&c.forecast.length){
-      html+='<div class="section"><div class="sec-title">7-Day Price Forecast</div>'
-        +'<div class="explain" style="margin-bottom:6px">Based on recent price trends, the system estimates what the price may be in the next 7 days. '
-        +'<strong>This is only an estimate.</strong> Actual prices depend on supply, demand, and other factors that cannot be predicted.</div>'
+      addSection(
+        '<div class="section"><div class="sec-title">7-Day Price Forecast</div>'
+        +'<div class="explain" style="margin-bottom:6px"><strong>Estimate only.</strong> Actual prices may vary based on supply, demand, and other market factors.</div>'
         +'<div class="forecast-row">'
         +c.forecast.map(function(f){
           return '<div class="fc-box"><div class="fd">Day '+f.day+'</div><div class="fp">'+php(f.price)+'</div></div>';
         }).join('')
-        +'</div></div>';
+        +'</div></div>'
+      );
     }
 
     if(c.price_history&&c.price_history.length){
-      var recent=c.price_history.slice(-15).reverse();
-      html+='<div class="section"><div class="sec-title">Recent Price Records (Last '+recent.length+' Entries)</div>'
-        +'<table><thead><tr><th>Date</th><th>Price per '+c.commodity.unit+'</th><th>7-Day Average</th><th>Establishment</th><th>Remark</th></tr></thead><tbody>'
-        +recent.map(function(r){
-          var anom=r.is_anomaly?'anom-row':'';
-          var tag=r.is_anomaly?'<span class="tag tag-anom">&#9888; Unusual &mdash; please verify</span>':'&mdash;';
-          return '<tr class="'+anom+'"><td>'+fmtDate(r.date)+'</td><td><strong>'+php(r.price)+'</strong></td>'
-            +'<td>'+php(r.ma7)+'</td><td>'+(r.market||'&mdash;')+'</td><td>'+tag+'</td></tr>';
-        }).join('')
-        +'</tbody></table></div>';
+      // Group records by establishment
+      var byEst={};
+      c.price_history.forEach(function(r){
+        var key=r.market||'Unknown';
+        if(!byEst[key]) byEst[key]=[];
+        byEst[key].push(r);
+      });
+      var estNames=Object.keys(byEst).sort();
+      var isFirstTable=true;
+
+      estNames.forEach(function(estName){
+        var rows=byEst[estName].slice().sort(function(a,b){
+          return new Date(b.date)-new Date(a.date);
+        });
+        var REC_CHUNK=12;
+        for(var ri=0;ri<rows.length;ri+=REC_CHUNK){
+          var rchunk=rows.slice(ri,ri+REC_CHUNK);
+          var isFirstChunk=(ri===0);
+          addSection(
+            '<div class="section">'
+            +(isFirstTable&&isFirstChunk
+              ?'<div class="sec-title">Price Records by Establishment</div>'
+              +(isFirstChunk?'<div style="font-weight:bold;font-size:10px;color:#1F4788;background:#e8edf6;padding:5px 10px;margin-bottom:6px;border-radius:3px">&#127976; '+estName+'</div>':'')
+              :isFirstChunk
+                ?'<div class="sec-title">Price Records (continued)</div>'
+                 +'<div style="font-weight:bold;font-size:10px;color:#1F4788;background:#e8edf6;padding:5px 10px;margin-bottom:6px;border-radius:3px">&#127976; '+estName+'</div>'
+                :'<div class="sec-title">Price Records &mdash; '+estName+' (continued)</div>')
+            +'<table><thead><tr>'
+            +'<th>Date</th><th>Price per '+c.commodity.unit+'</th>'
+            +'<th>7-Day Average</th><th>Remark</th>'
+            +'</tr></thead><tbody>'
+            +rchunk.map(function(r){
+              var anom=r.is_anomaly?'anom-row':'';
+              var tag=r.is_anomaly?'<span class="tag tag-anom">&#9888; Unusual &mdash; please verify</span>':'&mdash;';
+              return '<tr class="'+anom+'">'
+                +'<td>'+fmtDate(r.date)+'</td>'
+                +'<td><strong>'+php(r.price)+'</strong></td>'
+                +'<td>'+php(r.ma7)+'</td>'
+                +'<td>'+tag+'</td>'
+                +'</tr>';
+            }).join('')
+            +'</tbody></table></div>'
+          );
+          if(isFirstChunk) isFirstTable=false;
+        }
+      });
     }
 
-    html+=pageFooter('Page '+pg,totalPgs,data.generated_at)+'</div>';
+    flush();
   });
 
+  // ── Teardown & render pages ───────────────────────────────────────────
+  document.body.removeChild(measDiv);
+
+  var totalPgs=pages.length;
+  var html='';
+  pages.forEach(function(pg,i){
+    html+='<div class="page">'+lguH+pg.join('')+pageFooter('Page '+(i+1),totalPgs,data.generated_at)+'</div>';
+  });
   return html;
 }
 
