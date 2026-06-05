@@ -443,7 +443,7 @@ function generateReportHTML(applicationData, settings, paymentData, currentUserN
   const paidDate = paymentData.payment_date ? new Date(paymentData.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   
   const permitSignatory = settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA';
-  const permitPosition = settings.permit_signatory_title?.value || 'MUNICIPAL MAYOR';
+  const permitPosition = settings.permit_signatory_position?.value || 'MUNICIPAL MAYOR';
   const pnpChiefName = settings.disco_pnp_chief_name?.value || 'P/C ROMMEL SABALBURO';
   const pnpChiefRank = settings.disco_pnp_chief_rank?.value || '';
   

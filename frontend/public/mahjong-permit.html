@@ -264,7 +264,7 @@ function generateReportHTML(settings, applicationData, permitTypeData, paymentDa
   const byName    = settings.permit_by_signatory_name?.value  || 'NAME';
   const byTitle   = settings.permit_by_signatory_title?.value || 'POSITION';
   const aprvName  = settings.permit_signatory_name?.value     || 'HON. NELIN B. TAMBIS, CPA, MPA';
-  const aprvTitle = settings.permit_signatory_title?.value    || 'MUNICIPAL MAYOR';
+  const aprvTitle = settings.permit_signatory_position?.value    || 'MUNICIPAL MAYOR';
 
   // ── Payment ───────────────────────────────────────────────────────────────
   const paidAmount = paymentData.amount

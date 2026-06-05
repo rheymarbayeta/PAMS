@@ -486,7 +486,7 @@ async function fetchPermitReport() {
       Settings response status: <span id="dbg-status">fetching…</span><br>
       permit_signatory_name = <strong id="dbg-name">—</strong><br>
       permit_signatory_position = <strong id="dbg-pos">—</strong><br>
-      permit_signatory_title (old key) = <strong id="dbg-title">—</strong><br>
+      permit_signatory_position (old key) = <strong id="dbg-title">—</strong><br>
       Auth token: <span id="dbg-token">—</span>
     `;
     document.body.appendChild(debugDiv);
@@ -503,7 +503,7 @@ async function fetchPermitReport() {
         const dbgData = await dbgResp.json();
         document.getElementById('dbg-name').textContent  = JSON.stringify(dbgData.permit_signatory_name)  || 'KEY MISSING';
         document.getElementById('dbg-pos').textContent   = JSON.stringify(dbgData.permit_signatory_position) || 'KEY MISSING';
-        document.getElementById('dbg-title').textContent = JSON.stringify(dbgData.permit_signatory_title) || 'KEY MISSING';
+        document.getElementById('dbg-title').textContent = JSON.stringify(dbgData.permit_signatory_position) || 'KEY MISSING';
       }
     } catch(e) {
       document.getElementById('dbg-status').textContent = 'ERROR: ' + e.message;
