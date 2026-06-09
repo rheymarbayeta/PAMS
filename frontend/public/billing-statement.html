@@ -88,10 +88,12 @@
   .due-date  { font-weight: bold; }
   .surcharge-note { margin-left: auto; font-style: italic; color: #c00; }
 
-  /* Table */
-  .bill-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 6px; }
-  .bill-table th, .bill-table td { border: 1px solid #555; padding: 2px 4px; vertical-align: top; }
-  .section-head { background: #1e3a8a; color: #fff; text-align: center; font-size: 9pt; font-weight: bold; padding: 3px 4px; }
+    /* Table – 50/50 RIGHTS/RENTAL split */
+    .bill-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 6px; }
+    .bill-table th, .bill-table td { border: 1px solid #555; padding: 2px 4px; vertical-align: top; }
+    .section-head { background: #1e3a8a; color: #fff; text-align: center; font-size: 9pt; font-weight: bold; padding: 3px 4px; }
+    .rights-section { width: 50%; display: inline-block; }
+    .rental-section { width: 50%; display: inline-block; }
   .bill-table thead tr:last-child th { background: #dbeafe; color: #1e3a8a; font-weight: bold; text-align: center; font-size: 7.5pt; }
   .num { text-align: right; }
   .monthly-label { font-size: 7.5pt; padding-left: 4px; border-right: none; }
@@ -295,7 +297,7 @@ function renderBill(data) {
 
     /* Table */
     + '<table class="bill-table">'
-    + '<colgroup><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:18%"><col style="width:22%"></colgroup>'
+    + '<colgroup><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:50%"></colgroup>'
     + '<thead>'
     + '<tr><th colspan="4" class="section-head">RIGHTS</th><th class="section-head">RENTAL</th></tr>'
     + '<tr><th>PRINCIPAL</th><th>DOWNPAYMENT</th><th>TOTAL<br>AMOUNT PAID</th><th>BALANCE</th><th class="rental-col">&nbsp;</th></tr>'
