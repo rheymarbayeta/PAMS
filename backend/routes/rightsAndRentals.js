@@ -1156,6 +1156,127 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
   }
 });
 
+// Get billing statement data for a lease contract
+router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
+  try {
+    const { contract_id } = req.params;
+    const billingMonth = parseInt(req.query.month) || (new Date().getMonth() + 1);
+    const billingYear  = parseInt(req.query.year)  || new Date().getFullYear();
+
+    const connection = await pool.getConnection();
+    try {
+      // Contract + lessee + property
+      const [contracts] = await connection.query(`
+        SELECT
+          lc.*,
+          l.name            AS lessee_name,
+          l.email           AS lessee_email,
+          l.contact_number  AS lessee_contact,
+          p.property_name,
+          p.property_code,
+          p.address         AS property_address
+        FROM lease_contracts lc
+        JOIN lessees   l ON lc.lessee_id   = l.id
+        JOIN properties p ON lc.property_id = p.id
+        WHERE lc.id = ?
+      `, [contract_id]);
+
+      if (!contracts || contracts.length === 0) {
+        return res.status(404).json({ error: 'Lease contract not found' });
+      }
+      const contract = contracts[0];
+
+      // Property units via junction table
+      const [units] = await connection.query(`
+        SELECT pu.id, pu.stall_number, pu.floor_level, pu.unit_description, pu.area_sqm
+        FROM lease_contract_units lcu
+        JOIN property_units pu ON lcu.property_unit_id = pu.id
+        WHERE lcu.lease_contract_id = ?
+      `, [contract_id]);
+
+      const principal     = parseFloat(contract.principal_amount)     || 0;
+      const downpayment   = parseFloat(contract.downpayment)          || 0;
+      const monthlyRights = parseFloat(contract.monthly_rights_amount) || 0;
+      const monthlyRental = parseFloat(contract.monthly_rental_amount) || 0;
+
+      // Total rights payments ever paid
+      const [rightsTotalRow] = await connection.query(`
+        SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
+        FROM payment_history_rights
+        WHERE lease_contract_id = ?
+      `, [contract_id]);
+      const totalRightsPaid = parseFloat(rightsTotalRow[0].total_paid) || 0;
+      const rightsBalance   = principal - downpayment - totalRightsPaid;
+
+      // Previous month unpaid rental balance
+      const prevMonth = billingMonth === 1 ? 12 : billingMonth - 1;
+      const prevYear  = billingMonth === 1 ? billingYear - 1 : billingYear;
+
+      const [prevBalRow] = await connection.query(`
+        SELECT COALESCE(balance, 0) AS balance
+        FROM payment_history_rental
+        WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
+        ORDER BY id DESC LIMIT 1
+      `, [contract_id, prevMonth, prevYear]);
+      const previousBalance = prevBalRow.length > 0 ? parseFloat(prevBalRow[0].balance) || 0 : 0;
+      const surcharge       = previousBalance > 0 ? parseFloat((previousBalance * 0.20).toFixed(2)) : 0;
+
+      // Current month rental payment (if any – for "Less: Late Payments" line)
+      const [currRentalRow] = await connection.query(`
+        SELECT or_number, COALESCE(amount_paid, 0) AS amount_paid
+        FROM payment_history_rental
+        WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
+        ORDER BY id DESC LIMIT 1
+      `, [contract_id, billingMonth, billingYear]);
+      const latePaymentOR     = currRentalRow.length > 0 ? currRentalRow[0].or_number : null;
+      const latePaymentAmount = currRentalRow.length > 0 ? parseFloat(currRentalRow[0].amount_paid) || 0 : 0;
+
+      const rentalDues = parseFloat((previousBalance + surcharge + monthlyRental - latePaymentAmount).toFixed(2));
+      const rightsDues = monthlyRights;
+      const totalDue   = parseFloat((rightsDues + rentalDues).toFixed(2));
+
+      // Billing statement number: {property_code}-{year}-{mm}-{contractId padded}
+      const billingNumber = `${contract.property_code}-${billingYear}-${String(billingMonth).padStart(2, '0')}-${String(contract_id).padStart(3, '0')}`;
+
+      // Last calendar day of billing month
+      const lastDay = new Date(billingYear, billingMonth, 0).getDate();
+
+      res.json({
+        contract: { ...contract, property_units: units },
+        billing: {
+          billing_number:   billingNumber,
+          billing_month:    billingMonth,
+          billing_year:     billingYear,
+          payment_due_date: `${billingYear}-${String(billingMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+          rights: {
+            principal,
+            downpayment,
+            total_paid: totalRightsPaid,
+            balance:    rightsBalance,
+            monthly_amount: monthlyRights,
+            dues:       rightsDues
+          },
+          rental: {
+            previous_balance:    previousBalance,
+            surcharge,
+            this_month:          monthlyRental,
+            late_payment_or:     latePaymentOR,
+            late_payment_amount: latePaymentAmount,
+            monthly_rental:      monthlyRental,
+            dues:                rentalDues
+          },
+          total_due: totalDue
+        }
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get billing error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Record a new payment for rights and/or rental
 router.post('/lease-contracts/:contract_id/payments/record', async (req, res) => {
   try {

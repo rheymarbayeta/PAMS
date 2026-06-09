@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Billing Statement</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; }
+
+  /* ── Controls bar ── */
+  .controls {
+    padding: 10px 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-wrap: wrap;
+  }
+  .controls label { font-size: 13px; color: #555; }
+  .controls select {
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .btn {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #fff;
+  }
+  .btn-print  { background: #28a745; }
+  .btn-print:hover  { background: #1e7e34; }
+  .btn-reload { background: #6366f1; }
+  .btn-reload:hover { background: #4f46e5; }
+  .btn:disabled { background: #6c757d; cursor: not-allowed; }
+  .spacer { flex: 1; }
+  #loadStatus { font-size: 13px; color: #555; }
+
+  /* ── Page wrapper ── */
+  #bill-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 20px 12px 40px;
+  }
+  #bill-wrap.hidden { display: none; }
+
+  /* ── Billing document: half A4 = A5 landscape 210×148 mm ── */
+  .billing-doc {
+    width: 210mm;
+    min-height: 148mm;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    padding: 10mm 12mm 8mm;
+    font-size: 9pt;
+    color: #111;
+  }
+
+  /* Header */
+  .bill-header { text-align: center; line-height: 1.35; margin-bottom: 6px; }
+  .bill-header .office-title { font-style: italic; font-weight: bold; font-size: 10pt; }
+
+  /* Meta row */
+  .bill-meta { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 6px; }
+  .bill-meta-left .property-name { font-weight: bold; font-size: 11pt; }
+  .bill-meta-left .property-addr { font-size: 8.5pt; color: #444; }
+  .bill-meta-right { text-align: right; font-size: 8.5pt; }
+  .bill-meta-right .bill-no { font-weight: bold; }
+
+  .bill-divider { border-top: 2px solid #1e3a8a; margin: 5px 0; }
+
+  /* Lessee row */
+  .bill-lessee-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .lessee-name { font-weight: bold; font-size: 11pt; }
+  .bill-unit-info { text-align: right; font-size: 8.5pt; line-height: 1.4; color: #444; }
+  .bill-unit-info span { color: #111; }
+
+  /* Due date row */
+  .bill-due-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; font-size: 8.5pt; }
+  .due-label { font-weight: bold; }
+  .due-date  { font-weight: bold; }
+  .surcharge-note { margin-left: auto; font-style: italic; color: #c00; }
+
+  /* Table */
+  .bill-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 6px; }
+  .bill-table th, .bill-table td { border: 1px solid #555; padding: 2px 4px; vertical-align: top; }
+  .section-head { background: #1e3a8a; color: #fff; text-align: center; font-size: 9pt; font-weight: bold; padding: 3px 4px; }
+  .bill-table thead tr:last-child th { background: #dbeafe; color: #1e3a8a; font-weight: bold; text-align: center; font-size: 7.5pt; }
+  .num { text-align: right; }
+  .monthly-label { font-size: 7.5pt; padding-left: 4px; border-right: none; }
+  .dues-label { font-size: 7.5pt; padding-left: 4px; border-right: none; font-style: italic; }
+  .dues-amount { font-weight: bold; border-bottom: 2px solid #555; }
+  .rental-col { border-left: 2px solid #555; }
+  .rental-line { display: flex; justify-content: space-between; gap: 4px; }
+  .or-line { font-size: 7pt; color: #555; }
+  .monthly-rental-line { border-top: 1px solid #aaa; padding-top: 1px; }
+  .total-row td { border-top: 2px solid #1e3a8a; }
+  .total-cell { background: #f3f4f6; }
+  .total-line { font-weight: bold; font-size: 9pt; }
+  .total-amount { font-size: 10pt; color: #1e3a8a; }
+
+  /* Footer */
+  .bill-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 6px; }
+  .generated-note { font-size: 7.5pt; font-style: italic; color: #555; }
+  .signatory { text-align: center; }
+  .sig-line { border-top: 1px solid #555; width: 140px; margin: 0 auto 2px; }
+  .sig-name  { font-weight: bold; font-size: 8.5pt; }
+  .sig-title { font-size: 7.5pt; color: #444; }
+
+  .error-box { margin: 20px; padding: 14px; background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; color: #991b1b; font-size: 13px; }
+  .loading-box { margin: 40px; text-align: center; font-size: 15px; color: #555; }
+
+  /* Print */
+  @media print {
+    body { background: #fff; margin: 0; }
+    .controls { display: none !important; }
+    #bill-wrap { padding: 0; display: block; }
+    .billing-doc { width: 210mm; min-height: 148mm; border: none; padding: 8mm 10mm 6mm; margin: 0; }
+    @page { size: A5 landscape; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <label>Month:</label>
+  <select id="selMonth"></select>
+  <label>Year:</label>
+  <select id="selYear"></select>
+  <button class="btn btn-reload" id="btnReload">&#8635; Refresh</button>
+  <span id="loadStatus"></span>
+  <span class="spacer"></span>
+  <button class="btn btn-print" id="btnPrint" disabled onclick="window.print()">&#128424; Print</button>
+</div>
+
+<div id="loading" class="loading-box">Loading billing statement&hellip;</div>
+<div id="error"  class="error-box" style="display:none"></div>
+<div id="bill-wrap" class="hidden"></div>
+
+<script>
+var MONTHS = ['January','February','March','April','May','June',
+              'July','August','September','October','November','December'];
+
+var p     = new URLSearchParams(location.search);
+var ID    = p.get('id')    || '';
+var TOKEN = p.get('token') || localStorage.getItem('token') || '';
+var API   = location.origin;
+
+/* Populate selects */
+var now = new Date();
+var selMonth = document.getElementById('selMonth');
+var selYear  = document.getElementById('selYear');
+
+MONTHS.forEach(function(m, i) {
+  var o = document.createElement('option');
+  o.value = i + 1;
+  o.textContent = m;
+  if (i + 1 === (now.getMonth() + 1)) o.selected = true;
+  selMonth.appendChild(o);
+});
+for (var y = now.getFullYear() - 3; y <= now.getFullYear() + 6; y++) {
+  var o2 = document.createElement('option');
+  o2.value = y;
+  o2.textContent = y;
+  if (y === now.getFullYear()) o2.selected = true;
+  selYear.appendChild(o2);
+}
+
+// Override with URL params if present
+if (p.get('month')) selMonth.value = p.get('month');
+if (p.get('year'))  selYear.value  = p.get('year');
+
+document.getElementById('btnReload').addEventListener('click', loadBilling);
+
+function fmt(n) {
+  return Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+function lastDayOfMonth(m, y) {
+  return new Date(y, m, 0).getDate();
+}
+function periodLabel(m, y) {
+  return MONTHS[m - 1].toUpperCase() + ' 1-' + lastDayOfMonth(m, y) + ', ' + y;
+}
+function dueDateLabel(d) {
+  return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function showError(msg) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('bill-wrap').classList.add('hidden');
+  var el = document.getElementById('error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function loadBilling() {
+  var month = selMonth.value;
+  var year  = selYear.value;
+
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('error').style.display   = 'none';
+  document.getElementById('bill-wrap').classList.add('hidden');
+  document.getElementById('btnPrint').disabled = true;
+  document.getElementById('loadStatus').textContent = 'Loading…';
+
+  fetch(API + '/api/rights-and-rentals/lease-contracts/' + ID + '/billing?month=' + month + '&year=' + year, {
+    headers: { 'Authorization': 'Bearer ' + TOKEN }
+  })
+  .then(function(r) {
+    if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Error ' + r.status); });
+    return r.json();
+  })
+  .then(function(data) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('loadStatus').textContent = '';
+    renderBill(data);
+    document.getElementById('bill-wrap').classList.remove('hidden');
+    document.getElementById('btnPrint').disabled = false;
+  })
+  .catch(function(err) {
+    showError('Failed to load billing data: ' + err.message);
+    document.getElementById('loadStatus').textContent = '';
+  });
+}
+
+function renderBill(data) {
+  var c = data.contract;
+  var b = data.billing;
+  var r = b.rights;
+  var rn = b.rental;
+
+  var prevMonthIdx = b.billing_month === 1 ? 11 : b.billing_month - 2;
+  var prevYear     = b.billing_month === 1 ? b.billing_year - 1 : b.billing_year;
+
+  var unit = (c.property_units && c.property_units.length > 0) ? c.property_units[0] : null;
+  var unitLine = '';
+  if (unit) {
+    unitLine = (unit.floor_level ? unit.floor_level.toUpperCase() + ': ' : '')
+             + (unit.stall_number ? 'STALL# ' + unit.stall_number : '')
+             + (unit.area_sqm ? ' (' + unit.area_sqm + ' SQ.M.)' : '');
+  }
+
+  var wrap = document.getElementById('bill-wrap');
+  wrap.innerHTML = '<div class="billing-doc">'
+
+    /* Header */
+    + '<div class="bill-header">'
+    + '<p>Republic of the Philippines</p>'
+    + '<p>Province of Cebu</p>'
+    + '<p>Municipality of Dalaguete</p>'
+    + '<p class="office-title">Office of the Municipal Treasurer</p>'
+    + '</div>'
+
+    /* Meta row */
+    + '<div class="bill-meta">'
+    + '<div class="bill-meta-left">'
+    + '<p class="property-name">' + esc(c.property_name.toUpperCase()) + '</p>'
+    + '<p class="property-addr">' + esc(c.property_address || 'Dalaguete, Cebu') + '</p>'
+    + '</div>'
+    + '<div class="bill-meta-right">'
+    + '<p><span>BILLING STATEMENT No.</span> <strong>' + esc(b.billing_number) + '</strong></p>'
+    + '<p><span>As of</span> ' + periodLabel(b.billing_month, b.billing_year) + '</p>'
+    + '</div>'
+    + '</div>'
+
+    + '<div class="bill-divider"></div>'
+
+    /* Lessee row */
+    + '<div class="bill-lessee-row">'
+    + '<div><p class="lessee-name">' + esc(c.lessee_name.toUpperCase()) + '</p></div>'
+    + '<div class="bill-unit-info">'
+    + (unitLine ? '<p>' + esc(unitLine) + '</p>' : '')
+    + '<p>Contract Effectivity Date: <span>' + fmtDate(c.contract_effective_date) + '</span></p>'
+    + '<p>Termination of Contract: <span>' + fmtDate(c.contract_termination_date) + '</span></p>'
+    + '</div>'
+    + '</div>'
+
+    /* Due date */
+    + '<div class="bill-due-row">'
+    + '<span class="due-label">PAYMENT DUE DATE:</span>'
+    + '<span class="due-date">' + dueDateLabel(b.payment_due_date) + '</span>'
+    + '<span class="surcharge-note">Note: 20% surcharge for late payments</span>'
+    + '</div>'
+
+    /* Table */
+    + '<table class="bill-table">'
+    + '<colgroup><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:18%"><col style="width:22%"></colgroup>'
+    + '<thead>'
+    + '<tr><th colspan="4" class="section-head">RIGHTS</th><th class="section-head">RENTAL</th></tr>'
+    + '<tr><th>PRINCIPAL</th><th>DOWNPAYMENT</th><th>TOTAL<br>AMOUNT PAID</th><th>BALANCE</th><th class="rental-col">&nbsp;</th></tr>'
+    + '</thead>'
+    + '<tbody>'
+
+    /* Row 1 */
+    + '<tr>'
+    + '<td class="num">' + fmt(r.principal) + '</td>'
+    + '<td class="num">' + fmt(r.downpayment) + '</td>'
+    + '<td class="num">' + fmt(r.total_paid) + '</td>'
+    + '<td class="num">' + fmt(r.balance) + '</td>'
+    + '<td class="rental-col"><div class="rental-line">'
+    + '<span>BALANCE (' + MONTHS[prevMonthIdx] + ' ' + prevYear + '):</span>'
+    + '<span class="num">' + (rn.previous_balance > 0 ? fmt(rn.previous_balance) : '-') + '</span>'
+    + '</div></td>'
+    + '</tr>'
+
+    /* Row 2 */
+    + '<tr>'
+    + '<td colspan="3" class="monthly-label">Monthly Rights :</td>'
+    + '<td class="num">' + fmt(r.monthly_amount) + '</td>'
+    + '<td class="rental-col"><div class="rental-line">'
+    + '<span>Surcharge (20%):</span>'
+    + '<span class="num">' + (rn.surcharge > 0 ? fmt(rn.surcharge) : '-') + '</span>'
+    + '</div></td>'
+    + '</tr>'
+
+    /* Row 3 */
+    + '<tr>'
+    + '<td colspan="3" class="dues-label">Dues (' + MONTHS[b.billing_month - 1] + ' ' + b.billing_year + '):</td>'
+    + '<td class="num dues-amount">' + fmt(r.dues) + '</td>'
+    + '<td class="rental-col"><div class="rental-line">'
+    + '<span>This Month (' + MONTHS[b.billing_month - 1] + ' ' + b.billing_year + '):</span>'
+    + '<span class="num">' + fmt(rn.this_month) + '</span>'
+    + '</div></td>'
+    + '</tr>'
+
+    /* Row 4 */
+    + '<tr><td colspan="4">&nbsp;</td>'
+    + '<td class="rental-col"><div class="rental-line"><span>Less: Late Payments:</span><span class="num">&nbsp;</span></div></td>'
+    + '</tr>'
+
+    /* Row 5 – OR */
+    + '<tr><td colspan="4">&nbsp;</td>'
+    + '<td class="rental-col"><div class="rental-line or-line">'
+    + '<span>with OR #' + (rn.late_payment_or || '') + '</span>'
+    + '<span class="num">' + (rn.late_payment_amount > 0 ? fmt(rn.late_payment_amount) : '') + '</span>'
+    + '</div></td>'
+    + '</tr>'
+
+    /* Row 6 – Monthly Rental */
+    + '<tr><td colspan="4">&nbsp;</td>'
+    + '<td class="rental-col"><div class="rental-line monthly-rental-line">'
+    + '<span>Monthly Rental:</span><span class="num">' + fmt(rn.monthly_rental) + '</span>'
+    + '</div></td>'
+    + '</tr>'
+
+    /* Row 7 – Dues rental */
+    + '<tr><td colspan="4">&nbsp;</td>'
+    + '<td class="rental-col"><div class="rental-line">'
+    + '<span>Dues (' + MONTHS[b.billing_month - 1] + ' ' + b.billing_year + '):</span>'
+    + '<span class="num dues-amount">' + fmt(rn.dues) + '</span>'
+    + '</div></td>'
+    + '</tr>'
+
+    + '</tbody>'
+
+    /* Total */
+    + '<tfoot><tr class="total-row"><td colspan="4">&nbsp;</td>'
+    + '<td class="rental-col total-cell"><div class="rental-line total-line">'
+    + '<span>TOTAL AMOUNT DUE:</span>'
+    + '<span class="num total-amount">' + fmt(b.total_due) + '</span>'
+    + '</div></td>'
+    + '</tr></tfoot>'
+    + '</table>'
+
+    /* Footer */
+    + '<div class="bill-footer">'
+    + '<p class="generated-note">** This is an electronically generated statement of account.</p>'
+    + '<div class="signatory"><div class="sig-line"></div>'
+    + '<p class="sig-name">HAIDEE D. OGOC</p>'
+    + '<p class="sig-title">Acting Municipal Treasurer</p>'
+    + '</div>'
+    + '</div>'
+
+    + '</div>'; // .billing-doc
+}
+
+function esc(str) {
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(str || ''));
+  return d.innerHTML;
+}
+
+// Auto-load on start
+loadBilling();
+</script>
+</body>
+</html>

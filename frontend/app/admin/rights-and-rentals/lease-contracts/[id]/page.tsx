@@ -41,6 +41,25 @@ export default function ViewLeaseContractPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
+  // Billing modal
+  const now = new Date();
+  const [showBillingModal, setShowBillingModal] = useState(false);
+  const [billingUrl, setBillingUrl] = useState('');
+
+  const openBillingModal = () => {
+    const token = localStorage.getItem('token') || '';
+    const month = now.getMonth() + 1;
+    const year  = now.getFullYear();
+    const url = `/billing-statement.html?id=${contractId}&month=${month}&year=${year}&token=${encodeURIComponent(token)}&_v=${Date.now()}`;
+    setBillingUrl(url);
+    setShowBillingModal(true);
+  };
+
+  const closeBillingModal = () => {
+    setShowBillingModal(false);
+    setBillingUrl('');
+  };
+
   useEffect(() => {
     fetchContractDetails();
   }, [contractId]);
@@ -339,6 +358,15 @@ export default function ViewLeaseContractPage() {
                   </button>
                 </>
               )}
+              <button
+                onClick={openBillingModal}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Billing Statement
+              </button>
               <Link
                 href="/admin/rights-and-rentals/lease-contracts"
                 className="flex items-center gap-2 bg-gray-300 hover:bg-gray-400 text-gray-900 px-4 py-2 rounded-lg transition-colors"
@@ -349,6 +377,60 @@ export default function ViewLeaseContractPage() {
           </div>
         </div>
       </Layout>
+
+      {/* Billing Statement Modal */}
+      {showBillingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full h-full max-w-5xl max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Billing Statement</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const token = localStorage.getItem('token') || '';
+                    const month = now.getMonth() + 1;
+                    const year  = now.getFullYear();
+                    setBillingUrl(`/billing-statement.html?id=${contractId}&month=${month}&year=${year}&token=${encodeURIComponent(token)}&_v=${Date.now()}`);
+                  }}
+                  title="Regenerate"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Regenerate
+                </button>
+                <button
+                  onClick={closeBillingModal}
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {/* Body – iframe */}
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                src={billingUrl}
+                className="w-full h-full border-0"
+                title="Billing Statement"
+              />
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-end px-4 sm:px-6 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={closeBillingModal}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ProtectedRoute>
   );
 }

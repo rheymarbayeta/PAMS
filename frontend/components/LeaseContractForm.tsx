@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
 
 interface Lessee {
@@ -51,6 +51,21 @@ export default function LeaseContractForm({
     status: 'active'
   });
   const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
+  const [noTerminationDate, setNoTerminationDate] = useState(false);
+  const [lesseeSearch, setLesseeSearch] = useState('');
+  const [lesseeDropdownOpen, setLesseeDropdownOpen] = useState(false);
+  const lesseeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close lessee dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (lesseeDropdownRef.current && !lesseeDropdownRef.current.contains(e.target as Node)) {
+        setLesseeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -60,11 +75,13 @@ export default function LeaseContractForm({
 
   useEffect(() => {
     if (initialData) {
+      const terminationDate = initialData.contract_termination_date?.split('T')[0] || '';
+      setNoTerminationDate(!terminationDate);
       setFormData({
         lessee_id: initialData.lessee_id || '',
         property_id: initialData.property_id || '',
         contract_effective_date: initialData.contract_effective_date?.split('T')[0] || '',
-        contract_termination_date: initialData.contract_termination_date?.split('T')[0] || '',
+        contract_termination_date: terminationDate,
         principal_amount: initialData.principal_amount?.toString() || '',
         monthly_rights_amount: initialData.monthly_rights_amount?.toString() || '',
         monthly_rental_amount: initialData.monthly_rental_amount?.toString() || '',
@@ -144,6 +161,7 @@ export default function LeaseContractForm({
         lessee_id: parseInt(formData.lessee_id),
         property_id: parseInt(formData.property_id),
         property_unit_ids: selectedUnitIds,
+        contract_termination_date: noTerminationDate ? null : formData.contract_termination_date || null,
         principal_amount: formData.principal_amount ? parseFloat(formData.principal_amount) : 0,
         monthly_rights_amount: formData.monthly_rights_amount ? parseFloat(formData.monthly_rights_amount) : 0,
         monthly_rental_amount: formData.monthly_rental_amount ? parseFloat(formData.monthly_rental_amount) : 0,
@@ -177,25 +195,73 @@ export default function LeaseContractForm({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Lessee */}
-        <div>
+        {/* Lessee – searchable */}
+        <div className="relative" ref={lesseeDropdownRef}>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Lessee *
           </label>
-          <select
-            name="lessee_id"
-            value={formData.lessee_id}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
+          {/* Hidden native input for form validation */}
+          <input type="hidden" name="lessee_id" value={formData.lessee_id} required />
+          <div
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer flex items-center justify-between focus-within:ring-2 focus-within:ring-indigo-600 focus-within:border-indigo-600"
+            onClick={() => setLesseeDropdownOpen(o => !o)}
           >
-            <option value="">Select a lessee</option>
-            {lessees.map(lessee => (
-              <option key={lessee.id} value={lessee.id}>
-                {lessee.name}
-              </option>
-            ))}
-          </select>
+            <span className={formData.lessee_id ? 'text-gray-900' : 'text-gray-400'}>
+              {formData.lessee_id
+                ? lessees.find(l => String(l.id) === String(formData.lessee_id))?.name || 'Select a lessee'
+                : 'Select a lessee'}
+            </span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${lesseeDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          {lesseeDropdownOpen && (
+            <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+              <div className="p-2 border-b border-gray-100">
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search lessee..."
+                  value={lesseeSearch}
+                  onChange={e => setLesseeSearch(e.target.value)}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+              <ul className="max-h-52 overflow-y-auto">
+                <li
+                  className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-pointer"
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, lessee_id: '' }));
+                    setLesseeSearch('');
+                    setLesseeDropdownOpen(false);
+                  }}
+                >
+                  — Select a lessee —
+                </li>
+                {lessees
+                  .filter(l => l.name.toLowerCase().includes(lesseeSearch.toLowerCase()))
+                  .map(lessee => (
+                    <li
+                      key={lessee.id}
+                      className={`px-4 py-2 text-sm cursor-pointer hover:bg-indigo-50 ${
+                        String(formData.lessee_id) === String(lessee.id) ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-gray-800'
+                      }`}
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, lessee_id: String(lessee.id) }));
+                        setLesseeSearch('');
+                        setLesseeDropdownOpen(false);
+                      }}
+                    >
+                      {lessee.name}
+                    </li>
+                  ))}
+                {lessees.filter(l => l.name.toLowerCase().includes(lesseeSearch.toLowerCase())).length === 0 && (
+                  <li className="px-4 py-2 text-sm text-gray-400 italic">No matches found</li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Property */}
@@ -309,10 +375,27 @@ export default function LeaseContractForm({
           <input
             type="date"
             name="contract_termination_date"
-            value={formData.contract_termination_date}
+            value={noTerminationDate ? '' : formData.contract_termination_date}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            disabled={noTerminationDate}
+            className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 ${
+              noTerminationDate ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+            }`}
           />
+          <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={noTerminationDate}
+              onChange={e => {
+                setNoTerminationDate(e.target.checked);
+                if (e.target.checked) {
+                  setFormData(prev => ({ ...prev, contract_termination_date: '' }));
+                }
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="text-sm text-gray-600">No termination date specified</span>
+          </label>
         </div>
 
         {/* Principal Amount */}
