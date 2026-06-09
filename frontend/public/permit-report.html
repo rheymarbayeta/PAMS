@@ -478,38 +478,7 @@ async function fetchPermitReport() {
     
     renderReport(assessmentData, settings, applicationData, permitTypeData, paymentData, assessmentFees, currentUserName);
 
-    // ── DEBUG OVERLAY (visible in the page, remove after fix is confirmed) ────
-    const debugDiv = document.createElement('div');
-    debugDiv.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e1e1e;color:#0f0;font:12px monospace;padding:8px 12px;z-index:9999;max-height:160px;overflow:auto;border-top:2px solid #0f0;';
-    debugDiv.innerHTML = `
-      <strong style="color:#ff0">DEBUG — Settings API Response</strong><br>
-      Settings response status: <span id="dbg-status">fetching…</span><br>
-      permit_signatory_name = <strong id="dbg-name">—</strong><br>
-      permit_signatory_position = <strong id="dbg-pos">—</strong><br>
-      permit_signatory_position (old key) = <strong id="dbg-title">—</strong><br>
-      Auth token: <span id="dbg-token">—</span>
-    `;
-    document.body.appendChild(debugDiv);
-
-    // Re-fetch settings just for the debug overlay
-    try {
-      const dbgResp = await fetch(`${apiBaseUrl}/api/settings`, {
-        method: 'GET',
-        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
-        credentials: 'include'
-      });
-      document.getElementById('dbg-status').textContent = dbgResp.status + ' ' + dbgResp.statusText;
-      if (dbgResp.ok) {
-        const dbgData = await dbgResp.json();
-        document.getElementById('dbg-name').textContent  = JSON.stringify(dbgData.permit_signatory_name)  || 'KEY MISSING';
-        document.getElementById('dbg-pos').textContent   = JSON.stringify(dbgData.permit_signatory_position) || 'KEY MISSING';
-        document.getElementById('dbg-title').textContent = JSON.stringify(dbgData.permit_signatory_position) || 'KEY MISSING';
-      }
-    } catch(e) {
-      document.getElementById('dbg-status').textContent = 'ERROR: ' + e.message;
-    }
-    document.getElementById('dbg-token').textContent = authToken ? 'PRESENT (' + authToken.substring(0,20) + '…)' : 'MISSING';
-    // ─────────────────────────────────────────────────────────────────────────
+  } catch (error) {
     console.error('Error fetching permit data:', error);
     showError(`Failed to load permit report: ${error.message}`);
   }
