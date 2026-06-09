@@ -63,9 +63,46 @@
     color: #111;
   }
 
-  /* Header */
-  .bill-header { text-align: center; line-height: 1.35; margin-bottom: 6px; }
-  .bill-header .office-title { font-style: italic; font-weight: bold; font-size: 10pt; }
+  /* Dynamic Header */
+  .bill-header { 
+    text-align: center; 
+    line-height: 1.2; 
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+  }
+  .bill-header img { height: 40px; width: auto; object-fit: contain; }
+  .bill-header-text { text-align: center; }
+  .bill-header-text div { font-weight: bold; font-size: 9pt; line-height: 1.15; }
+  .bill-header-text .line-1 { font-size: 8pt; }
+  .bill-header-text .line-2 { font-size: 8pt; }
+  .bill-header-text .line-3 { font-size: 8pt; }
+  .bill-header-text .line-4 { font-size: 9.5pt; margin-top: 1px; }
+  .bill-header-text .line-5 { font-size: 8pt; margin-top: 1px; }
+  
+  /* Footer */
+  .bill-footer {
+    text-align: center;
+    font-size: 7pt;
+    color: #555;
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px solid #ccc;
+    line-height: 1.3;
+  }
+
+  /* Signatory */
+  .bill-signatory {
+    text-align: right;
+    margin: 12px 0 6px 0;
+    font-size: 8pt;
+    margin-right: 20px;
+  }
+  .signatory-line { border-top: 1px solid #333; width: 120px; margin: 45px 0 2px auto; }
+  .signatory-name { font-weight: bold; font-size: 8.5pt; margin-top: 2px; }
+  .signatory-title { font-size: 7.5pt; color: #444; }
 
   /* Meta row */
   .bill-meta { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 6px; }
@@ -109,12 +146,15 @@
   .total-amount { font-size: 10pt; color: #1e3a8a; }
 
   /* Footer */
-  .bill-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 6px; }
-  .generated-note { font-size: 7.5pt; font-style: italic; color: #555; }
-  .signatory { text-align: center; }
-  .sig-line { border-top: 1px solid #555; width: 140px; margin: 0 auto 2px; }
-  .sig-name  { font-weight: bold; font-size: 8.5pt; }
-  .sig-title { font-size: 7.5pt; color: #444; }
+  .bill-footer {
+    text-align: center;
+    font-size: 7pt;
+    color: #555;
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px solid #ccc;
+    line-height: 1.3;
+  }
 
   .error-box { margin: 20px; padding: 14px; background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; color: #991b1b; font-size: 13px; }
   .loading-box { margin: 40px; text-align: center; font-size: 15px; color: #555; }
@@ -154,6 +194,56 @@ var p     = new URLSearchParams(location.search);
 var ID    = p.get('id')    || '';
 var TOKEN = p.get('token') || localStorage.getItem('token') || '';
 var API   = location.origin;
+
+// Global state for header/footer
+var headerSettings = {};
+var currentUserName = 'System';
+var treasurerName = 'Municipal Treasurer';
+var treasurerPosition = 'Municipal Treasurer';
+var settingsReady = false;
+
+/* Fetch settings and user info */
+Promise.all([
+  fetch(API + '/api/settings', { headers: { 'Authorization': 'Bearer ' + TOKEN } }).then(r => r.ok ? r.json() : {}),
+  fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + TOKEN } }).then(r => r.ok ? r.json() : {})
+])
+.then(function(results) {
+  var settings = results[0];
+  var userInfo = results[1];
+  
+  // Extract header settings
+  var getLogoUrl = function(url) {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return API + url;
+    return url;
+  };
+  
+  headerSettings = {
+    logoLeftUrl: getLogoUrl(settings.assessment_header_logo_left?.value),
+    logoRightUrl: getLogoUrl(settings.assessment_header_logo_right?.value),
+    logoHeight: Math.max(20, Math.min(120, parseFloat(settings.assessment_header_logo_size?.value) || 40)),
+    line1: settings.assessment_header_line_1?.value || 'REPUBLIC OF THE PHILIPPINES',
+    line2: settings.assessment_header_line_2?.value || 'MUNICIPALITY OF DALAGUETE',
+    line3: settings.assessment_header_line_3?.value || 'PROVINCE OF CEBU',
+    line4: settings.assessment_header_line_4?.value || 'MUNICIPAL TREASURER\'S OFFICE',
+    line5: settings.assessment_header_line_5?.value || '',
+    fontSize: Math.max(7, Math.min(20, parseFloat(settings.assessment_header_font_size?.value) || 9))
+  };
+  
+  if (userInfo.name) currentUserName = userInfo.name;
+  if (settings.municipal_treasurer_name?.value) treasurerName = settings.municipal_treasurer_name.value;
+  if (settings.municipal_treasurer_position?.value) treasurerPosition = settings.municipal_treasurer_position.value;
+  
+  settingsReady = true;
+  // Auto-load billing after settings are ready
+  loadBilling();
+})
+.catch(function(err) {
+  console.warn('Failed to fetch settings/user info:', err);
+  settingsReady = true;
+  loadBilling();
+});
 
 /* Populate selects */
 var now = new Date();
@@ -253,16 +343,26 @@ function renderBill(data) {
              + (unit.area_sqm ? ' (' + unit.area_sqm + ' SQ.M.)' : '');
   }
 
+  // Build dynamic header
+  var headerHtml = '<div class="bill-header">';
+  if (headerSettings.logoLeftUrl) {
+    headerHtml += '<img src="' + headerSettings.logoLeftUrl + '" alt="Logo" style="height: ' + headerSettings.logoHeight + 'px;">';
+  }
+  headerHtml += '<div class="bill-header-text">';
+  if (headerSettings.line1) headerHtml += '<div class="line-1" style="font-size:' + headerSettings.fontSize + 'px">' + esc(headerSettings.line1) + '</div>';
+  if (headerSettings.line2) headerHtml += '<div class="line-2" style="font-size:' + headerSettings.fontSize + 'px">' + esc(headerSettings.line2) + '</div>';
+  if (headerSettings.line3) headerHtml += '<div class="line-3" style="font-size:' + headerSettings.fontSize + 'px">' + esc(headerSettings.line3) + '</div>';
+  if (headerSettings.line4) headerHtml += '<div class="line-4" style="font-size:' + Math.round(headerSettings.fontSize * 1.35) + 'px">' + esc(headerSettings.line4) + '</div>';
+  if (headerSettings.line5) headerHtml += '<div class="line-5" style="font-size:' + headerSettings.fontSize + 'px">' + esc(headerSettings.line5) + '</div>';
+  headerHtml += '</div>';
+  if (headerSettings.logoRightUrl) {
+    headerHtml += '<img src="' + headerSettings.logoRightUrl + '" alt="Logo 2" style="height: ' + headerSettings.logoHeight + 'px;">';
+  }
+  headerHtml += '</div>';
+
   var wrap = document.getElementById('bill-wrap');
   wrap.innerHTML = '<div class="billing-doc">'
-
-    /* Header */
-    + '<div class="bill-header">'
-    + '<p>Republic of the Philippines</p>'
-    + '<p>Province of Cebu</p>'
-    + '<p>Municipality of Dalaguete</p>'
-    + '<p class="office-title">Office of the Municipal Treasurer</p>'
-    + '</div>'
+    + headerHtml
 
     /* Meta row */
     + '<div class="bill-meta">'
@@ -375,13 +475,16 @@ function renderBill(data) {
     + '</tr></tfoot>'
     + '</table>'
 
+    /* Signatory */
+    + '<div class="bill-signatory">'
+    + '<div class="signatory-line"></div>'
+    + '<div class="signatory-name">' + esc(treasurerName) + '</div>'
+    + '<div class="signatory-title">' + esc(treasurerPosition) + '</div>'
+    + '</div>'
+
     /* Footer */
     + '<div class="bill-footer">'
-    + '<p class="generated-note">** This is an electronically generated statement of account.</p>'
-    + '<div class="signatory"><div class="sig-line"></div>'
-    + '<p class="sig-name">HAIDEE D. OGOC</p>'
-    + '<p class="sig-title">Acting Municipal Treasurer</p>'
-    + '</div>'
+    + '<div>Generated by: ' + esc(currentUserName) + ' | ' + esc(treasurerName) + ' | Permit and Assessment Management System | Issued: ' + now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '</div>'
     + '</div>'
 
     + '</div>'; // .billing-doc
@@ -392,9 +495,6 @@ function esc(str) {
   d.appendChild(document.createTextNode(str || ''));
   return d.innerHTML;
 }
-
-// Auto-load on start
-loadBilling();
 </script>
 </body>
 </html>
