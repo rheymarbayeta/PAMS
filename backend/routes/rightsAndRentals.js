@@ -565,7 +565,30 @@ router.get('/lease-contracts', async (req, res) => {
         JOIN properties p ON lc.property_id = p.id
         ORDER BY lc.contract_effective_date DESC
       `);
-      res.json(contracts);
+
+      // Fetch units for each contract
+      const contractsWithUnits = await Promise.all(
+        contracts.map(async (contract) => {
+          const [units] = await connection.query(`
+            SELECT 
+              pu.id,
+              pu.stall_number,
+              pu.floor_level,
+              pu.unit_description,
+              pu.area_sqm,
+              pu.status
+            FROM lease_contract_units lcu
+            JOIN property_units pu ON lcu.property_unit_id = pu.id
+            WHERE lcu.lease_contract_id = ?
+          `, [contract.id]);
+          return {
+            ...contract,
+            property_units: units
+          };
+        })
+      );
+
+      res.json(contractsWithUnits);
     } finally {
       connection.release();
     }
