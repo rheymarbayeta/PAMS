@@ -29,6 +29,7 @@ export default function PropertyUnitsSection({
   onUnitsUpdated
 }: PropertyUnitsSectionProps) {
   const [showAddUnit, setShowAddUnit] = useState(false);
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [editingUnit, setEditingUnit] = useState<PropertyUnit | null>(null);
   const [unitForm, setUnitForm] = useState({
     stall_number: '',
@@ -37,6 +38,7 @@ export default function PropertyUnitsSection({
     area_sqm: '',
     status: 'available'
   });
+  const [bulkInput, setBulkInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleAddUnitClick = () => {
@@ -102,6 +104,71 @@ export default function PropertyUnitsSection({
     }
   };
 
+  const handleBulkAdd = async () => {
+    if (!bulkInput.trim()) {
+      alert('Please enter unit data');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Parse bulk input - each line is a stall number, optionally with floor level, description
+      // Format: stall_number | floor_level | unit_description | area_sqm
+      const lines = bulkInput.trim().split('\n');
+      const unitsToCreate: any[] = [];
+      
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        
+        const parts = line.split('|').map(p => p.trim());
+        const stallNumber = parts[0];
+        
+        if (!stallNumber) continue;
+        
+        unitsToCreate.push({
+          stall_number: stallNumber,
+          floor_level: parts[1] || null,
+          unit_description: parts[2] || null,
+          area_sqm: parts[3] ? parseFloat(parts[3]) : null,
+          status: 'available'
+        });
+      }
+
+      if (unitsToCreate.length === 0) {
+        alert('No valid units found in the input');
+        return;
+      }
+
+      // Create all units
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const unitData of unitsToCreate) {
+        try {
+          await api.post(`/api/rights-and-rentals/properties/${propertyId}/units`, unitData);
+          successCount++;
+        } catch (error: any) {
+          console.error('Error creating unit:', unitData.stall_number, error);
+          failureCount++;
+        }
+      }
+
+      if (failureCount > 0) {
+        alert(`Created ${successCount} units. Failed to create ${failureCount} units.`);
+      } else {
+        alert(`Successfully created ${successCount} units`);
+      }
+
+      setShowBulkAdd(false);
+      setBulkInput('');
+      onUnitsUpdated();
+    } catch (error: any) {
+      alert('Error processing bulk add: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
@@ -127,15 +194,26 @@ export default function PropertyUnitsSection({
           Property Units
         </h2>
         {canEdit && (
-          <button
-            onClick={handleAddUnitClick}
-            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Unit
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddUnitClick}
+              className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Unit
+            </button>
+            <button
+              onClick={() => setShowBulkAdd(true)}
+              className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Bulk Add
+            </button>
+          </div>
         )}
       </div>
 
@@ -221,54 +299,138 @@ export default function PropertyUnitsSection({
         </div>
       )}
 
-      {/* Units List */}
+      {/* Bulk Add Modal */}
+      {showBulkAdd && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Bulk Add Units</h3>
+            <p className="text-sm text-gray-600 mb-4">Enter one unit per line. Format: Stall Number | Floor Level | Description | Area (sqm)</p>
+            
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-xs text-blue-700">
+                <strong>Example:</strong><br/>
+                Stall A | Ground | Office | 50<br/>
+                101 | 1st Floor | Retail | 75<br/>
+                102 | 1st Floor | Storage |
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Unit Data *</label>
+              <textarea
+                value={bulkInput}
+                onChange={(e) => setBulkInput(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"
+                placeholder="Stall A | Ground | Office | 50&#10;101 | 1st Floor | Retail | 75"
+                rows={8}
+              />
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowBulkAdd(false);
+                  setBulkInput('');
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkAdd}
+                disabled={submitting}
+                className="flex-1 px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 font-medium disabled:opacity-50"
+              >
+                {submitting ? 'Creating...' : 'Create Units'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Units List - Grouped by Floor */}
       {units && units.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Stall Number</th>
-                <th className="px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Floor</th>
-                <th className="px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Description</th>
-                <th className="px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Area (sqm)</th>
-                <th className="px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Status</th>
-                {canEdit && <th className="px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {units.map((unit) => (
-                <tr key={unit.id} className="hover:bg-blue-50/50 transition-colors duration-150">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{unit.stall_number}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{unit.floor_level || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{unit.unit_description || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{unit.area_sqm || '-'}</td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(unit.status)}`}>
-                      {unit.status.charAt(0).toUpperCase() + unit.status.slice(1)}
-                    </span>
-                  </td>
-                  {canEdit && (
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditUnitClick(unit)}
-                          className="text-blue-600 hover:text-blue-700 font-medium"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUnit(unit.id)}
-                          className="text-red-600 hover:text-red-700 font-medium"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-6 p-6">
+          {Object.entries(
+            units.reduce((acc, unit) => {
+              const floorKey = unit.floor_level || 'No Floor Assigned';
+              if (!acc[floorKey]) acc[floorKey] = [];
+              acc[floorKey].push(unit);
+              return acc;
+            }, {} as Record<string, PropertyUnit[]>)
+          )
+            .sort(([floorA], [floorB]) => {
+              // Sort floors: Ground, Basement, then numeric (1st, 2nd, etc), then others
+              const getFloorOrder = (floor: string) => {
+                if (floor === 'Ground') return 0;
+                if (floor === 'Basement') return -1;
+                const num = parseInt(floor);
+                if (!isNaN(num)) return num;
+                return 999;
+              };
+              return getFloorOrder(floorA) - getFloorOrder(floorB);
+            })
+            .map(([floor, floorUnits]) => (
+              <div key={floor} className="border border-gray-200 rounded-lg overflow-hidden">
+                {/* Floor Header */}
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-3 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-3m0 0l7-4 7 4M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9M9 5h6" />
+                    </svg>
+                    {floor}
+                    <span className="ml-2 text-xs font-normal bg-white px-2 py-0.5 rounded text-gray-600">{floorUnits.length} unit{floorUnits.length > 1 ? 's' : ''}</span>
+                  </h3>
+                </div>
+
+                {/* Floor Units Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Stall Number</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Area (sqm)</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Status</th>
+                        {canEdit && <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {floorUnits.map((unit) => (
+                        <tr key={unit.id} className="hover:bg-blue-50/50 transition-colors duration-150">
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{unit.stall_number}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{unit.unit_description || '-'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{unit.area_sqm || '-'}</td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(unit.status)}`}>
+                              {unit.status.charAt(0).toUpperCase() + unit.status.slice(1)}
+                            </span>
+                          </td>
+                          {canEdit && (
+                            <td className="px-6 py-4 text-sm">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleEditUnitClick(unit)}
+                                  className="text-blue-600 hover:text-blue-700 font-medium"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUnit(unit.id)}
+                                  className="text-red-600 hover:text-red-700 font-medium"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
         </div>
       ) : (
         <div className="p-6 text-center">
