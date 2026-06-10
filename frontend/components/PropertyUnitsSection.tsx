@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '@/services/api';
 
 export interface PropertyUnit {
@@ -31,6 +31,7 @@ export default function PropertyUnitsSection({
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [editingUnit, setEditingUnit] = useState<PropertyUnit | null>(null);
+  const [activeLeases, setActiveLeases] = useState<Map<number, boolean>>(new Map());
   const [unitForm, setUnitForm] = useState({
     stall_number: '',
     floor_level: '',
@@ -40,6 +41,52 @@ export default function PropertyUnitsSection({
   });
   const [bulkInput, setBulkInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Fetch active leases for the property to determine unit occupancy
+  useEffect(() => {
+    fetchActiveLeases();
+  }, [propertyId, units]);
+
+  const fetchActiveLeases = async () => {
+    try {
+      // Fetch all leases for this property
+      const response = await api.get(`/api/rights-and-rentals/properties/${propertyId}/lease-contracts`);
+      const leases = response.data || [];
+      
+      // Build a map of unit IDs that have active leases
+      const occupiedUnits = new Map<number, boolean>();
+      leases.forEach((lease: any) => {
+        // Check if lease is active
+        const now = new Date();
+        const startDate = new Date(lease.contract_effective_date);
+        const endDate = lease.contract_termination_date ? new Date(lease.contract_termination_date) : null;
+        
+        const isActive = startDate <= now && (!endDate || endDate >= now) && lease.status === 'active';
+        
+        if (isActive && lease.property_units && Array.isArray(lease.property_units)) {
+          // Mark each unit in the lease as occupied
+          lease.property_units.forEach((unit: any) => {
+            occupiedUnits.set(unit.id, true);
+          });
+        }
+      });
+      
+      setActiveLeases(occupiedUnits);
+    } catch (error) {
+      console.error('Error fetching active leases:', error);
+      // Silently fail - this doesn't block the UI
+    }
+  };
+
+  // Helper function to get the display status
+  const getDisplayStatus = (unit: PropertyUnit): 'available' | 'occupied' | 'maintenance' | 'reserved' => {
+    // If unit has an active lease, show as occupied
+    if (activeLeases.has(unit.id) && activeLeases.get(unit.id)) {
+      return 'occupied';
+    }
+    // Otherwise use the unit's stored status
+    return unit.status;
+  };
 
   const handleAddUnitClick = () => {
     setEditingUnit(null);
@@ -402,8 +449,8 @@ export default function PropertyUnitsSection({
                           <td className="px-6 py-4 text-sm text-gray-600">{unit.unit_description || '-'}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{unit.area_sqm || '-'}</td>
                           <td className="px-6 py-4 text-sm">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(unit.status)}`}>
-                              {unit.status.charAt(0).toUpperCase() + unit.status.slice(1)}
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(getDisplayStatus(unit))}`}>
+                              {getDisplayStatus(unit).charAt(0).toUpperCase() + getDisplayStatus(unit).slice(1)}
                             </span>
                           </td>
                           {canEdit && (

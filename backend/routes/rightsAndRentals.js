@@ -575,6 +575,58 @@ router.get('/lease-contracts', async (req, res) => {
   }
 });
 
+// Get lease contracts for a specific property with their units
+router.get('/properties/:property_id/lease-contracts', async (req, res) => {
+  try {
+    const { property_id } = req.params;
+    const connection = await pool.getConnection();
+    try {
+      // Get all lease contracts for this property
+      const [contracts] = await connection.query(`
+        SELECT 
+          lc.id,
+          lc.lessee_id,
+          l.name as lessee_name,
+          l.contact_number,
+          lc.property_id,
+          p.property_name,
+          p.property_code,
+          lc.contract_effective_date,
+          lc.contract_termination_date,
+          lc.status,
+          lc.created_at
+        FROM lease_contracts lc
+        JOIN lessees l ON lc.lessee_id = l.id
+        JOIN properties p ON lc.property_id = p.id
+        WHERE lc.property_id = ?
+        ORDER BY lc.contract_effective_date DESC
+      `, [property_id]);
+
+      // For each contract, fetch its associated units
+      const contractsWithUnits = await Promise.all(contracts.map(async (contract) => {
+        const [units] = await connection.query(`
+          SELECT pu.id, pu.stall_number
+          FROM lease_contract_units lcu
+          JOIN property_units pu ON lcu.property_unit_id = pu.id
+          WHERE lcu.lease_contract_id = ?
+        `, [contract.id]);
+        
+        return {
+          ...contract,
+          property_units: units
+        };
+      }));
+
+      res.json(contractsWithUnits);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get property lease contracts error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get a single lease contract
 router.get('/lease-contracts/:id', async (req, res) => {
   try {
