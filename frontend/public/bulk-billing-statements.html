@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bulk Billing Statements</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; }
+
+  .controls {
+    padding: 10px 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-wrap: wrap;
+  }
+  .controls label { font-size: 13px; color: #555; }
+  .btn {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #fff;
+    background: #28a745;
+  }
+  .btn:hover { background: #1e7e34; }
+  .btn:disabled { background: #6c757d; cursor: not-allowed; }
+  .spacer { flex: 1; }
+  #loadStatus { font-size: 13px; color: #555; }
+
+  #bill-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 8px 40px;
+    gap: 16px;
+  }
+  #bill-wrap.hidden { display: none; }
+
+  /* A4 page – 2 statements per page */
+  .bulk-page {
+    width: 210mm;
+    height: 297mm;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    display: flex;
+    flex-direction: column;
+    page-break-after: always;
+    overflow: hidden;
+  }
+  .statement-wrapper {
+    height: 148.5mm;
+    overflow: hidden;
+    border-bottom: 1px dashed #ccc;
+    page-break-inside: avoid;
+  }
+  .statement-wrapper:last-child { border-bottom: none; }
+
+  /* Compact billing doc (half A4) */
+  .billing-doc-compact {
+    width: 100%;
+    height: 100%;
+    padding: 5mm 7mm;
+    font-size: 8pt;
+    color: #1f2937;
+    line-height: 1.25;
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+    background: #fff;
+  }
+  .billing-doc-compact .bill-header-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1px;
+    margin-top: 2px;
+  }
+  .billing-doc-compact .bill-property {
+    flex: 1;
+    font-weight: 700;
+    font-size: 9pt;
+    color: #111;
+  }
+  .billing-doc-compact .bill-statement-no {
+    text-align: right;
+    font-weight: 600;
+    font-size: 7.5pt;
+    line-height: 1.3;
+    color: #374151;
+  }
+  .billing-doc-compact .bill-location { font-size: 7.5pt; margin-bottom: 1px; color: #555; }
+  .billing-doc-compact .bill-period {
+    text-align: right;
+    font-size: 7.5pt;
+    margin-bottom: 2px;
+    font-weight: 600;
+    color: #374151;
+  }
+  .billing-doc-compact .bill-lessee-section {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .billing-doc-compact .bill-lessee-section > div:first-child {
+    font-weight: 700;
+    font-size: 9pt;
+    color: #111;
+  }
+  .billing-doc-compact .bill-lessee-section > div:last-child {
+    font-weight: 600;
+    font-size: 8pt;
+    color: #374151;
+  }
+  .billing-doc-compact .bill-total-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+    padding: 3px 6px;
+    background: #f9fafb;
+    border-left: 3px solid #1e40af;
+  }
+  .billing-doc-compact .bill-total-label { font-weight: 700; font-size: 8pt; flex: 1; }
+  .billing-doc-compact .bill-total-value {
+    border: 1.5px solid #1e40af;
+    padding: 2px 6px;
+    font-weight: 700;
+    font-size: 10pt;
+    color: #1e40af;
+    min-width: 80px;
+    text-align: right;
+    background: #fff;
+  }
+  .billing-doc-compact .bill-due-section {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 1px;
+    font-size: 8pt;
+  }
+  .billing-doc-compact .bill-due-label { font-weight: 700; min-width: 110px; }
+  .billing-doc-compact .bill-note {
+    font-size: 7pt;
+    font-style: italic;
+    margin-bottom: 3px;
+    color: #6b7280;
+  }
+  .billing-doc-compact .bill-section-title {
+    text-align: center;
+    font-weight: 700;
+    font-size: 8pt;
+    letter-spacing: 1px;
+    margin: 4px 0 3px;
+    color: #111;
+  }
+  .billing-doc-compact .bill-rental-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+    font-size: 7.5pt;
+  }
+  .billing-doc-compact .bill-rental-table td {
+    border: 1px solid #d1d5db;
+    padding: 2px 4px;
+    vertical-align: middle;
+  }
+  .billing-doc-compact .bill-rental-table tr:nth-child(odd) { background: #f9fafb; }
+  .billing-doc-compact .bill-rental-label { font-weight: 600; width: 65%; }
+  .billing-doc-compact .bill-rental-value { text-align: right; font-weight: 600; width: 35%; }
+  .billing-doc-compact .bill-signatory {
+    text-align: right;
+    margin: 6px 0 2px;
+    font-size: 7.5pt;
+  }
+  .billing-doc-compact .signatory-line {
+    border-top: 1px solid #333;
+    width: 100px;
+    margin: 18px 0 2px auto;
+  }
+  .billing-doc-compact .signatory-name { font-weight: 700; color: #111; }
+  .billing-doc-compact .signatory-title { font-size: 7pt; color: #6b7280; }
+  .billing-doc-compact .bill-footer {
+    text-align: center;
+    font-size: 6.5pt;
+    color: #9ca3af;
+    margin-top: 4px;
+    padding-top: 2px;
+    border-top: 1px solid #e5e7eb;
+    font-style: italic;
+  }
+
+  .error-box {
+    margin: 20px;
+    padding: 14px;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    color: #991b1b;
+    font-size: 13px;
+  }
+  .loading-box { margin: 40px; text-align: center; font-size: 15px; color: #555; }
+
+  @media print {
+    body { background: #fff; margin: 0; }
+    .controls { display: none !important; }
+    #bill-wrap { padding: 0; gap: 0; }
+    .bulk-page { border: none; margin: 0; page-break-after: always; }
+    .statement-wrapper { border-bottom: none; }
+    @page { size: A4; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <span id="summaryLabel" style="font-size:13px;font-weight:600;color:#333;"></span>
+  <span id="loadStatus"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="btnPrint" disabled onclick="window.print()">&#128424; Print</button>
+</div>
+
+<div id="loading" class="loading-box">Loading bulk billing statements&hellip;</div>
+<div id="error" class="error-box" style="display:none"></div>
+<div id="bill-wrap" class="hidden"></div>
+
+<script src="/js/billing-common.js"></script>
+<script>
+var p = new URLSearchParams(location.search);
+var IDS = (p.get('ids') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+var MONTH = parseInt(p.get('month'), 10) || (new Date().getMonth() + 1);
+var YEAR = parseInt(p.get('year'), 10) || new Date().getFullYear();
+var TOKEN = p.get('token') || localStorage.getItem('token') || '';
+var API = location.origin;
+var BC = window.BillingCommon;
+
+function showError(msg) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('bill-wrap').classList.add('hidden');
+  var el = document.getElementById('error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function setSummary(count) {
+  var monthName = BC.MONTHS[MONTH - 1];
+  document.getElementById('summaryLabel').textContent =
+    count + ' statement' + (count === 1 ? '' : 's') + ' — ' + monthName + ' ' + YEAR;
+}
+
+function loadAll() {
+  if (IDS.length === 0) {
+    showError('No contract IDs provided.');
+    return;
+  }
+
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('bill-wrap').classList.add('hidden');
+  document.getElementById('btnPrint').disabled = true;
+  document.getElementById('loadStatus').textContent = 'Loading…';
+
+  BC.loadBillingContext(API, TOKEN)
+    .then(function (ctx) {
+      var promises = IDS.map(function (id) {
+        return BC.fetchBillingData(API, TOKEN, id, MONTH, YEAR).catch(function (err) {
+          console.warn('Failed billing for contract ' + id + ':', err.message);
+          return null;
+        });
+      });
+      return Promise.all(promises).then(function (results) {
+        return { ctx: ctx, statements: results.filter(Boolean) };
+      });
+    })
+    .then(function (result) {
+      if (result.statements.length === 0) {
+        throw new Error('Could not load billing data for any of the selected contracts.');
+      }
+      document.getElementById('bill-wrap').innerHTML = BC.renderBulkPages(result.statements, result.ctx);
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('loadStatus').textContent = '';
+      document.getElementById('bill-wrap').classList.remove('hidden');
+      document.getElementById('btnPrint').disabled = false;
+      setSummary(result.statements.length);
+      if (result.statements.length < IDS.length) {
+        document.getElementById('loadStatus').textContent =
+          (IDS.length - result.statements.length) + ' contract(s) skipped due to errors.';
+      }
+    })
+    .catch(function (err) {
+      showError(err.message || 'Failed to load bulk billing.');
+      document.getElementById('loadStatus').textContent = '';
+    });
+}
+
+loadAll();
+</script>
+</body>
+</html>

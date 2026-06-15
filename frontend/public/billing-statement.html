@@ -276,71 +276,21 @@
 <div id="error"  class="error-box" style="display:none"></div>
 <div id="bill-wrap" class="hidden"></div>
 
+<script src="/js/billing-common.js"></script>
 <script>
-var MONTHS = ['January','February','March','April','May','June',
-              'July','August','September','October','November','December'];
-
-var p     = new URLSearchParams(location.search);
-var ID    = p.get('id')    || '';
+var BC = window.BillingCommon;
+var p = new URLSearchParams(location.search);
+var ID = p.get('id') || '';
 var TOKEN = p.get('token') || localStorage.getItem('token') || '';
-var API   = location.origin;
-
-// Global state for header/footer
-var headerSettings = {};
-var currentUserName = 'System';
-var treasurerName = 'Municipal Treasurer';
-var treasurerPosition = 'Municipal Treasurer';
-var settingsReady = false;
-
-/* Fetch settings and user info */
-Promise.all([
-  fetch(API + '/api/settings', { headers: { 'Authorization': 'Bearer ' + TOKEN } }).then(r => r.ok ? r.json() : {}),
-  fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + TOKEN } }).then(r => r.ok ? r.json() : {})
-])
-.then(function(results) {
-  var settings = results[0];
-  var userInfo = results[1];
-  
-  // Extract header settings
-  var getLogoUrl = function(url) {
-    if (!url) return null;
-    if (url.startsWith('http')) return url;
-    if (url.startsWith('/api/')) return API + url;
-    return url;
-  };
-  
-  headerSettings = {
-    logoLeftUrl: getLogoUrl(settings.assessment_header_logo_left?.value),
-    logoRightUrl: getLogoUrl(settings.assessment_header_logo_right?.value),
-    logoHeight: Math.max(20, Math.min(120, parseFloat(settings.assessment_header_logo_size?.value) || 40)),
-    line1: settings.assessment_header_line_1?.value || 'REPUBLIC OF THE PHILIPPINES',
-    line2: settings.assessment_header_line_2?.value || 'MUNICIPALITY OF DALAGUETE',
-    line3: settings.assessment_header_line_3?.value || 'PROVINCE OF CEBU',
-    line4: settings.assessment_header_line_4?.value || 'MUNICIPAL TREASURER\'S OFFICE',
-    line5: settings.assessment_header_line_5?.value || '',
-    fontSize: Math.max(7, Math.min(20, parseFloat(settings.assessment_header_font_size?.value) || 9))
-  };
-  
-  if (userInfo.name) currentUserName = userInfo.name;
-  if (settings.municipal_treasurer_name?.value) treasurerName = settings.municipal_treasurer_name.value;
-  if (settings.municipal_treasurer_position?.value) treasurerPosition = settings.municipal_treasurer_position.value;
-  
-  settingsReady = true;
-  // Auto-load billing after settings are ready
-  loadBilling();
-})
-.catch(function(err) {
-  console.warn('Failed to fetch settings/user info:', err);
-  settingsReady = true;
-  loadBilling();
-});
+var API = location.origin;
+var billingCtx = null;
 
 /* Populate selects */
 var now = new Date();
 var selMonth = document.getElementById('selMonth');
 var selYear  = document.getElementById('selYear');
 
-MONTHS.forEach(function(m, i) {
+BC.MONTHS.forEach(function(m, i) {
   var o = document.createElement('option');
   o.value = i + 1;
   o.textContent = m;
@@ -355,31 +305,10 @@ for (var y = now.getFullYear() - 3; y <= now.getFullYear() + 6; y++) {
   selYear.appendChild(o2);
 }
 
-// Override with URL params if present
 if (p.get('month')) selMonth.value = p.get('month');
 if (p.get('year'))  selYear.value  = p.get('year');
 
 document.getElementById('btnReload').addEventListener('click', loadBilling);
-
-function fmt(n) {
-  return Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtDate(d) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-function periodLabel(m, y) {
-  var lastDay = new Date(y, m, 0).getDate();
-  return MONTHS[m - 1] + ' 1-' + lastDay + ', ' + y;
-}
-function dueDateLabel(d) {
-  if (!d) return '—';
-  var date = new Date(d);
-  var month = MONTHS[date.getMonth()].substring(0, 3) + '.';
-  var day = String(date.getDate()).padStart(2, '0');
-  var year = date.getFullYear();
-  return month + ' ' + day + ', ' + year;
-}
 
 function showError(msg) {
   document.getElementById('loading').style.display = 'none';
@@ -399,133 +328,33 @@ function loadBilling() {
   document.getElementById('btnPrint').disabled = true;
   document.getElementById('loadStatus').textContent = 'Loading…';
 
-  fetch(API + '/api/rights-and-rentals/lease-contracts/' + ID + '/billing?month=' + month + '&year=' + year, {
-    headers: { 'Authorization': 'Bearer ' + TOKEN }
-  })
-  .then(function(r) {
-    if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Error ' + r.status); });
-    return r.json();
-  })
-  .then(function(data) {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('loadStatus').textContent = '';
-    renderBill(data);
-    document.getElementById('bill-wrap').classList.remove('hidden');
-    document.getElementById('btnPrint').disabled = false;
-  })
-  .catch(function(err) {
-    showError('Failed to load billing data: ' + err.message);
-    document.getElementById('loadStatus').textContent = '';
-  });
+  var ctxPromise = billingCtx
+    ? Promise.resolve(billingCtx)
+    : BC.loadBillingContext(API, TOKEN).then(function(ctx) {
+        billingCtx = ctx;
+        return ctx;
+      });
+
+  ctxPromise
+    .then(function(ctx) {
+      return BC.fetchBillingData(API, TOKEN, ID, month, year).then(function(data) {
+        return { ctx: ctx, data: data };
+      });
+    })
+    .then(function(result) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('loadStatus').textContent = '';
+      document.getElementById('bill-wrap').innerHTML = BC.renderBillingStatement(result.data, result.ctx);
+      document.getElementById('bill-wrap').classList.remove('hidden');
+      document.getElementById('btnPrint').disabled = false;
+    })
+    .catch(function(err) {
+      showError('Failed to load billing data: ' + err.message);
+      document.getElementById('loadStatus').textContent = '';
+    });
 }
 
-function renderBill(data) {
-  var c = data.contract;
-  var b = data.billing;
-  var rn = b.rental;
-
-  var prevMonthIdx = b.billing_month === 1 ? 11 : b.billing_month - 2;
-  var prevYear     = b.billing_month === 1 ? b.billing_year - 1 : b.billing_year;
-
-  var unit = (c.property_units && c.property_units.length > 0) ? c.property_units[0] : null;
-  var unitNo = unit ? (unit.stall_number || 'N/A') : 'N/A';
-
-  // Build dynamic header
-  var headerHtml = '<div style="text-align: center; margin-bottom: 6px; display: flex; justify-content: center; align-items: center; gap: 12px;">';
-  if (headerSettings.logoLeftUrl) {
-    headerHtml += '<img src="' + headerSettings.logoLeftUrl + '" alt="Logo" style="height: ' + headerSettings.logoHeight + 'px; width: auto; object-fit: contain;">';
-  }
-  headerHtml += '<div style="text-align: center;">';
-  if (headerSettings.line1) headerHtml += '<div style="font-size:' + headerSettings.fontSize + 'pt; font-weight: bold;">' + esc(headerSettings.line1) + '</div>';
-  if (headerSettings.line2) headerHtml += '<div style="font-size:' + headerSettings.fontSize + 'pt; font-weight: bold;">' + esc(headerSettings.line2) + '</div>';
-  if (headerSettings.line3) headerHtml += '<div style="font-size:' + headerSettings.fontSize + 'pt; font-weight: bold;">' + esc(headerSettings.line3) + '</div>';
-  if (headerSettings.line4) headerHtml += '<div style="font-size:' + Math.round(headerSettings.fontSize * 1.35) + 'pt; font-weight: bold; margin-top: 2px;">' + esc(headerSettings.line4) + '</div>';
-  if (headerSettings.line5) headerHtml += '<div style="font-size:' + headerSettings.fontSize + 'pt; font-weight: bold; margin-top: 2px;">' + esc(headerSettings.line5) + '</div>';
-  headerHtml += '</div>';
-  if (headerSettings.logoRightUrl) {
-    headerHtml += '<img src="' + headerSettings.logoRightUrl + '" alt="Logo 2" style="height: ' + headerSettings.logoHeight + 'px; width: auto; object-fit: contain;">';
-  }
-  headerHtml += '</div>';
-
-  var wrap = document.getElementById('bill-wrap');
-  
-  var html = '<div class="billing-doc">'
-    + headerHtml
-    + '<hr style="border: none; border-top: 1px solid #333; margin: 4px 0;">'
-
-    // Header row
-    + '<div class="bill-header-row">'
-    + '<div class="bill-property">' + esc(c.property_name.toUpperCase()) + '</div>'
-    + '<div class="bill-statement-no">BILLING STATEMENT No.<br>' + esc(b.billing_number) + '</div>'
-    + '</div>'
-
-    // Location
-    + '<div class="bill-location">' + esc(c.property_address || 'Dalaguete, Cebu') + '</div>'
-
-    // Billing period
-    + '<div class="bill-period">As of ' + periodLabel(b.billing_month, b.billing_year) + '</div>'
-
-    // Lessee and space number
-    + '<div class="bill-lessee-section">'
-    + '<div>' + esc(c.lessee_name.toUpperCase()) + '</div>'
-    + '<div>SPACE No: ' + esc(unitNo) + '</div>'
-    + '</div>'
-
-    // Total amount due box
-    + '<div class="bill-total-box">'
-    + '<span class="bill-total-label">TOTAL AMOUNT DUE:</span>'
-    + '<span class="bill-total-value">₱ ' + fmt(b.total_due) + '</span>'
-    + '</div>'
-
-    // Payment due date
-    + '<div class="bill-due-section">'
-    + '<span class="bill-due-label">PAYMENT DUE DATE:</span>'
-    + '<span>' + dueDateLabel(b.payment_due_date) + '</span>'
-    + '</div>'
-
-    // Note about surcharge
-    + '<div class="bill-note">Note: 20% surcharge for late payments.</div>'
-
-    // Section title
-    + '<div class="bill-section-title">M O N T H L Y &nbsp;&nbsp;R E N T A L S</div>'
-
-    // Rental details table
-    + '<table class="bill-rental-table">'
-    + '<tr><td class="bill-rental-label">BALANCE (' + MONTHS[prevMonthIdx].toUpperCase() + ' ' + prevYear + '):</td><td class="bill-rental-value">₱ ' + fmt(rn.previous_balance) + '</td></tr>'
-    + '<tr><td class="bill-rental-label">Surcharge (20%)</td><td class="bill-rental-value">₱ ' + fmt(rn.surcharge) + '</td></tr>'
-    + '<tr><td class="bill-rental-label">This Month (' + MONTHS[b.billing_month - 1].toUpperCase() + ' ' + b.billing_year + '):</td><td class="bill-rental-value">₱ ' + fmt(rn.this_month) + '</td></tr>'
-    + '<tr><td class="bill-rental-label"><div style="margin-left: 16px;">Less: Late Payment</div></td><td class="bill-rental-value"></td></tr>';
-  
-  if (rn.late_payment_or) {
-    html += '<tr><td class="bill-rental-label"><div style="margin-left: 32px;">with OR#' + esc(rn.late_payment_or) + '</div></td><td class="bill-rental-value">₱ ' + fmt(rn.late_payment_amount) + '</td></tr>';
-  }
-  
-  html += '<tr><td class="bill-rental-label">Monthly Rental:</td><td class="bill-rental-value">₱ ' + fmt(rn.monthly_rental) + '</td></tr>'
-    + '<tr><td class="bill-rental-label"><strong>Dues (' + MONTHS[b.billing_month - 1].toUpperCase() + ' ' + b.billing_year + '):</strong></td><td class="bill-rental-value"><strong>₱ ' + fmt(rn.dues) + '</strong></td></tr>'
-    + '</table>'
-
-    // Signatory
-    + '<div class="bill-signatory">'
-    + '<div class="signatory-line"></div>'
-    + '<div class="signatory-name">' + esc(treasurerName) + '</div>'
-    + '<div class="signatory-title">' + esc(treasurerPosition) + '</div>'
-    + '</div>'
-
-    // Footer
-    + '<div class="bill-footer">'
-    + '** This is an electronically generated statement of account.'
-    + '</div>'
-
-    + '</div>';
-
-  wrap.innerHTML = html;
-}
-
-function esc(str) {
-  var d = document.createElement('div');
-  d.appendChild(document.createTextNode(str || ''));
-  return d.innerHTML;
-}
+loadBilling();
 </script>
 </body>
 </html>

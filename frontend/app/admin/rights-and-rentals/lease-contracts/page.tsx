@@ -39,8 +39,7 @@ export default function LeaseContractsPage() {
   const [showBulkBillingModal, setShowBulkBillingModal] = useState(false);
   const [bulkBillingMonth, setBulkBillingMonth] = useState<number>(new Date().getMonth() + 1);
   const [bulkBillingYear, setBulkBillingYear] = useState<number>(new Date().getFullYear());
-  const [bulkBillingHTML, setBulkBillingHTML] = useState<string>('');
-  const [bulkBillingLoading, setBulkBillingLoading] = useState(false);
+  const [bulkBillingUrl, setBulkBillingUrl] = useState<string>('');
 
   useEffect(() => {
     setCurrentPage(1);
@@ -106,246 +105,26 @@ export default function LeaseContractsPage() {
     );
   };
 
-  const generateBulkBilling = async () => {
+  const generateBulkBilling = () => {
     if (filteredContracts.length === 0) {
       showAlert('No contracts to generate billing for', 'Info');
       return;
     }
 
-    setBulkBillingLoading(true);
-    try {
-      // Fetch billing data for each filtered contract
-      const billingDataPromises = filteredContracts.map(contract =>
-        api.get(`/api/rights-and-rentals/lease-contracts/${contract.id}/billing?month=${bulkBillingMonth}&year=${bulkBillingYear}`)
-          .then(res => ({
-            contract,
-            billing: res.data
-          }))
-          .catch(err => ({
-            contract,
-            billing: null,
-            error: err
-          }))
-      );
-
-      const billingResults = await Promise.all(billingDataPromises);
-      const validBilling = billingResults.filter(r => r.billing);
-
-      if (validBilling.length === 0) {
-        showAlert('Could not fetch billing data for contracts', 'Error');
-        setBulkBillingLoading(false);
-        return;
-      }
-
-      // Generate HTML with 2 statements per page
-      const html = generateBulkBillingHTML(validBilling, bulkBillingMonth, bulkBillingYear);
-      setBulkBillingHTML(html);
-      setShowBulkBillingModal(true);
-    } catch (error) {
-      console.error('Error generating bulk billing:', error);
-      showAlert('Error generating bulk billing', 'Error');
-    } finally {
-      setBulkBillingLoading(false);
-    }
+    const token = localStorage.getItem('token') || '';
+    const ids = filteredContracts.map(c => c.id).join(',');
+    const url = `/bulk-billing-statements.html?ids=${ids}&month=${bulkBillingMonth}&year=${bulkBillingYear}&token=${encodeURIComponent(token)}&_v=${Date.now()}`;
+    setBulkBillingUrl(url);
   };
 
-  const generateBulkBillingHTML = (billingResults: any[], month: number, year: number): string => {
-    const statements = billingResults.map(r => ({
-      contract: r.contract,
-      billing: r.billing
-    }));
-
-    let html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bulk Billing Statements</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Arial', sans-serif; background: white; }
-    .page { width: 210mm; height: 297mm; margin: 0; padding: 0; page-break-after: always; display: flex; flex-direction: column; }
-    .statement-wrapper { height: 148.5mm; padding: 8mm; border: 1px solid #ddd; page-break-inside: avoid; display: flex; flex-direction: column; font-size: 11px; }
-    
-    .billing-header { text-align: center; margin-bottom: 6px; line-height: 1.2; }
-    .billing-header-title { font-size: 10px; font-weight: bold; color: #000; }
-    .billing-header-subtitle { font-size: 9px; color: #333; }
-    .billing-header-office { font-size: 11px; font-weight: bold; color: #000; margin: 2px 0; }
-    .billing-header-tel { font-size: 8px; color: #666; }
-    
-    .billing-location { display: flex; gap: 10mm; margin: 6px 0; font-size: 9px; }
-    .location-left { flex: 1; }
-    .location-left-title { font-weight: bold; margin-bottom: 2px; }
-    .location-right { text-align: right; }
-    .location-right-number { font-weight: bold; }
-    
-    .lessee-info { margin: 4px 0; font-size: 9px; }
-    .lessee-name { font-weight: bold; font-size: 10px; }
-    .lessee-space { font-size: 8px; color: #666; }
-    
-    .amount-due-box { background: #f0f0f0; padding: 4px 8px; margin: 4px 0; display: flex; justify-content: space-between; align-items: center; border: 1px solid #ddd; }
-    .amount-due-label { font-weight: bold; font-size: 9px; }
-    .amount-due-value { font-size: 12px; font-weight: bold; color: #1e40af; min-width: 50px; text-align: right; }
-    
-    .due-date { font-size: 8px; margin: 2px 0; }
-    
-    .note { font-size: 7px; color: #666; margin: 2px 0; font-style: italic; }
-    
-    .monthly-table { width: 100%; border-collapse: collapse; font-size: 8px; margin: 4px 0; }
-    .monthly-table th { background: #e5e7eb; padding: 2px 4px; text-align: left; font-weight: bold; border: 1px solid #ccc; }
-    .monthly-table td { padding: 2px 4px; border: 1px solid #ccc; }
-    .monthly-table .label { width: 60%; }
-    .monthly-table .amount { width: 40%; text-align: right; }
-    
-    @media print {
-      body { margin: 0; padding: 0; background: white; }
-      .page { margin: 0; page-break-after: always; }
-      .statement-wrapper { page-break-inside: avoid; margin: 0; }
-    }
-  </style>
-</head>
-<body>
-`;
-
-    // Group statements into pairs for A4 pages
-    for (let i = 0; i < statements.length; i += 2) {
-      html += '<div class="page">';
-      
-      // First statement
-      html += generateStatementHTML(statements[i], month, year);
-      
-      // Second statement (if exists)
-      if (i + 1 < statements.length) {
-        html += generateStatementHTML(statements[i + 1], month, year);
-      }
-      
-      html += '</div>';
-    }
-
-    html += '</body></html>';
-    return html;
+  const closeBulkBillingPreview = () => {
+    setBulkBillingUrl('');
+    setShowBulkBillingModal(false);
   };
 
-  const generateStatementHTML = (data: any, month: number, year: number): string => {
-    const { contract, billing } = data;
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    const fmt = (n: number) => {
-      return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-
-    const dueDate = billing?.due_date 
-      ? new Date(billing.due_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-      : `${monthShort[month - 1]}. 30, ${year}`;
-
-    const totalAmount = (billing?.monthly_rights_amount || 0) + (billing?.monthly_rental_amount || 0);
-    const billingNumber = `MPM-${year}-${String(month).padStart(2, '0')}-${String(contract.id).padStart(3, '0')}`;
-    
-    // Date range for the period
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
-    const dateRange = `${monthShort[month - 1]} 1-${endDate.getDate()}, ${year}`;
-
-    return `
-    <div class="statement-wrapper">
-      <div class="billing-header">
-        <div class="billing-header-title">REPUBLIC OF THE PHILIPPINES</div>
-        <div class="billing-header-subtitle">MUNICIPALITY OF DALAGUETE</div>
-        <div class="billing-header-subtitle">PROVINCE OF CEBU</div>
-        <div class="billing-header-office">MUNICIPAL TREASURER'S OFFICE</div>
-        <div class="billing-header-tel">Tel. # 520 4141 loc. 309</div>
-      </div>
-
-      <div class="billing-location">
-        <div class="location-left">
-          <div class="location-left-title">${contract.property_name}</div>
-          <div>${contract.property_name}</div>
-        </div>
-        <div class="location-right">
-          <div class="location-right-number">BILLING STATEMENT No.</div>
-          <div style="font-weight: bold;">${billingNumber}</div>
-        </div>
-      </div>
-
-      <div style="text-align: right; font-size: 8px; margin: 2px 0;">
-        As of ${dateRange}
-      </div>
-
-      <div class="lessee-info">
-        <div class="lessee-name">${contract.lessee_name}</div>
-        <div class="lessee-space">SPACE No: ${contract.id}</div>
-      </div>
-
-      <div class="amount-due-box">
-        <div class="amount-due-label">TOTAL AMOUNT DUE:</div>
-        <div class="amount-due-value">₱ ${fmt(totalAmount)}</div>
-      </div>
-
-      <div class="due-date">
-        <strong>PAYMENT DUE DATE:</strong> ${dueDate}
-      </div>
-      <div class="note">
-        Note: 20% surcharge for late payments.
-      </div>
-
-      <div style="font-size: 8px; text-align: center; font-weight: bold; margin: 3px 0; letter-spacing: 2px;">
-        MONTHLY RENTALS
-      </div>
-
-      <table class="monthly-table">
-        <tbody>
-          <tr>
-            <td class="label">BALANCE (${monthShort[Math.max(0, month - 2)]} ${year}):</td>
-            <td class="amount">₱ ${fmt(billing?.previous_balance || 0)}</td>
-          </tr>
-          <tr>
-            <td class="label">Surcharge (20%)</td>
-            <td class="amount">₱ ${fmt(billing?.surcharge || 0)}</td>
-          </tr>
-          <tr style="background: #f9fafb;">
-            <td class="label"><strong>This Month (${monthShort[month - 1]} ${year}):</strong></td>
-            <td class="amount"><strong>₱ ${fmt(billing?.monthly_rental_amount || 0)}</strong></td>
-          </tr>
-          <tr>
-            <td class="label">Less: Late Payment</td>
-            <td class="amount">₱ ${fmt(billing?.late_payment_discount || 0)}</td>
-          </tr>
-          <tr style="border-top: 2px solid #000; font-weight: bold;">
-            <td class="label">Monthly Rental:</td>
-            <td class="amount">₱ ${fmt(totalAmount)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    `;
-  };
-
-  const downloadBillingPDF = async () => {
-    try {
-      // Create a temporary link and download
-      const element = document.createElement('a');
-      const file = new Blob([bulkBillingHTML], { type: 'text/html' });
-      element.href = URL.createObjectURL(file);
-      element.download = `bulk-billing-${bulkBillingMonth}-${bulkBillingYear}.html`;
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
-    } catch (error) {
-      showAlert('Error downloading billing', 'Error');
-    }
-  };
-
-  const printBulkBilling = () => {
-    const printWindow = window.open('', '', 'width=1000,height=600');
-    if (printWindow) {
-      printWindow.document.write(bulkBillingHTML);
-      printWindow.document.close();
-      printWindow.onload = () => {
-        printWindow.print();
-      };
-    }
+  const closeBulkBilling = () => {
+    setShowBulkBillingModal(false);
+    setBulkBillingUrl('');
   };
 
   const userRoles = user?.roles || [user?.role_name];
@@ -633,7 +412,7 @@ export default function LeaseContractsPage() {
           </div>
 
           {/* Bulk Billing Modal - Month/Year Selection */}
-          {showBulkBillingModal && !bulkBillingHTML && (
+          {showBulkBillingModal && !bulkBillingUrl && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4">
                 <div className="px-6 py-4 border-b border-gray-200">
@@ -669,74 +448,65 @@ export default function LeaseContractsPage() {
                 </div>
                 <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end">
                   <button
-                    onClick={() => setShowBulkBillingModal(false)}
+                    onClick={closeBulkBilling}
                     className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={generateBulkBilling}
-                    disabled={bulkBillingLoading}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
                   >
-                    {bulkBillingLoading ? 'Generating...' : 'Generate'}
+                    Generate
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Bulk Billing Display Modal */}
-          {bulkBillingHTML && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full h-full flex flex-col mx-4 my-4">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-gray-900">Bulk Billing Statements</h2>
-                  <p className="text-sm text-gray-600">{filteredContracts.length} contracts - {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][bulkBillingMonth - 1]} {bulkBillingYear}</p>
+          {/* Bulk Billing Preview Modal */}
+          {bulkBillingUrl && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
+              <div className="bg-white rounded-lg shadow-2xl w-full h-full max-w-5xl max-h-[92vh] flex flex-col">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Bulk Billing Statements</h3>
+                    <p className="text-sm text-gray-600">
+                      {filteredContracts.length} contracts — {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][bulkBillingMonth - 1]} {bulkBillingYear}
+                    </p>
+                  </div>
+                  <button
+                    onClick={closeBulkBillingPreview}
+                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-                <div className="flex-1 overflow-auto bg-gray-100 p-4">
+                <div className="flex-1 overflow-hidden">
                   <iframe
-                    srcDoc={bulkBillingHTML}
-                    className="w-full h-full bg-white"
-                    title="Bulk Billing Preview"
+                    src={bulkBillingUrl}
+                    className="w-full h-full border-0"
+                    title="Bulk Billing Statements"
                   />
                 </div>
-                <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-between">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t border-gray-200 bg-gray-50">
                   <button
                     onClick={() => {
-                      setBulkBillingHTML('');
+                      setBulkBillingUrl('');
                       setShowBulkBillingModal(true);
                     }}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Back
                   </button>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={printBulkBilling}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4H9m20 0H3" />
-                      </svg>
-                      Print
-                    </button>
-                    <button
-                      onClick={downloadBillingPDF}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      Download
-                    </button>
-                    <button
-                      onClick={() => setBulkBillingHTML('')}
-                      className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      Close
-                    </button>
-                  </div>
+                  <button
+                    onClick={closeBulkBillingPreview}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
             </div>
