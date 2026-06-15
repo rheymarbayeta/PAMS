@@ -352,6 +352,7 @@ function generateReportHTML(settings, applicationData, permitTypeData, paymentDa
             <div style="flex:1;">
               ${bySignatoryEnabled ? `
               <div style="margin-bottom:50px;font-weight:bold;">REVIEWED BY:</div>
+              ${getLogoUrl(settings.permit_by_signatory_signature?.value) ? `<img src="${getLogoUrl(settings.permit_by_signatory_signature?.value)}" alt="E-Signature" style="height:36px;width:auto;max-width:140px;object-fit:contain;display:block;margin-bottom:4px;">` : ''}
               <div style="font-weight:bold;text-transform:uppercase;text-decoration:underline;">${byName}</div>
               <div style="font-size:13px;text-transform:uppercase;">${byTitle}</div>
               ` : ''}
@@ -359,6 +360,7 @@ function generateReportHTML(settings, applicationData, permitTypeData, paymentDa
             <!-- Right: APPROVED BY -->
             <div style="flex:1;">
               <div style="margin-bottom:50px;font-weight:bold;">APPROVED BY:</div>
+              ${getLogoUrl(settings.permit_signatory_signature?.value) ? `<img src="${getLogoUrl(settings.permit_signatory_signature?.value)}" alt="E-Signature" style="height:36px;width:auto;max-width:140px;object-fit:contain;display:block;margin-bottom:4px;">` : ''}
               <div style="font-weight:bold;text-transform:uppercase;text-decoration:underline;">${aprvName}</div>
               <div style="font-size:13px;text-transform:uppercase;">${aprvTitle}</div>
             </div>

@@ -1267,7 +1267,9 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
           </div>
 
           <div style="margin-top: 25px; text-align: center;">
-            <div style="height: 35px;"></div>
+            ${getLogoUrl(settings.municipal_treasurer_signature?.value)
+              ? `<img src="${getLogoUrl(settings.municipal_treasurer_signature?.value)}" alt="E-Signature" style="height:45px;width:auto;max-width:180px;object-fit:contain;display:block;margin:0 auto 4px;">`
+              : '<div style="height: 35px;"></div>'}
             <div style="font-weight: bold; margin-bottom: 5px;">${settings.municipal_treasurer_name?.value || 'HAIDEE D. OGOC'}</div>
             <div style="border-top: 1px solid #333; width: 200px; margin: 0 auto;font-weight: bold; margin-bottom: 25px;">${settings.municipal_treasurer_position?.value || 'ACTING MUNICIPAL TREASURER'}</div>
           </div>

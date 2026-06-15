@@ -320,6 +320,16 @@ function buildSignatoryHTML(settings, currentUserName) {
   const preparedPos  = settings.citation_prepared_by_position?.value  || '';
   const certName     = settings.citation_certified_by_name?.value     || '';
   const certPos      = settings.citation_certified_by_position?.value || '';
+  const getAssetUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/api/')) return `${apiBaseUrl}${url}`;
+    return url;
+  };
+  const certifiedSigUrl = getAssetUrl(settings.citation_certified_by_signature?.value);
+  const certifiedSigImg = certifiedSigUrl
+    ? `<img src="${certifiedSigUrl}" alt="E-Signature" style="height:36px;width:auto;max-width:140px;object-fit:contain;display:block;margin:0 auto 4px;">`
+    : '';
   return `
     <div class="signatory-block">
       <table><tr>
@@ -333,6 +343,7 @@ function buildSignatoryHTML(settings, currentUserName) {
         <td>
           <div class="sig-label">Certified correct by:</div>
           <div class="sig-line">
+            ${certifiedSigImg}
             <div class="sig-name">${certName}</div>
             <div class="sig-position">${certPos}</div>
           </div>

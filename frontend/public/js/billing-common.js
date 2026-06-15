@@ -66,6 +66,7 @@
         headerSettings: parseHeaderSettings(api, settings),
         treasurerName: settings.municipal_treasurer_name?.value || 'Municipal Treasurer',
         treasurerPosition: settings.municipal_treasurer_position?.value || 'Municipal Treasurer',
+        treasurerSignatureUrl: getLogoUrl(api, settings.municipal_treasurer_signature?.value),
         currentUserName: userInfo.name || 'System'
       };
     });
@@ -143,10 +144,33 @@
     return html;
   }
 
+  function buildSignatoryHtml(ctx, compact) {
+    var sigH = compact ? 28 : 45;
+    var html = '<div class="bill-signatory">';
+    if (ctx.treasurerSignatureUrl) {
+      html +=
+        '<img src="' +
+        ctx.treasurerSignatureUrl +
+        '" alt="E-Signature" style="height:' +
+        sigH +
+        'px;width:auto;max-width:160px;object-fit:contain;display:block;margin:0 0 2px auto;">';
+    } else {
+      html += '<div class="signatory-line"></div>';
+    }
+    html +=
+      '<div class="signatory-name">' +
+      esc(ctx.treasurerName) +
+      '</div>' +
+      '<div class="signatory-title">' +
+      esc(ctx.treasurerPosition) +
+      '</div></div>';
+    return html;
+  }
+
   /**
    * Render one billing statement as an HTML string.
    * @param {object} data - API response { contract, billing }
-   * @param {object} ctx - { headerSettings, treasurerName, treasurerPosition }
+   * @param {object} ctx - { headerSettings, treasurerName, treasurerPosition, treasurerSignatureUrl? }
    * @param {{ compact?: boolean }} options - compact=true for A4 half-page bulk layout
    */
   function renderBillingStatement(data, ctx, options) {
@@ -254,15 +278,7 @@
       fmt(rn.dues) +
       '</strong></td></tr>' +
       '</table>' +
-      '<div class="bill-signatory">' +
-      '<div class="signatory-line"></div>' +
-      '<div class="signatory-name">' +
-      esc(ctx.treasurerName) +
-      '</div>' +
-      '<div class="signatory-title">' +
-      esc(ctx.treasurerPosition) +
-      '</div>' +
-      '</div>' +
+      buildSignatoryHtml(ctx, compact) +
       '<div class="bill-footer">** This is an electronically generated statement of account.</div>' +
       '</div>';
 
@@ -296,6 +312,7 @@
     esc: esc,
     loadBillingContext: loadBillingContext,
     fetchBillingData: fetchBillingData,
+    buildSignatoryHtml: buildSignatoryHtml,
     renderBillingStatement: renderBillingStatement,
     renderBulkPages: renderBulkPages
   };

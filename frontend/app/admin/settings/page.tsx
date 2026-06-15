@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
@@ -11,21 +11,107 @@ interface Setting {
   description: string;
 }
 
+function SignatureUploadField({
+  label,
+  description,
+  savedUrl,
+  previewUrl,
+  uploading,
+  onFileSelect,
+  onClear,
+}: {
+  label: string;
+  description?: string;
+  savedUrl: string;
+  previewUrl: string;
+  uploading: boolean;
+  onFileSelect: (file: File) => void;
+  onClear: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const displayUrl = previewUrl || (savedUrl ? (savedUrl.startsWith('http') ? savedUrl : `${apiBase}${savedUrl}`) : null);
+
+  return (
+    <div className="md:col-span-2">
+      <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+      {description && <p className="text-xs text-gray-500 mb-2">{description}</p>}
+      <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 hover:border-indigo-300 transition-colors">
+        {displayUrl ? (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 flex justify-center flex-1 min-h-[80px] items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={displayUrl} alt="E-Signature preview" className="h-16 w-auto max-w-full object-contain" />
+            </div>
+            <div className="flex gap-2 sm:flex-col">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={uploading}
+                className="text-sm px-4 py-2 rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-medium disabled:opacity-50"
+              >
+                {uploading ? 'Uploading…' : 'Change'}
+              </button>
+              <button
+                type="button"
+                onClick={onClear}
+                disabled={uploading}
+                className="text-sm px-4 py-2 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 font-medium disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="flex flex-col items-center gap-2 text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50 w-full py-6"
+          >
+            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+            <span className="text-sm font-medium">{uploading ? 'Uploading…' : 'Upload e-signature'}</span>
+            <span className="text-xs text-gray-400">PNG or JPG with transparent background recommended · up to 5 MB</span>
+          </button>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onFileSelect(file);
+            e.target.value = '';
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 interface Settings {
   default_municipality?: Setting;
   default_province?: Setting;
   default_country?: Setting;
   municipal_treasurer_name?: Setting;
   municipal_treasurer_position?: Setting;
+  municipal_treasurer_signature?: Setting;
   permit_signatory_name?: Setting;
   permit_signatory_position?: Setting;
+  permit_signatory_signature?: Setting;
   permit_by_signatory_name?: Setting;
   permit_by_signatory_title?: Setting;
+  permit_by_signatory_signature?: Setting;
   permit_by_signatory_enabled?: Setting;
   citation_signatory_enabled?: Setting;
   citation_prepared_by_position?: Setting;
   citation_certified_by_name?: Setting;
   citation_certified_by_position?: Setting;
+  citation_certified_by_signature?: Setting;
 }
 
 export default function SettingsPage() {
@@ -38,16 +124,22 @@ export default function SettingsPage() {
     default_country: '',
     municipal_treasurer_name: '',
     municipal_treasurer_position: '',
+    municipal_treasurer_signature: '',
     permit_signatory_name: '',
     permit_signatory_position: '',
+    permit_signatory_signature: '',
     permit_by_signatory_name: '',
     permit_by_signatory_title: '',
+    permit_by_signatory_signature: '',
     permit_by_signatory_enabled: 'true',
     citation_signatory_enabled: 'true',
     citation_prepared_by_position: '',
     citation_certified_by_name: '',
     citation_certified_by_position: '',
+    citation_certified_by_signature: '',
   });
+  const [signaturePreview, setSignaturePreview] = useState<Record<string, string>>({});
+  const [signatureUploading, setSignatureUploading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchSettings();
@@ -64,21 +156,58 @@ export default function SettingsPage() {
         default_country: settingsData.default_country?.value || '',
         municipal_treasurer_name: settingsData.municipal_treasurer_name?.value || '',
         municipal_treasurer_position: settingsData.municipal_treasurer_position?.value || '',
+        municipal_treasurer_signature: settingsData.municipal_treasurer_signature?.value || '',
         permit_signatory_name: settingsData.permit_signatory_name?.value || '',
         permit_signatory_position: settingsData.permit_signatory_position?.value || '',
+        permit_signatory_signature: settingsData.permit_signatory_signature?.value || '',
         permit_by_signatory_name: settingsData.permit_by_signatory_name?.value || '',
         permit_by_signatory_title: settingsData.permit_by_signatory_title?.value || '',
+        permit_by_signatory_signature: settingsData.permit_by_signatory_signature?.value || '',
         permit_by_signatory_enabled: settingsData.permit_by_signatory_enabled?.value || 'true',
         citation_signatory_enabled: settingsData.citation_signatory_enabled?.value ?? 'true',
         citation_prepared_by_position: settingsData.citation_prepared_by_position?.value || '',
         citation_certified_by_name: settingsData.citation_certified_by_name?.value || '',
         citation_certified_by_position: settingsData.citation_certified_by_position?.value || '',
+        citation_certified_by_signature: settingsData.citation_certified_by_signature?.value || '',
       });
+      setSignaturePreview({});
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSignatureUpload = async (key: keyof typeof formData, file: File) => {
+    setSignatureUploading((prev) => ({ ...prev, [key]: true }));
+    const localPreview = URL.createObjectURL(file);
+    setSignaturePreview((prev) => ({ ...prev, [key]: localPreview }));
+    try {
+      const fd = new FormData();
+      fd.append('logo', file);
+      const res = await api.post('/api/settings/upload-logo', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setFormData((prev) => ({ ...prev, [key]: res.data.url }));
+    } catch {
+      alert('Failed to upload e-signature. Please try again.');
+      setSignaturePreview((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    } finally {
+      setSignatureUploading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleSignatureClear = (key: keyof typeof formData) => {
+    setFormData((prev) => ({ ...prev, [key]: '' }));
+    setSignaturePreview((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -90,15 +219,19 @@ export default function SettingsPage() {
         api.put(`/api/settings/default_country`, { value: formData.default_country }),
         api.put(`/api/settings/municipal_treasurer_name`, { value: formData.municipal_treasurer_name }),
         api.put(`/api/settings/municipal_treasurer_position`, { value: formData.municipal_treasurer_position }),
+        api.put(`/api/settings/municipal_treasurer_signature`, { value: formData.municipal_treasurer_signature, description: 'E-signature image URL for Municipal Treasurer' }),
         api.put(`/api/settings/permit_signatory_name`, { value: formData.permit_signatory_name }),
         api.put(`/api/settings/permit_signatory_position`, { value: formData.permit_signatory_position }),
+        api.put(`/api/settings/permit_signatory_signature`, { value: formData.permit_signatory_signature, description: 'E-signature image URL for permit signatory' }),
         api.put(`/api/settings/permit_by_signatory_name`, { value: formData.permit_by_signatory_name }),
         api.put(`/api/settings/permit_by_signatory_title`, { value: formData.permit_by_signatory_title }),
+        api.put(`/api/settings/permit_by_signatory_signature`, { value: formData.permit_by_signatory_signature, description: 'E-signature image URL for permit BY signatory' }),
         api.put(`/api/settings/permit_by_signatory_enabled`, { value: formData.permit_by_signatory_enabled }),
         api.put(`/api/settings/citation_signatory_enabled`, { value: formData.citation_signatory_enabled }),
         api.put(`/api/settings/citation_prepared_by_position`, { value: formData.citation_prepared_by_position }),
         api.put(`/api/settings/citation_certified_by_name`, { value: formData.citation_certified_by_name }),
         api.put(`/api/settings/citation_certified_by_position`, { value: formData.citation_certified_by_position }),
+        api.put(`/api/settings/citation_certified_by_signature`, { value: formData.citation_certified_by_signature, description: 'E-signature image URL for citation certified-by signatory' }),
       ]);
       alert('Settings saved successfully');
       fetchSettings();
@@ -355,6 +488,15 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+              <SignatureUploadField
+                label="E-Signature"
+                description="Displayed on billing statements and assessment reports. PNG with transparent background works best."
+                savedUrl={formData.municipal_treasurer_signature}
+                previewUrl={signaturePreview.municipal_treasurer_signature || ''}
+                uploading={!!signatureUploading.municipal_treasurer_signature}
+                onFileSelect={(file) => handleSignatureUpload('municipal_treasurer_signature', file)}
+                onClear={() => handleSignatureClear('municipal_treasurer_signature')}
+              />
             </div>
 
             {/* Permit Signatory */}
@@ -401,6 +543,15 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+              <SignatureUploadField
+                label="E-Signature"
+                description="Displayed on permit documents above the signatory name."
+                savedUrl={formData.permit_signatory_signature}
+                previewUrl={signaturePreview.permit_signatory_signature || ''}
+                uploading={!!signatureUploading.permit_signatory_signature}
+                onFileSelect={(file) => handleSignatureUpload('permit_signatory_signature', file)}
+                onClear={() => handleSignatureClear('permit_signatory_signature')}
+              />
             </div>
 
             {/* Permit BY Signatory */}
@@ -458,6 +609,15 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+              <SignatureUploadField
+                label="E-Signature"
+                description="Displayed on permit documents in the BY section."
+                savedUrl={formData.permit_by_signatory_signature}
+                previewUrl={signaturePreview.permit_by_signatory_signature || ''}
+                uploading={!!signatureUploading.permit_by_signatory_signature}
+                onFileSelect={(file) => handleSignatureUpload('permit_by_signatory_signature', file)}
+                onClear={() => handleSignatureClear('permit_by_signatory_signature')}
+              />
             </div>
 
             {/* Citation Report Signatory */}
@@ -528,6 +688,15 @@ export default function SettingsPage() {
                     onChange={(e) => setFormData({ ...formData, citation_certified_by_position: e.target.value })}
                   />
                 </div>
+                <SignatureUploadField
+                  label="Certified Correct By — E-Signature"
+                  description="Displayed on citation ticket reports for the certified-by signatory."
+                  savedUrl={formData.citation_certified_by_signature}
+                  previewUrl={signaturePreview.citation_certified_by_signature || ''}
+                  uploading={!!signatureUploading.citation_certified_by_signature}
+                  onFileSelect={(file) => handleSignatureUpload('citation_certified_by_signature', file)}
+                  onClear={() => handleSignatureClear('citation_certified_by_signature')}
+                />
               </div>
             </div>
 

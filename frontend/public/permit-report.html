@@ -1088,12 +1088,14 @@ function generateReportHTML(data, settings = {}, applicationData = {}, permitTyp
           ${settings.permit_by_signatory_enabled?.value !== 'false' ? `
           <div style="margin-bottom: 20px;"><strong>BY:</strong></div>
           <div style="margin-bottom: 5px; line-height: 1.2;">
+            ${getLogoUrl(settings.permit_by_signatory_signature?.value) ? `<img src="${getLogoUrl(settings.permit_by_signatory_signature?.value)}" alt="E-Signature" style="height:40px;width:auto;max-width:160px;object-fit:contain;display:block;margin-bottom:4px;">` : ''}
             <div style="font-weight: bold; text-transform: uppercase;">${settings.permit_by_signatory_name?.value || 'NAME'}</div>
             <div style="text-transform: uppercase; font-size: 14px;">${settings.permit_by_signatory_title?.value || 'POSITION'}</div>
           </div>
           ` : ''}
           <div style="margin-top: 30px; margin-bottom: 20px;"><strong>APPROVED BY:</strong></div>
           <div style="margin-bottom: 5px; line-height: 1.2;">
+            ${getLogoUrl(settings.permit_signatory_signature?.value) ? `<img src="${getLogoUrl(settings.permit_signatory_signature?.value)}" alt="E-Signature" style="height:40px;width:auto;max-width:160px;object-fit:contain;display:block;margin-bottom:4px;">` : ''}
             <div style="font-weight: bold;">${settings.permit_signatory_name?.value || 'HON. NELIN B. TAMBIS, CPA, MPA'}</div>
             <div style="font-weight: normal; font-size: 14px;">${settings.permit_signatory_position?.value || 'MUNICIPAL MAYOR'}</div>
           </div>
