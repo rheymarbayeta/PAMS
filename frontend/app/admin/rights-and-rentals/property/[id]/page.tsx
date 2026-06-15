@@ -14,7 +14,6 @@ interface PropertyUnit {
   property_id: number;
   stall_number: string;
   floor_level: string | null;
-  unit_descriptionel: string | null;
   unit_description: string | null;
   area_sqm: number | null;
   status: 'available' | 'occupied' | 'maintenance' | 'reserved';

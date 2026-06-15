@@ -23,15 +23,21 @@ interface LeaseContract {
   property_units?: { id: number; stall_number: string; floor_level: string; unit_description: string; area_sqm: number | null; status: string }[];
 }
 
+const NO_FLOOR_LABEL = 'No Floor Assigned';
+
+function getFloorLabel(floorLevel: string | null | undefined): string {
+  return floorLevel || NO_FLOOR_LABEL;
+}
+
 export default function LeaseContractsPage() {
   const { user } = useAuth();
   const [contracts, setContracts] = useState<LeaseContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedProperty, setSelectedProperty] = useState<string>('');
-  const [selectedUnit, setSelectedUnit] = useState<string>('');
+  const [selectedFloorLevel, setSelectedFloorLevel] = useState<string>('');
   const [properties, setProperties] = useState<{ id: number; property_name: string }[]>([]);
-  const [units, setUnits] = useState<{ id: number; stall_number: string; property_id: number }[]>([]);
+  const [floorLevels, setFloorLevels] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
   
@@ -43,13 +49,25 @@ export default function LeaseContractsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedProperty, selectedUnit]);
+  }, [searchTerm, selectedProperty, selectedFloorLevel]);
 
   useEffect(() => {
     fetchContracts();
     fetchProperties();
-    fetchUnits();
   }, []);
+
+  useEffect(() => {
+    if (!selectedProperty) {
+      setFloorLevels([]);
+      return;
+    }
+    const property = properties.find(p => p.property_name === selectedProperty);
+    if (!property) {
+      setFloorLevels([]);
+      return;
+    }
+    fetchFloorLevelsForProperty(property.id);
+  }, [selectedProperty, properties]);
 
   const fetchContracts = async () => {
     try {
@@ -71,20 +89,17 @@ export default function LeaseContractsPage() {
     }
   };
 
-  const fetchUnits = async () => {
+  const fetchFloorLevelsForProperty = async (propertyId: number) => {
     try {
-      const response = await api.get('/api/rights-and-rentals/properties');
-      // Flatten all units from all properties
-      const allUnits = (response.data || []).flatMap((prop: any) =>
-        (prop.units || []).map((unit: any) => ({
-          id: unit.id,
-          stall_number: unit.stall_number,
-          property_id: prop.id
-        }))
-      );
-      setUnits(allUnits);
+      const response = await api.get(`/api/rights-and-rentals/properties/${propertyId}/units`);
+      const floors = new Set<string>();
+      (response.data || []).forEach((unit: { floor_level: string | null }) => {
+        floors.add(getFloorLabel(unit.floor_level));
+      });
+      setFloorLevels(Array.from(floors).sort((a, b) => a.localeCompare(b)));
     } catch (error) {
-      console.error('Error fetching units:', error);
+      console.error('Error fetching floor levels:', error);
+      setFloorLevels([]);
     }
   };
 
@@ -138,13 +153,13 @@ export default function LeaseContractsPage() {
     // Property filter
     const propertyMatch = !selectedProperty || c.property_name === selectedProperty;
     
-    // Unit filter - need to check if contract has the selected unit
-    let unitMatch = !selectedUnit;
-    if (selectedUnit && c.property_units && c.property_units.length > 0) {
-      unitMatch = c.property_units.some(unit => unit.stall_number === selectedUnit);
+    // Floor level filter
+    let floorMatch = !selectedFloorLevel;
+    if (selectedFloorLevel && c.property_units && c.property_units.length > 0) {
+      floorMatch = c.property_units.some(unit => getFloorLabel(unit.floor_level) === selectedFloorLevel);
     }
     
-    return searchMatch && propertyMatch && unitMatch;
+    return searchMatch && propertyMatch && floorMatch;
   });
 
   const totalPages = Math.ceil(filteredContracts.length / recordsPerPage);
@@ -273,7 +288,7 @@ export default function LeaseContractsPage() {
                     value={selectedProperty}
                     onChange={(e) => {
                       setSelectedProperty(e.target.value);
-                      setSelectedUnit(''); // Reset unit filter when property changes
+                      setSelectedFloorLevel(''); // Reset unit filter when property changes
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
                   >
@@ -286,16 +301,17 @@ export default function LeaseContractsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Filter by Property Unit</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Filter by Floor Level</label>
                   <select
-                    value={selectedUnit}
-                    onChange={(e) => setSelectedUnit(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    value={selectedFloorLevel}
+                    onChange={(e) => setSelectedFloorLevel(e.target.value)}
+                    disabled={!selectedProperty}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:bg-gray-100 disabled:text-gray-500"
                   >
-                    <option value="">All Units</option>
-                    {units.map(unit => (
-                      <option key={unit.id} value={unit.stall_number}>
-                        {unit.stall_number}
+                    <option value="">{selectedProperty ? 'All Floor Levels' : 'Select a property first'}</option>
+                    {floorLevels.map(floor => (
+                      <option key={floor} value={floor}>
+                        {floor}
                       </option>
                     ))}
                   </select>

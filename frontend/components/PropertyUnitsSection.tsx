@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import api from '@/services/api';
 
 export interface PropertyUnit {
@@ -439,7 +440,7 @@ export default function PropertyUnitsSection({
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Area (sqm)</th>
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Status</th>
-                        {canEdit && <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>}
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -453,24 +454,34 @@ export default function PropertyUnitsSection({
                               {getDisplayStatus(unit).charAt(0).toUpperCase() + getDisplayStatus(unit).slice(1)}
                             </span>
                           </td>
-                          {canEdit && (
-                            <td className="px-6 py-4 text-sm">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleEditUnitClick(unit)}
-                                  className="text-blue-600 hover:text-blue-700 font-medium"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteUnit(unit.id)}
-                                  className="text-red-600 hover:text-red-700 font-medium"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          )}
+                          <td className="px-6 py-4 text-sm">
+                            <div className="flex gap-2">
+                              <Link
+                                href={`/admin/rights-and-rentals/property/${propertyId}/units/${unit.id}`}
+                                className="text-indigo-600 hover:text-indigo-700 font-medium"
+                              >
+                                View
+                              </Link>
+                              {canEdit && (
+                                <>
+                                  <span className="text-gray-300">|</span>
+                                  <button
+                                    onClick={() => handleEditUnitClick(unit)}
+                                    className="text-blue-600 hover:text-blue-700 font-medium"
+                                  >
+                                    Edit
+                                  </button>
+                                  <span className="text-gray-300">|</span>
+                                  <button
+                                    onClick={() => handleDeleteUnit(unit.id)}
+                                    className="text-red-600 hover:text-red-700 font-medium"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

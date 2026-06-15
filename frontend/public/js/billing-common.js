@@ -30,6 +30,29 @@
     return d.innerHTML;
   }
 
+  function formatUnitStalls(units) {
+    if (!units || units.length === 0) return 'N/A';
+    return units
+      .map(function (u) {
+        return u.stall_number || 'N/A';
+      })
+      .join(', ');
+  }
+
+  function formatFloorLevels(units) {
+    if (!units || units.length === 0) return 'N/A';
+    var floors = [];
+    var seen = {};
+    units.forEach(function (u) {
+      var floor = u.floor_level && String(u.floor_level).trim();
+      if (floor && !seen[floor]) {
+        seen[floor] = true;
+        floors.push(floor);
+      }
+    });
+    return floors.length > 0 ? floors.join(', ') : 'N/A';
+  }
+
   function getLogoUrl(api, url) {
     if (!url) return null;
     if (url.startsWith('http')) return url;
@@ -183,8 +206,9 @@
     var prevMonthIdx = b.billing_month === 1 ? 11 : b.billing_month - 2;
     var prevYear = b.billing_month === 1 ? b.billing_year - 1 : b.billing_year;
 
-    var unit = c.property_units && c.property_units.length > 0 ? c.property_units[0] : null;
-    var unitNo = unit ? unit.stall_number || 'N/A' : 'N/A';
+    var units = c.property_units && c.property_units.length > 0 ? c.property_units : [];
+    var unitNo = formatUnitStalls(units);
+    var floorLevel = formatFloorLevels(units);
 
     var docClass = compact ? 'billing-doc billing-doc-compact' : 'billing-doc';
     var headerHtml = buildHeaderHtml(ctx.headerSettings, compact);
@@ -217,6 +241,9 @@
       '</div>' +
       '<div>SPACE No: ' +
       esc(unitNo) +
+      '</div>' +
+      '<div>FLOOR LEVEL: ' +
+      esc(floorLevel) +
       '</div>' +
       '</div>' +
       '<div class="bill-total-box">' +
@@ -308,6 +335,8 @@
     periodLabel: periodLabel,
     dueDateLabel: dueDateLabel,
     esc: esc,
+    formatUnitStalls: formatUnitStalls,
+    formatFloorLevels: formatFloorLevels,
     loadBillingContext: loadBillingContext,
     fetchBillingData: fetchBillingData,
     buildSignatoryHtml: buildSignatoryHtml,

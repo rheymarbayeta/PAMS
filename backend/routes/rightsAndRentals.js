@@ -364,7 +364,7 @@ router.delete('/properties/:id', async (req, res) => {
 
 // ========== PROPERTY UNITS ==========
 
-// Get a single property unit
+// Get a single property unit with current occupant
 router.get('/units/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -374,7 +374,8 @@ router.get('/units/:id', async (req, res) => {
         SELECT 
           pu.*,
           p.property_name,
-          p.property_code
+          p.property_code,
+          p.address AS property_address
         FROM property_units pu
         JOIN properties p ON pu.property_id = p.id
         WHERE pu.id = ?
@@ -384,7 +385,79 @@ router.get('/units/:id', async (req, res) => {
         return res.status(404).json({ error: 'Property unit not found' });
       }
 
-      res.json(unit[0]);
+      const unitData = unit[0];
+
+      // Active lease linked to this unit (primary source for current occupant)
+      let currentOccupant = null;
+      let currentLease = null;
+      try {
+        const [leaseRows] = await connection.query(`
+          SELECT
+            lc.id AS lease_contract_id,
+            lc.contract_effective_date,
+            lc.contract_termination_date,
+            lc.status AS contract_status,
+            lc.monthly_rights_amount,
+            lc.monthly_rental_amount,
+            l.id AS lessee_id,
+            l.name AS lessee_name,
+            l.contact_number AS lessee_contact,
+            l.email AS lessee_email
+          FROM lease_contract_units lcu
+          JOIN lease_contracts lc ON lcu.lease_contract_id = lc.id
+          JOIN lessees l ON lc.lessee_id = l.id
+          WHERE lcu.property_unit_id = ?
+            AND lc.status = 'active'
+            AND lc.contract_effective_date <= CURDATE()
+            AND (lc.contract_termination_date IS NULL OR lc.contract_termination_date >= CURDATE())
+          ORDER BY lc.contract_effective_date DESC
+          LIMIT 1
+        `, [id]);
+
+        if (leaseRows.length > 0) {
+          const row = leaseRows[0];
+          currentLease = {
+            id: row.lease_contract_id,
+            contract_effective_date: row.contract_effective_date,
+            contract_termination_date: row.contract_termination_date,
+            status: row.contract_status,
+            monthly_rights_amount: row.monthly_rights_amount,
+            monthly_rental_amount: row.monthly_rental_amount,
+          };
+          currentOccupant = {
+            lessee_id: row.lessee_id,
+            name: row.lessee_name,
+            contact_number: row.lessee_contact,
+            email: row.lessee_email,
+            source: 'active_lease',
+          };
+        }
+      } catch (e) {
+        // lease_contract_units may not exist during migration
+      }
+
+      // Fallback: lessee_id stored directly on the unit
+      if (!currentOccupant && unitData.lessee_id) {
+        const [lesseeRows] = await connection.query(
+          'SELECT id, name, contact_number, email FROM lessees WHERE id = ?',
+          [unitData.lessee_id]
+        );
+        if (lesseeRows.length > 0) {
+          currentOccupant = {
+            lessee_id: lesseeRows[0].id,
+            name: lesseeRows[0].name,
+            contact_number: lesseeRows[0].contact_number,
+            email: lesseeRows[0].email,
+            source: 'unit_record',
+          };
+        }
+      }
+
+      res.json({
+        ...unitData,
+        current_occupant: currentOccupant,
+        current_lease: currentLease,
+      });
     } finally {
       connection.release();
     }
