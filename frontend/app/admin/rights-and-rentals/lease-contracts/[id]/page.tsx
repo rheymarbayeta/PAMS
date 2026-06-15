@@ -25,6 +25,8 @@ interface LeaseContract {
   monthly_rights_amount: number;
   monthly_rental_amount: number;
   downpayment: number;
+  outstanding_rental_balance?: number;
+  outstanding_balance_notes?: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -46,6 +48,12 @@ export default function ViewLeaseContractPage() {
   const [showBillingModal, setShowBillingModal] = useState(false);
   const [billingUrl, setBillingUrl] = useState('');
 
+  // Outstanding balance modal
+  const [showOutstandingModal, setShowOutstandingModal] = useState(false);
+  const [outstandingAmount, setOutstandingAmount] = useState('');
+  const [outstandingNotes, setOutstandingNotes] = useState('');
+  const [savingOutstanding, setSavingOutstanding] = useState(false);
+
   const openBillingModal = () => {
     const token = localStorage.getItem('token') || '';
     const month = now.getMonth() + 1;
@@ -58,6 +66,43 @@ export default function ViewLeaseContractPage() {
   const closeBillingModal = () => {
     setShowBillingModal(false);
     setBillingUrl('');
+  };
+
+  const openOutstandingModal = () => {
+    if (!contract) return;
+    setOutstandingAmount(String(contract.outstanding_rental_balance ?? 0));
+    setOutstandingNotes(contract.outstanding_balance_notes || '');
+    setShowOutstandingModal(true);
+  };
+
+  const closeOutstandingModal = () => {
+    setShowOutstandingModal(false);
+  };
+
+  const handleSaveOutstandingBalance = async () => {
+    const amount = parseFloat(outstandingAmount);
+    if (Number.isNaN(amount) || amount < 0) {
+      showAlert('Please enter a valid non-negative amount', 'Validation Error');
+      return;
+    }
+
+    setSavingOutstanding(true);
+    try {
+      const response = await api.patch(
+        `/api/rights-and-rentals/lease-contracts/${contractId}/outstanding-balance`,
+        {
+          outstanding_rental_balance: amount,
+          outstanding_balance_notes: outstandingNotes.trim() || null,
+        }
+      );
+      setContract((prev) => (prev ? { ...prev, ...response.data } : prev));
+      setShowOutstandingModal(false);
+      showAlert('Outstanding balance saved successfully', 'Success');
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || 'Error saving outstanding balance', 'Error');
+    } finally {
+      setSavingOutstanding(false);
+    }
   };
 
   useEffect(() => {
@@ -323,6 +368,53 @@ export default function ViewLeaseContractPage() {
               </div>
             </div>
 
+            {/* Outstanding Balance */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Outstanding Balance
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Previous or other unpaid rental balance carried into billing statements.
+                  </p>
+                </div>
+                {canEdit && (
+                  <button
+                    onClick={openOutstandingModal}
+                    className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    {(contract.outstanding_rental_balance ?? 0) > 0 ? 'Edit' : 'Add'} Balance
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                  <p className="text-sm text-amber-800 font-medium">Outstanding Rental Balance</p>
+                  <p className="text-2xl font-bold text-amber-900 mt-1">
+                    {formatCurrency(contract.outstanding_rental_balance ?? 0)}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                  <p className="text-sm text-gray-600 font-medium">Notes / Source</p>
+                  <p className="text-base text-gray-900 mt-1">
+                    {contract.outstanding_balance_notes?.trim() || 'No notes provided'}
+                  </p>
+                </div>
+              </div>
+              {(contract.outstanding_rental_balance ?? 0) > 0 && (
+                <p className="text-xs text-gray-500 mt-4">
+                  This amount is included in the BALANCE line on billing statements and is subject to the 20% surcharge when unpaid.
+                </p>
+              )}
+            </div>
+
             {/* Metadata */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Metadata</h2>
@@ -426,6 +518,66 @@ export default function ViewLeaseContractPage() {
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Outstanding Balance Modal */}
+      {showOutstandingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Outstanding Balance</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Set a carried-forward rental balance from previous periods or other sources.
+              </p>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label htmlFor="outstanding_amount" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Amount (PHP) *
+                </label>
+                <input
+                  id="outstanding_amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={outstandingAmount}
+                  onChange={(e) => setOutstandingAmount(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label htmlFor="outstanding_notes" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Notes / Source
+                </label>
+                <input
+                  id="outstanding_notes"
+                  type="text"
+                  value={outstandingNotes}
+                  onChange={(e) => setOutstandingNotes(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  placeholder="e.g., Balance from January 2025 manual records"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={closeOutstandingModal}
+                disabled={savingOutstanding}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveOutstandingBalance}
+                disabled={savingOutstanding}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {savingOutstanding ? 'Saving...' : 'Save Balance'}
               </button>
             </div>
           </div>

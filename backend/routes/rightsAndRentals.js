@@ -974,6 +974,70 @@ router.put('/lease-contracts/:id', async (req, res) => {
   }
 });
 
+// Update outstanding / previous rental balance for a lease contract
+router.patch('/lease-contracts/:id/outstanding-balance', async (req, res) => {
+  try {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
+      const { id } = req.params;
+      const { outstanding_rental_balance, outstanding_balance_notes } = req.body;
+
+      if (outstanding_rental_balance === undefined || outstanding_rental_balance === null || outstanding_rental_balance === '') {
+        return res.status(400).json({ error: 'Outstanding balance amount is required' });
+      }
+
+      const amount = parseFloat(outstanding_rental_balance);
+      if (Number.isNaN(amount) || amount < 0) {
+        return res.status(400).json({ error: 'Outstanding balance must be a non-negative number' });
+      }
+
+      const connection = await pool.getConnection();
+      try {
+        const [existing] = await connection.query('SELECT id FROM lease_contracts WHERE id = ?', [id]);
+        if (!existing.length) {
+          return res.status(404).json({ error: 'Lease contract not found' });
+        }
+
+        await connection.query(`
+          UPDATE lease_contracts SET
+            outstanding_rental_balance = ?,
+            outstanding_balance_notes = ?
+          WHERE id = ?
+        `, [amount, outstanding_balance_notes || null, id]);
+
+        const [updated] = await connection.query(`
+          SELECT lc.*, l.name AS lessee_name, p.property_name
+          FROM lease_contracts lc
+          JOIN lessees l ON lc.lessee_id = l.id
+          JOIN properties p ON lc.property_id = p.id
+          WHERE lc.id = ?
+        `, [id]);
+
+        await logAction(
+          req.user.user_id,
+          'UPDATE',
+          'lease_contracts',
+          id,
+          `Updated outstanding rental balance to ${amount.toFixed(2)}`
+        );
+
+        res.json(updated[0]);
+      } catch (dbError) {
+        if (dbError.code === 'ER_BAD_FIELD_ERROR') {
+          return res.status(500).json({
+            error: 'Outstanding balance columns are missing. Run database/migrations/add_lease_contract_outstanding_balance.sql'
+          });
+        }
+        throw dbError;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Update outstanding balance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Delete a lease contract
 router.delete('/lease-contracts/:id', async (req, res) => {
   try {
@@ -1293,7 +1357,9 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
         WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
         ORDER BY id DESC LIMIT 1
       `, [contract_id, prevMonth, prevYear]);
-      const previousBalance = prevBalRow.length > 0 ? parseFloat(prevBalRow[0].balance) || 0 : 0;
+      const previousMonthBalance = prevBalRow.length > 0 ? parseFloat(prevBalRow[0].balance) || 0 : 0;
+      const outstandingBalance   = parseFloat(contract.outstanding_rental_balance) || 0;
+      const previousBalance      = parseFloat((previousMonthBalance + outstandingBalance).toFixed(2));
       const surcharge       = previousBalance > 0 ? parseFloat((previousBalance * 0.20).toFixed(2)) : 0;
 
       // Current month rental payment (if any – for "Less: Late Payments" line)
@@ -1333,6 +1399,9 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
           },
           rental: {
             previous_balance:    previousBalance,
+            previous_month_balance: previousMonthBalance,
+            outstanding_balance: outstandingBalance,
+            outstanding_balance_notes: contract.outstanding_balance_notes || null,
             surcharge,
             this_month:          monthlyRental,
             late_payment_or:     latePaymentOR,
