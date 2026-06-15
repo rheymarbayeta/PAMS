@@ -44,7 +44,7 @@
   }
   #bill-wrap.hidden { display: none; }
 
-  /* A4 page – 2 statements per page */
+  /* A4 page – 2 equal halves for easy cutting */
   .bulk-page {
     width: 210mm;
     height: 297mm;
@@ -54,20 +54,41 @@
     flex-direction: column;
     page-break-after: always;
     overflow: hidden;
+    position: relative;
+  }
+  /* Cut guide at exact page center */
+  .bulk-page::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 6mm;
+    right: 6mm;
+    border-top: 1px dashed #bbb;
+    pointer-events: none;
+    z-index: 2;
   }
   .statement-wrapper {
-    height: 148.5mm;
+    flex: 1 1 50%;
+    min-height: 0;
+    max-height: 50%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    padding: 5mm 7mm;
     overflow: hidden;
-    border-bottom: 1px dashed #ccc;
     page-break-inside: avoid;
   }
-  .statement-wrapper:last-child { border-bottom: none; }
+  .statement-wrapper + .statement-wrapper {
+    border-top: 1px dashed #e5e7eb;
+  }
 
   /* Compact billing doc (half A4) */
   .billing-doc-compact {
     width: 100%;
-    height: 100%;
-    padding: 5mm 7mm;
+    height: auto;
+    flex-shrink: 0;
+    padding: 0;
     font-size: 8pt;
     color: #1f2937;
     line-height: 1.25;
@@ -211,7 +232,8 @@
     .controls { display: none !important; }
     #bill-wrap { padding: 0; gap: 0; }
     .bulk-page { border: none; margin: 0; page-break-after: always; }
-    .statement-wrapper { border-bottom: none; }
+    .bulk-page::after { border-top-color: #ccc; }
+    .statement-wrapper + .statement-wrapper { border-top-color: #ddd; }
     @page { size: A4; margin: 0; }
   }
 </style>

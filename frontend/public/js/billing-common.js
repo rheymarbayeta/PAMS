@@ -293,13 +293,11 @@
         '<div class="statement-wrapper">' +
         renderBillingStatement(statements[i], ctx, { compact: true }) +
         '</div>';
+      html += '<div class="statement-wrapper">';
       if (i + 1 < statements.length) {
-        html +=
-          '<div class="statement-wrapper">' +
-          renderBillingStatement(statements[i + 1], ctx, { compact: true }) +
-          '</div>';
+        html += renderBillingStatement(statements[i + 1], ctx, { compact: true });
       }
-      html += '</div>';
+      html += '</div></div>';
     }
     return html;
   }
