@@ -41,16 +41,23 @@ interface LesseePaymentDetailsProps {
   lesseeId: number;
   lesseeName: string;
   leaseContracts: LeaseContractType[];
+  hideContractSelector?: boolean;
+  defaultContractId?: number;
+  canRecordPayment?: boolean;
 }
 
 const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
   lesseeId,
   lesseeName,
   leaseContracts,
+  hideContractSelector = false,
+  defaultContractId,
+  canRecordPayment = true,
 }) => {
-  const [selectedContractId, setSelectedContractId] = useState<number | null>(
-    leaseContracts.length > 0 ? leaseContracts[0].id : null
-  );
+  const [selectedContractId, setSelectedContractId] = useState<number | null>(() => {
+    if (defaultContractId) return defaultContractId;
+    return leaseContracts.length > 0 ? leaseContracts[0].id : null;
+  });
   const [balance, setBalance] = useState<AccountBalance | null>(null);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -161,23 +168,25 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
       <h2 className="text-2xl font-bold mb-6 text-gray-800">Payment Management</h2>
 
       {/* Contract Selection */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Select Lease Contract
-        </label>
-        <select
-          value={selectedContractId || ''}
-          onChange={(e) => setSelectedContractId(parseInt(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="">-- Select a contract --</option>
-          {leaseContracts.map((contract) => (
-            <option key={contract.id} value={contract.id}>
-              {contract.property_name} (Status: {contract.status})
-            </option>
-          ))}
-        </select>
-      </div>
+      {!hideContractSelector && (
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Lease Contract
+          </label>
+          <select
+            value={selectedContractId || ''}
+            onChange={(e) => setSelectedContractId(parseInt(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">-- Select a contract --</option>
+            {leaseContracts.map((contract) => (
+              <option key={contract.id} value={contract.id}>
+                {contract.property_name} (Status: {contract.status})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-md">
@@ -221,17 +230,19 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
           ) : (
             <>
               {/* Record Payment Button */}
-              <div className="mb-6">
-                <button
-                  onClick={() => setShowPaymentForm(!showPaymentForm)}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  {showPaymentForm ? 'Cancel' : 'Record Payment'}
-                </button>
-              </div>
+              {canRecordPayment && (
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowPaymentForm(!showPaymentForm)}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    {showPaymentForm ? 'Cancel' : 'Record Payment'}
+                  </button>
+                </div>
+              )}
 
               {/* Payment Form */}
-              {showPaymentForm && (
+              {canRecordPayment && showPaymentForm && (
                 <div className="mb-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
                   <h3 className="text-lg font-semibold mb-4 text-gray-800">Record New Payment</h3>
                   <form onSubmit={handleSubmitPayment} className="space-y-4">

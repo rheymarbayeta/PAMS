@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import LesseePaymentDetails from '@/components/LesseePaymentDetails';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
@@ -172,6 +173,9 @@ export default function ViewLeaseContractPage() {
 
   const userRoles = user?.roles || [user?.role_name];
   const canEdit = userRoles.some(role => role && role !== 'Viewer');
+  const canRecordPayment = userRoles.some((role) =>
+    role && ['SuperAdmin', 'Admin', 'Rights and Rentals Manager'].includes(role)
+  );
 
   if (loading) {
     return (
@@ -416,6 +420,29 @@ export default function ViewLeaseContractPage() {
                 </p>
               )}
             </div>
+
+            {/* Payment Management */}
+            <LesseePaymentDetails
+              lesseeId={contract.lessee_id}
+              lesseeName={contract.lessee_name}
+              leaseContracts={[{
+                id: contract.id,
+                contract_id: contract.id,
+                contract_effective_date: contract.contract_effective_date,
+                contract_termination_date: contract.contract_termination_date || '',
+                principal_amount: contract.principal_amount,
+                monthly_rights_amount: contract.monthly_rights_amount,
+                monthly_rental_amount: contract.monthly_rental_amount,
+                downpayment: contract.downpayment,
+                contract_status: contract.status,
+                property_id: contract.property_id,
+                property_name: contract.property_name,
+                status: contract.status,
+              }]}
+              hideContractSelector
+              defaultContractId={contract.id}
+              canRecordPayment={canRecordPayment}
+            />
 
             {/* Metadata */}
             <div className="bg-white rounded-lg shadow p-6">
