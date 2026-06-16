@@ -1368,6 +1368,31 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
   }
 });
 
+async function getBillingSurchargeSettings(connection) {
+  const [rows] = await connection.query(`
+    SELECT setting_key, setting_value
+    FROM system_settings
+    WHERE setting_key IN ('billing_surcharge_enabled', 'billing_surcharge_percentage')
+  `);
+
+  const map = {};
+  rows.forEach((row) => {
+    map[row.setting_key] = row.setting_value;
+  });
+
+  const enabled = map.billing_surcharge_enabled !== 'false';
+  const parsedPercentage = parseFloat(map.billing_surcharge_percentage);
+  const percentage = Number.isFinite(parsedPercentage)
+    ? Math.max(0, Math.min(100, parsedPercentage))
+    : 20;
+
+  return {
+    enabled,
+    percentage,
+    rate: percentage / 100,
+  };
+}
+
 // Get billing statement data for a lease contract
 router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
   try {
@@ -1433,7 +1458,10 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
       const previousMonthBalance = prevBalRow.length > 0 ? parseFloat(prevBalRow[0].balance) || 0 : 0;
       const outstandingBalance   = parseFloat(contract.outstanding_rental_balance) || 0;
       const previousBalance      = parseFloat((previousMonthBalance + outstandingBalance).toFixed(2));
-      const surcharge       = previousBalance > 0 ? parseFloat((previousBalance * 0.20).toFixed(2)) : 0;
+      const surchargeSettings = await getBillingSurchargeSettings(connection);
+      const surcharge = surchargeSettings.enabled && previousBalance > 0
+        ? parseFloat((previousBalance * surchargeSettings.rate).toFixed(2))
+        : 0;
 
       // Payments recorded for the billing period (used for dues calculation)
       const [currRightsRows] = await connection.query(`
@@ -1507,6 +1535,10 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
           billing_month:    billingMonth,
           billing_year:     billingYear,
           payment_due_date: `${billingYear}-${String(billingMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+          surcharge_config: {
+            enabled: surchargeSettings.enabled,
+            percentage: surchargeSettings.percentage,
+          },
           rights: {
             principal,
             downpayment,
@@ -1522,6 +1554,8 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             outstanding_balance: outstandingBalance,
             outstanding_balance_notes: contract.outstanding_balance_notes || null,
             surcharge,
+            surcharge_enabled: surchargeSettings.enabled,
+            surcharge_percentage: surchargeSettings.percentage,
             this_month:          monthlyRental,
             late_payment_or:     latestRentalPayment ? latestRentalPayment.or_number || null : null,
             late_payment_amount: rentalPaymentAmount,
@@ -1656,6 +1690,269 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
     });
   } catch (error) {
     console.error('Record payment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ========== REPORTS ==========
+
+router.get('/reports', async (req, res) => {
+  try {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
+      const reportType = (req.query.reportType || 'contracts').toLowerCase();
+      const propertyId = req.query.propertyId ? parseInt(req.query.propertyId, 10) : null;
+      const status = (req.query.status || '').trim().toLowerCase();
+      const paymentType = (req.query.paymentType || 'all').toLowerCase();
+      const dateFrom = req.query.dateFrom || '';
+      const dateTo = req.query.dateTo || '';
+      const search = (req.query.search || '').trim().toLowerCase();
+
+      const validTypes = ['contracts', 'payments', 'outstanding'];
+      if (!validTypes.includes(reportType)) {
+        return res.status(400).json({ error: 'Invalid reportType. Use contracts, payments, or outstanding.' });
+      }
+
+      const connection = await pool.getConnection();
+      try {
+        const filters = { reportType, propertyId, status, paymentType, dateFrom, dateTo, search };
+
+        if (reportType === 'payments') {
+          const rightsWhere = ['1=1'];
+          const rentalWhere = ['1=1'];
+          const rightsParams = [];
+          const rentalParams = [];
+
+          if (propertyId) {
+            rightsWhere.push('lc.property_id = ?');
+            rentalWhere.push('lc.property_id = ?');
+            rightsParams.push(propertyId);
+            rentalParams.push(propertyId);
+          }
+          if (status) {
+            rightsWhere.push('LOWER(lc.status) = ?');
+            rentalWhere.push('LOWER(lc.status) = ?');
+            rightsParams.push(status);
+            rentalParams.push(status);
+          }
+          if (dateFrom) {
+            rightsWhere.push('ph.payment_date >= ?');
+            rentalWhere.push('ph.payment_date >= ?');
+            rightsParams.push(dateFrom);
+            rentalParams.push(dateFrom);
+          }
+          if (dateTo) {
+            rightsWhere.push('ph.payment_date <= ?');
+            rentalWhere.push('ph.payment_date <= ?');
+            rightsParams.push(dateTo);
+            rentalParams.push(dateTo);
+          }
+          if (search) {
+            const like = `%${search}%`;
+            rightsWhere.push('(LOWER(l.name) LIKE ? OR LOWER(p.property_name) LIKE ? OR LOWER(ph.or_number) LIKE ?)');
+            rentalWhere.push('(LOWER(l.name) LIKE ? OR LOWER(p.property_name) LIKE ? OR LOWER(ph.or_number) LIKE ?)');
+            rightsParams.push(like, like, like);
+            rentalParams.push(like, like, like);
+          }
+
+          let paymentRows = [];
+
+          if (paymentType === 'all' || paymentType === 'rights') {
+            const [rightsRows] = await connection.query(`
+              SELECT
+                ph.id,
+                ph.lease_contract_id,
+                ph.payment_date,
+                ph.or_number,
+                ph.amount_paid,
+                ph.period_month,
+                ph.period_year,
+                ph.balance,
+                'rights' AS payment_type,
+                l.name AS lessee_name,
+                p.property_name,
+                p.property_code,
+                lc.status AS contract_status
+              FROM payment_history_rights ph
+              JOIN lease_contracts lc ON ph.lease_contract_id = lc.id
+              JOIN lessees l ON lc.lessee_id = l.id
+              JOIN properties p ON lc.property_id = p.id
+              WHERE ${rightsWhere.join(' AND ')}
+              ORDER BY ph.payment_date DESC, ph.id DESC
+            `, rightsParams);
+            paymentRows = paymentRows.concat(rightsRows);
+          }
+
+          if (paymentType === 'all' || paymentType === 'rental') {
+            const [rentalRows] = await connection.query(`
+              SELECT
+                ph.id,
+                ph.lease_contract_id,
+                ph.payment_date,
+                ph.or_number,
+                ph.amount_paid,
+                ph.period_month,
+                ph.period_year,
+                ph.balance,
+                'rental' AS payment_type,
+                l.name AS lessee_name,
+                p.property_name,
+                p.property_code,
+                lc.status AS contract_status
+              FROM payment_history_rental ph
+              JOIN lease_contracts lc ON ph.lease_contract_id = lc.id
+              JOIN lessees l ON lc.lessee_id = l.id
+              JOIN properties p ON lc.property_id = p.id
+              WHERE ${rentalWhere.join(' AND ')}
+              ORDER BY ph.payment_date DESC, ph.id DESC
+            `, rentalParams);
+            paymentRows = paymentRows.concat(rentalRows);
+          }
+
+          paymentRows.sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date));
+
+          const rightsTotal = paymentRows
+            .filter((r) => r.payment_type === 'rights')
+            .reduce((sum, r) => sum + (parseFloat(r.amount_paid) || 0), 0);
+          const rentalTotal = paymentRows
+            .filter((r) => r.payment_type === 'rental')
+            .reduce((sum, r) => sum + (parseFloat(r.amount_paid) || 0), 0);
+
+          return res.json({
+            reportType,
+            filters,
+            summary: {
+              totalRecords: paymentRows.length,
+              rightsPayments: paymentRows.filter((r) => r.payment_type === 'rights').length,
+              rentalPayments: paymentRows.filter((r) => r.payment_type === 'rental').length,
+              totalRightsCollected: parseFloat(rightsTotal.toFixed(2)),
+              totalRentalCollected: parseFloat(rentalTotal.toFixed(2)),
+              grandTotalCollected: parseFloat((rightsTotal + rentalTotal).toFixed(2)),
+            },
+            rows: paymentRows,
+          });
+        }
+
+        // Contract-based reports (contracts + outstanding)
+        const contractWhere = ['1=1'];
+        const contractParams = [];
+
+        if (propertyId) {
+          contractWhere.push('lc.property_id = ?');
+          contractParams.push(propertyId);
+        }
+        if (status) {
+          contractWhere.push('LOWER(lc.status) = ?');
+          contractParams.push(status);
+        }
+        if (dateFrom) {
+          contractWhere.push('lc.contract_effective_date >= ?');
+          contractParams.push(dateFrom);
+        }
+        if (dateTo) {
+          contractWhere.push('lc.contract_effective_date <= ?');
+          contractParams.push(dateTo);
+        }
+        if (search) {
+          const like = `%${search}%`;
+          contractWhere.push('(LOWER(l.name) LIKE ? OR LOWER(p.property_name) LIKE ? OR LOWER(p.property_code) LIKE ?)');
+          contractParams.push(like, like, like);
+        }
+
+        const [contracts] = await connection.query(`
+          SELECT
+            lc.id,
+            lc.lessee_id,
+            l.name AS lessee_name,
+            l.contact_number,
+            l.email AS lessee_email,
+            lc.property_id,
+            p.property_name,
+            p.property_code,
+            p.address AS property_address,
+            lc.contract_effective_date,
+            lc.contract_termination_date,
+            lc.principal_amount,
+            lc.downpayment,
+            lc.monthly_rights_amount,
+            lc.monthly_rental_amount,
+            lc.outstanding_rental_balance,
+            lc.outstanding_balance_notes,
+            lc.status,
+            COALESCE(rp.total_rights_paid, 0) AS total_rights_paid,
+            COALESCE(rt.total_rental_paid, 0) AS total_rental_paid
+          FROM lease_contracts lc
+          JOIN lessees l ON lc.lessee_id = l.id
+          JOIN properties p ON lc.property_id = p.id
+          LEFT JOIN (
+            SELECT lease_contract_id, SUM(amount_paid) AS total_rights_paid
+            FROM payment_history_rights
+            GROUP BY lease_contract_id
+          ) rp ON rp.lease_contract_id = lc.id
+          LEFT JOIN (
+            SELECT lease_contract_id, SUM(amount_paid) AS total_rental_paid
+            FROM payment_history_rental
+            GROUP BY lease_contract_id
+          ) rt ON rt.lease_contract_id = lc.id
+          WHERE ${contractWhere.join(' AND ')}
+          ORDER BY l.name ASC, lc.contract_effective_date DESC
+        `, contractParams);
+
+        const contractRows = await Promise.all(contracts.map(async (contract) => {
+          const [units] = await connection.query(`
+            SELECT pu.stall_number, pu.floor_level, pu.area_sqm
+            FROM lease_contract_units lcu
+            JOIN property_units pu ON lcu.property_unit_id = pu.id
+            WHERE lcu.lease_contract_id = ?
+            ORDER BY pu.stall_number ASC
+          `, [contract.id]);
+
+          const principal = parseFloat(contract.principal_amount) || 0;
+          const downpayment = parseFloat(contract.downpayment) || 0;
+          const totalRightsPaid = parseFloat(contract.total_rights_paid) || 0;
+          const totalRentalPaid = parseFloat(contract.total_rental_paid) || 0;
+          const rightsBalance = parseFloat((principal - downpayment - totalRightsPaid).toFixed(2));
+          const outstandingRental = parseFloat(contract.outstanding_rental_balance) || 0;
+          const monthlyRights = parseFloat(contract.monthly_rights_amount) || 0;
+          const monthlyRental = parseFloat(contract.monthly_rental_amount) || 0;
+
+          return {
+            ...contract,
+            property_units: units,
+            stall_numbers: units.map((u) => u.stall_number).filter(Boolean).join(', ') || '—',
+            floor_levels: [...new Set(units.map((u) => u.floor_level).filter(Boolean))].join(', ') || '—',
+            rights_balance: rightsBalance,
+            total_rights_paid: totalRightsPaid,
+            total_rental_paid: totalRentalPaid,
+            outstanding_rental_balance: outstandingRental,
+            monthly_dues: parseFloat((monthlyRights + monthlyRental).toFixed(2)),
+          };
+        }));
+
+        let rows = contractRows;
+        if (reportType === 'outstanding') {
+          rows = contractRows.filter(
+            (c) => c.rights_balance > 0 || c.outstanding_rental_balance > 0
+          );
+        }
+
+        const summary = {
+          totalRecords: rows.length,
+          activeContracts: rows.filter((c) => (c.status || '').toLowerCase() === 'active').length,
+          totalRightsBalance: parseFloat(rows.reduce((s, c) => s + c.rights_balance, 0).toFixed(2)),
+          totalOutstandingRental: parseFloat(rows.reduce((s, c) => s + c.outstanding_rental_balance, 0).toFixed(2)),
+          totalRightsCollected: parseFloat(rows.reduce((s, c) => s + c.total_rights_paid, 0).toFixed(2)),
+          totalRentalCollected: parseFloat(rows.reduce((s, c) => s + c.total_rental_paid, 0).toFixed(2)),
+          totalMonthlyDues: parseFloat(rows.reduce((s, c) => s + c.monthly_dues, 0).toFixed(2)),
+          totalPrincipal: parseFloat(rows.reduce((s, c) => s + (parseFloat(c.principal_amount) || 0), 0).toFixed(2)),
+        };
+
+        res.json({ reportType, filters, summary, rows });
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Get rights and rentals report error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

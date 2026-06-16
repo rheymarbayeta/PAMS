@@ -74,6 +74,40 @@
     };
   }
 
+  function parseBillingSurchargeSettings(settings) {
+    var enabled = settings.billing_surcharge_enabled?.value !== 'false';
+    var pct = parseFloat(settings.billing_surcharge_percentage?.value);
+    if (!Number.isFinite(pct)) pct = 20;
+    pct = Math.max(0, Math.min(100, pct));
+    return { enabled: enabled, percentage: pct };
+  }
+
+  function resolveSurchargeConfig(billing, ctx) {
+    if (billing && billing.surcharge_config) return billing.surcharge_config;
+    if (ctx && ctx.surchargeConfig) return ctx.surchargeConfig;
+    return { enabled: true, percentage: 20 };
+  }
+
+  function formatSurchargePercent(pct) {
+    return Number(pct).toLocaleString('en-PH', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function formatSurchargeLabel(pct) {
+    return 'Surcharge (' + formatSurchargePercent(pct) + '%):';
+  }
+
+  function buildSurchargeNote(surchargeConfig) {
+    if (!surchargeConfig || !surchargeConfig.enabled) return '';
+    return (
+      '<div class="bill-note">Note: ' +
+      formatSurchargePercent(surchargeConfig.percentage) +
+      '% surcharge for late payments.</div>'
+    );
+  }
+
   function loadBillingContext(api, token) {
     return Promise.all([
       fetch(api + '/api/settings', { headers: { Authorization: 'Bearer ' + token } }).then(function (r) {
@@ -90,7 +124,8 @@
         treasurerName: settings.municipal_treasurer_name?.value || 'Municipal Treasurer',
         treasurerPosition: settings.municipal_treasurer_position?.value || 'Municipal Treasurer',
         treasurerSignatureUrl: getLogoUrl(api, settings.municipal_treasurer_signature?.value),
-        currentUserName: userInfo.name || 'System'
+        currentUserName: userInfo.name || 'System',
+        surchargeConfig: parseBillingSurchargeSettings(settings)
       };
     });
   }
@@ -253,7 +288,7 @@
     );
   }
 
-  function buildRightsRentalTableHtml(b, r, rn, compact, showLastPayment) {
+  function buildRightsRentalTableHtml(b, r, rn, compact, showLastPayment, surchargeConfig) {
     var prevMonthIdx = b.billing_month === 1 ? 11 : b.billing_month - 2;
     var prevYear = b.billing_month === 1 ? b.billing_year - 1 : b.billing_year;
     var monthName = MONTHS[b.billing_month - 1];
@@ -261,6 +296,7 @@
     var tableClass = compact ? 'bill-table bill-table-compact' : 'bill-table';
     var rightsPayment = getLatestPayment(r);
     var rentalPayment = getLatestPayment(rn);
+    surchargeConfig = surchargeConfig || resolveSurchargeConfig(b, null);
 
     var html =
       '<table class="' +
@@ -301,12 +337,15 @@
       '<td class="num">₱ ' +
       fmt(r.monthly_amount) +
       '</td>' +
-      '<td class="rental-col"><div class="rental-line">' +
-      '<span>Surcharge (20%):</span>' +
-      '<span class="num">' +
-      (rn.surcharge > 0 ? '₱ ' + fmt(rn.surcharge) : '-') +
-      '</span>' +
-      '</div></td>' +
+      '<td class="rental-col">' +
+      (surchargeConfig.enabled
+        ? '<div class="rental-line"><span>' +
+          formatSurchargeLabel(surchargeConfig.percentage) +
+          '</span><span class="num">' +
+          (rn.surcharge > 0 ? '₱ ' + fmt(rn.surcharge) : '-') +
+          '</span></div>'
+        : '&nbsp;') +
+      '</td>' +
       '</tr>' +
       '<tr>' +
       '<td colspan="3" class="dues-label">Dues (' +
@@ -395,6 +434,7 @@
     var units = c.property_units && c.property_units.length > 0 ? c.property_units : [];
     var unitNo = formatUnitStalls(units);
     var floorLevel = formatFloorLevels(units);
+    var surchargeConfig = resolveSurchargeConfig(b, ctx);
 
     var docClass = compact ? 'billing-doc billing-doc-compact' : 'billing-doc';
     var headerHtml = buildHeaderHtml(ctx.headerSettings, compact);
@@ -444,8 +484,8 @@
       dueDateLabel(b.payment_due_date) +
       '</span>' +
       '</div>' +
-      '<div class="bill-note">Note: 20% surcharge for late payments.</div>' +
-      buildRightsRentalTableHtml(b, r, rn, compact, showLastPayment) +
+      buildSurchargeNote(surchargeConfig) +
+      buildRightsRentalTableHtml(b, r, rn, compact, showLastPayment, surchargeConfig) +
       buildSignatoryHtml(ctx, compact) +
       '<div class="bill-footer">** This is an electronically generated statement of account.</div>' +
       '</div>';
@@ -486,6 +526,10 @@
     loadBillingContext: loadBillingContext,
     fetchBillingData: fetchBillingData,
     paymentDateLabel: paymentDateLabel,
+    parseBillingSurchargeSettings: parseBillingSurchargeSettings,
+    resolveSurchargeConfig: resolveSurchargeConfig,
+    formatSurchargeLabel: formatSurchargeLabel,
+    buildSurchargeNote: buildSurchargeNote,
     isShowLastPaymentEnabled: isShowLastPaymentEnabled,
     getLatestPayment: getLatestPayment,
     buildOrDetailRows: buildOrDetailRows,

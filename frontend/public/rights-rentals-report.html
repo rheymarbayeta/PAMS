@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background-color: #f5f5f5;
+    font-family: 'Cambria', 'Noto Serif', 'Georgia', serif;
+  }
+  #report-container {
+    max-width: 8.5in;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .loading { padding: 40px; text-align: center; font-size: 18px; color: #666; }
+  .error {
+    padding: 20px; background-color: #fff3cd;
+    border: 1px solid #ffc107; border-radius: 4px;
+    color: #856404; margin: 20px;
+  }
+  .controls {
+    padding: 15px; background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    text-align: right;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .btn {
+    padding: 8px 16px; margin-left: 5px;
+    background-color: #28a745; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+  }
+  .btn:hover { background-color: #1e7e34; }
+  .report-pdf-btn {
+    padding: 8px 16px; margin-left: 5px;
+    background-color: #6366f1; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+  }
+  .report-pdf-btn:hover:not(:disabled) { background-color: #4f46e5; }
+  .report-pdf-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+  .report-error {
+    padding: 12px; background-color: #fee;
+    border: 1px solid #fcc; border-radius: 4px;
+    color: #c33; margin: 10px 15px; font-size: 13px; display: none;
+  }
+  .report-error.show { display: block; }
+  .page {
+    width: 8.5in; height: 13in;
+    padding: 0.5in; padding-bottom: 0.75in;
+    margin: 0 auto 20px auto;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
+    page-break-after: always;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .page:last-child { page-break-after: avoid; }
+  .page-content { height: 100%; display: flex; flex-direction: column; }
+  .page-footer {
+    position: absolute;
+    bottom: 0; left: 0.5in; right: 0.5in;
+    height: 0.75in; padding-top: 0.40in;
+    text-align: center; font-size: 8px; color: #666;
+    background: white;
+  }
+  .page-footer > div { border-top: 1px solid #ccc; padding-top: 6px; }
+  .hidden { display: none; }
+  .rr-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 9.5px; margin-top: 10px;
+  }
+  .rr-table th {
+    border: 1px solid #333; padding: 5px 6px;
+    background-color: #f0f0f0; font-weight: bold;
+    text-align: center; font-size: 10px;
+  }
+  .rr-table td {
+    border: 1px solid #555; padding: 4px 6px; vertical-align: top;
+  }
+  .rr-table td.center { text-align: center; }
+  .rr-table td.right { text-align: right; }
+  .rr-table tfoot td {
+    border: 1px solid #333; padding: 5px 6px;
+    font-weight: bold; background-color: #f0f0f0;
+  }
+  .continuation-header {
+    text-align: center; margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 1px solid #ccc;
+  }
+  .continuation-header h3 { font-size: 13px; color: #666; }
+  .summary-box {
+    margin-top: 10px; padding: 8px 12px;
+    border: 1px solid #999; font-size: 11px; line-height: 1.55;
+  }
+  .signatory-block { margin-top: 18px; }
+  .signatory-block table { width: 100%; border-collapse: collapse; }
+  .signatory-block td { width: 50%; vertical-align: top; padding: 4px 8px; }
+  .sig-label { font-size: 9px; color: #444; margin-bottom: 20px; }
+  .sig-line { display: inline-block; min-width: 200px; padding-top: 3px; }
+  .sig-name { font-size: 10.5px; font-weight: bold; text-transform: uppercase; }
+  .sig-position { font-size: 9px; font-style: italic; color: #1a56db; }
+  .type-rights { color: #1e40af; font-weight: bold; }
+  .type-rental { color: #065f46; font-weight: bold; }
+  @page { size: 8.5in 13in portrait; margin: 0; }
+  @media print {
+    body { background: white; margin: 0; padding: 0; }
+    #report-container { box-shadow: none; margin: 0; max-width: 100%; }
+    .controls { display: none !important; }
+    .page { box-shadow: none; margin: 0; width: 8.5in; height: 13in; page-break-after: always; overflow: hidden; }
+    .page:last-child { page-break-after: avoid; }
+  }
+</style>
+<title>Rights &amp; Rentals Report</title>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn" onclick="printReport()">🖨️ Print</button>
+    <button class="report-pdf-btn" id="reportPdfBtn" onclick="generateReportPDF()">📄 Download PDF</button>
+    <div id="reportError" class="report-error"></div>
+  </div>
+  <div id="loading" class="loading"><p>Loading report...</p></div>
+  <div id="error" class="error hidden"></div>
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script src="/js/rr-report-common.js"></script>
+<script src="/js/report-pagination-common.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var C = window.RRReportCommon;
+  var urlParams = new URLSearchParams(window.location.search);
+  var reportType = (urlParams.get('reportType') || 'contracts').toLowerCase();
+  var propertyId = urlParams.get('propertyId') || '';
+  var propertyName = urlParams.get('propertyName') || '';
+  var status = urlParams.get('status') || '';
+  var paymentType = urlParams.get('paymentType') || 'all';
+  var dateFrom = urlParams.get('dateFrom') || '';
+  var dateTo = urlParams.get('dateTo') || '';
+  var search = urlParams.get('search') || '';
+  var authToken = urlParams.get('token') || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || '';
+  var apiBaseUrl = window.location.origin;
+
+  var USABLE_H = (13 - 0.5 - 0.75) * 96;
+  var FIRST_HDR_H = 172;
+  var CONT_HDR_H = 66;
+  var THEAD_H = 28;
+  var SUMMARY_H = 90;
+  var SIGNATORY_H = 90;
+  var PAG = window.ReportPaginationCommon;
+  var PAGE_GEO = PAG.createGeometry({
+    usableH: USABLE_H,
+    firstHdrH: FIRST_HDR_H,
+    contHdrH: CONT_HDR_H,
+    theadH: THEAD_H
+  });
+
+  document.addEventListener('DOMContentLoaded', loadReport);
+
+  function measureRowHeights(rows, type) {
+    return PAG.measureTableRowHeights({
+      rows: rows,
+      tableClass: 'rr-table',
+      tableWidth: '7.5in',
+      theadHTML: tableHeaderHTML(type),
+      rowHTMLFn: function (row, i) {
+        return rowHTML(type, row, i + 1).replace(/^<tr>|<\/tr>$/g, '');
+      }
+    });
+  }
+
+  function paginateRows(rows, rowHeights, reserveH) {
+    return PAG.paginateIndexedRows(rows, rowHeights, reserveH, PAGE_GEO);
+  }
+
+  async function loadReport() {
+    try {
+      var headers = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+      var qs = new URLSearchParams();
+      qs.set('reportType', reportType);
+      if (propertyId) qs.set('propertyId', propertyId);
+      if (status) qs.set('status', status);
+      if (paymentType) qs.set('paymentType', paymentType);
+      if (dateFrom) qs.set('dateFrom', dateFrom);
+      if (dateTo) qs.set('dateTo', dateTo);
+      if (search) qs.set('search', search);
+
+      var res = await fetch(apiBaseUrl + '/api/rights-and-rentals/reports?' + qs.toString(), {
+        method: 'GET', headers: headers, credentials: 'include'
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('Unauthorised. Please log in again.');
+        var errBody = await res.json().catch(function () { return {}; });
+        throw new Error(errBody.error || ('HTTP ' + res.status));
+      }
+      var data = await res.json();
+
+      var settings = {};
+      try {
+        var sr = await fetch(apiBaseUrl + '/api/settings', { method: 'GET', headers: headers, credentials: 'include' });
+        if (sr.ok) settings = await sr.json();
+      } catch (_) {}
+
+      var currentUserName = 'PAMS';
+      try {
+        var mr = await fetch(apiBaseUrl + '/api/auth/me', { method: 'GET', headers: headers, credentials: 'include' });
+        if (mr.ok) {
+          var d = await mr.json();
+          if (d.full_name) currentUserName = d.full_name;
+        }
+      } catch (_) {}
+
+      if (propertyName && data.filters) data.filters.propertyName = propertyName;
+      renderReport(data, settings, currentUserName);
+    } catch (err) {
+      console.error('Error loading R&R report:', err);
+      showError('Failed to load report: ' + err.message);
+    }
+  }
+
+  function tableHeaderHTML(type) {
+    if (type === 'payments') {
+      return '<tr>' +
+        '<th style="width:4%;">#</th>' +
+        '<th style="width:10%;">Date</th>' +
+        '<th style="width:10%;">OR No.</th>' +
+        '<th style="width:8%;">Type</th>' +
+        '<th style="width:18%;">Lessee</th>' +
+        '<th style="width:16%;">Property</th>' +
+        '<th style="width:10%;">Period</th>' +
+        '<th style="width:12%;">Amount</th>' +
+        '<th style="width:12%;">Balance</th>' +
+        '</tr>';
+    }
+    if (type === 'outstanding') {
+      return '<tr>' +
+        '<th style="width:4%;">#</th>' +
+        '<th style="width:18%;">Lessee</th>' +
+        '<th style="width:14%;">Property</th>' +
+        '<th style="width:10%;">Stalls</th>' +
+        '<th style="width:12%;">Rights Bal.</th>' +
+        '<th style="width:12%;">Rental Bal.</th>' +
+        '<th style="width:10%;">Mo. Rights</th>' +
+        '<th style="width:10%;">Mo. Rental</th>' +
+        '<th style="width:10%;">Status</th>' +
+        '</tr>';
+    }
+    return '<tr>' +
+      '<th style="width:4%;">#</th>' +
+      '<th style="width:16%;">Lessee</th>' +
+      '<th style="width:14%;">Property</th>' +
+      '<th style="width:10%;">Stalls</th>' +
+      '<th style="width:10%;">Effective</th>' +
+      '<th style="width:8%;">Status</th>' +
+      '<th style="width:10%;">Principal</th>' +
+      '<th style="width:10%;">Rights Bal.</th>' +
+      '<th style="width:10%;">Rental Bal.</th>' +
+      '<th style="width:8%;">Mo. Dues</th>' +
+      '</tr>';
+  }
+
+  function rowHTML(type, row, rowNum) {
+    if (type === 'payments') {
+      var period = (row.period_month && row.period_year)
+        ? String(row.period_month).padStart(2, '0') + '/' + row.period_year
+        : '—';
+      var typeCls = row.payment_type === 'rights' ? 'type-rights' : 'type-rental';
+      var typeLabel = row.payment_type === 'rights' ? 'Rights' : 'Rental';
+      return '<tr>' +
+        '<td class="center">' + rowNum + '</td>' +
+        '<td class="center">' + C.fmtDate(row.payment_date) + '</td>' +
+        '<td class="center">' + C.esc(row.or_number || '—') + '</td>' +
+        '<td class="center ' + typeCls + '">' + typeLabel + '</td>' +
+        '<td>' + C.esc(row.lessee_name || '—') + '</td>' +
+        '<td>' + C.esc(row.property_name || '—') + '</td>' +
+        '<td class="center">' + period + '</td>' +
+        '<td class="right">₱ ' + C.fmtCurrency(row.amount_paid) + '</td>' +
+        '<td class="right">₱ ' + C.fmtCurrency(row.balance) + '</td>' +
+        '</tr>';
+    }
+    if (type === 'outstanding') {
+      return '<tr>' +
+        '<td class="center">' + rowNum + '</td>' +
+        '<td>' + C.esc(row.lessee_name || '—') + '</td>' +
+        '<td>' + C.esc(row.property_name || '—') + '</td>' +
+        '<td class="center">' + C.esc(row.stall_numbers || '—') + '</td>' +
+        '<td class="right">₱ ' + C.fmtCurrency(row.rights_balance) + '</td>' +
+        '<td class="right">₱ ' + C.fmtCurrency(row.outstanding_rental_balance) + '</td>' +
+        '<td class="right">₱ ' + C.fmtCurrency(row.monthly_rights_amount) + '</td>' +
+        '<td class="right">₱ ' + C.fmtCurrency(row.monthly_rental_amount) + '</td>' +
+        '<td class="center">' + C.esc((row.status || '—').toUpperCase()) + '</td>' +
+        '</tr>';
+    }
+    return '<tr>' +
+      '<td class="center">' + rowNum + '</td>' +
+      '<td>' + C.esc(row.lessee_name || '—') + '</td>' +
+      '<td>' + C.esc(row.property_name || '—') + '</td>' +
+      '<td class="center">' + C.esc(row.stall_numbers || '—') + '</td>' +
+      '<td class="center">' + C.fmtDate(row.contract_effective_date) + '</td>' +
+      '<td class="center">' + C.esc((row.status || '—').toUpperCase()) + '</td>' +
+      '<td class="right">₱ ' + C.fmtCurrency(row.principal_amount) + '</td>' +
+      '<td class="right">₱ ' + C.fmtCurrency(row.rights_balance) + '</td>' +
+      '<td class="right">₱ ' + C.fmtCurrency(row.outstanding_rental_balance) + '</td>' +
+      '<td class="right">₱ ' + C.fmtCurrency(row.monthly_dues) + '</td>' +
+      '</tr>';
+  }
+
+  async function renderReport(data, settings, currentUserName) {
+    var rows = data.rows || [];
+    var type = data.reportType || reportType;
+    var rowHeights = await measureRowHeights(rows, type);
+    var html = buildReportHTML(data, rowHeights, settings, currentUserName);
+    document.getElementById('report-content').innerHTML = html;
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('report-content').classList.remove('hidden');
+    C.updatePageNumbers();
+  }
+
+  function buildReportHTML(data, rowHeights, settings, currentUserName) {
+    var type = data.reportType || reportType;
+    var rows = data.rows || [];
+    var summary = data.summary || {};
+    var filters = data.filters || {};
+    var now = new Date();
+    var issuedAt = now.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    var headerHTML = C.buildAssessmentHeaderHTML(settings, apiBaseUrl);
+    var filterLabel = C.buildFilterLabel(filters);
+    var footerHTML = C.buildFooterHTML(currentUserName, issuedAt);
+    var title = C.REPORT_TITLES[type] || 'RIGHTS & RENTALS REPORT';
+    var subtitle = C.REPORT_SUBTITLES[type] || '';
+
+    var signatoryEnabled = settings.citation_signatory_enabled?.value !== 'false';
+    var reserveH = SUMMARY_H + (signatoryEnabled ? SIGNATORY_H : 0);
+    var pages = paginateRows(rows, rowHeights, reserveH);
+    var pagesHTML = '';
+
+    pages.forEach(function (page, pageIdx) {
+      var isLast = pageIdx === pages.length - 1;
+      var rowsHTML = '';
+      page.rows.forEach(function (row, j) {
+        rowsHTML += rowHTML(type, row, page.startIdx + j + 1);
+      });
+
+      var tfootHTML = isLast ? '<tfoot><tr>' +
+        '<td colspan="' + (type === 'payments' ? 8 : type === 'outstanding' ? 8 : 9) + '" style="text-align:right;font-weight:bold;">TOTAL RECORDS:</td>' +
+        '<td style="font-weight:bold;text-align:center;">' + rows.length + '</td>' +
+        '</tr></tfoot>' : '';
+
+      var pageHeading = page.isFirst ?
+        headerHTML +
+        '<div style="text-align:center;margin-bottom:4px;">' +
+        '<div style="font-size:16px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">' + C.esc(title) + '</div>' +
+        (subtitle ? '<div style="font-size:10px;color:#555;margin-top:2px;">' + C.esc(subtitle) + '</div>' : '') +
+        '<div style="font-size:10px;color:#555;margin-top:4px;">' + C.esc(filterLabel) + '</div>' +
+        '<div style="font-size:10px;color:#555;">As of: ' + C.esc(issuedAt) + '</div>' +
+        '</div>' +
+        '<div style="border-bottom:1px solid #ccc;margin-bottom:10px;"></div>' :
+        '<div class="continuation-header">' +
+        '<h3>' + C.esc(title) + ' — Continuation (Page ' + (pageIdx + 1) + ')</h3>' +
+        '<div style="font-size:9px;color:#555;">' + C.esc(filterLabel) + '</div>' +
+        '</div>';
+
+      var statsBlock = isLast ? C.buildSummaryHTML(type, summary) : '';
+      var signatoryBlock = isLast ? C.buildSignatoryHTML(settings, currentUserName, apiBaseUrl) : '';
+
+      pagesHTML +=
+        '<div class="page" id="page-' + (pageIdx + 1) + '">' +
+        '<div class="page-content">' +
+        pageHeading +
+        '<table class="rr-table">' +
+        '<thead>' + tableHeaderHTML(type) + '</thead>' +
+        '<tbody>' + (rowsHTML || '<tr><td colspan="10" class="center" style="padding:20px;color:#666;">No records found for the selected filters.</td></tr>') + '</tbody>' +
+        tfootHTML +
+        '</table>' +
+        statsBlock +
+        signatoryBlock +
+        '</div>' +
+        '<div class="page-footer">' + footerHTML + '</div>' +
+        '</div>';
+    });
+
+    return pagesHTML;
+  }
+
+  window.printReport = function () { window.print(); };
+
+  window.generateReportPDF = async function () {
+    var btn = document.getElementById('reportPdfBtn');
+    var errDiv = document.getElementById('reportError');
+    try {
+      var reportContent = document.getElementById('report-content');
+      if (!reportContent || reportContent.classList.contains('hidden')) throw new Error('Report not loaded yet.');
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Generating PDF...';
+      errDiv.classList.remove('show');
+
+      var styleText = Array.from(document.querySelectorAll('style')).map(function (s) { return s.innerHTML; }).join('\n');
+      var fullHtml = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><style>' +
+        styleText +
+        'body { background: white; margin: 0; padding: 0; }' +
+        '.controls { display: none !important; }' +
+        '#report-container { box-shadow: none; margin: 0; max-width: 100%; }' +
+        '.page { box-shadow: none; margin: 0; }' +
+        '</style></head><body><div id="report-container">' + reportContent.innerHTML + '</div></body></html>';
+
+      var date = new Date().toISOString().split('T')[0];
+      var filename = 'R&R Report - ' + reportType.toUpperCase() + ' - ' + date + '.pdf';
+
+      var response = await fetch(apiBaseUrl + '/api/reports/generate-from-html', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken && { Authorization: 'Bearer ' + authToken })
+        },
+        body: JSON.stringify({ html: fullHtml, filename: filename, pageSize: 'legal' })
+      });
+
+      if (!response.ok) {
+        var err = await response.json().catch(function () { return { error: 'Server error' }; });
+        throw new Error(err.error || ('HTTP ' + response.status));
+      }
+
+      var blob = await response.blob();
+      var url = window.URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      btn.innerHTML = '✅ Downloaded!';
+      setTimeout(function () { btn.innerHTML = '📄 Download PDF'; btn.disabled = false; }, 2000);
+    } catch (err) {
+      errDiv.textContent = 'Error: ' + err.message;
+      errDiv.classList.add('show');
+      setTimeout(function () { errDiv.classList.remove('show'); }, 5000);
+      btn.innerHTML = '📄 Download PDF';
+      btn.disabled = false;
+    }
+  };
+
+  function showError(message) {
+    var el = document.getElementById('error');
+    el.textContent = message;
+    el.classList.remove('hidden');
+    document.getElementById('loading').classList.add('hidden');
+  }
+})();
+</script>
+</body>
+</html>

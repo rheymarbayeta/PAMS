@@ -112,6 +112,8 @@ interface Settings {
   citation_certified_by_name?: Setting;
   citation_certified_by_position?: Setting;
   citation_certified_by_signature?: Setting;
+  billing_surcharge_enabled?: Setting;
+  billing_surcharge_percentage?: Setting;
 }
 
 export default function SettingsPage() {
@@ -137,6 +139,8 @@ export default function SettingsPage() {
     citation_certified_by_name: '',
     citation_certified_by_position: '',
     citation_certified_by_signature: '',
+    billing_surcharge_enabled: 'true',
+    billing_surcharge_percentage: '20',
   });
   const [signaturePreview, setSignaturePreview] = useState<Record<string, string>>({});
   const [signatureUploading, setSignatureUploading] = useState<Record<string, boolean>>({});
@@ -169,6 +173,8 @@ export default function SettingsPage() {
         citation_certified_by_name: settingsData.citation_certified_by_name?.value || '',
         citation_certified_by_position: settingsData.citation_certified_by_position?.value || '',
         citation_certified_by_signature: settingsData.citation_certified_by_signature?.value || '',
+        billing_surcharge_enabled: settingsData.billing_surcharge_enabled?.value ?? 'true',
+        billing_surcharge_percentage: settingsData.billing_surcharge_percentage?.value || '20',
       });
       setSignaturePreview({});
     } catch (error) {
@@ -232,6 +238,8 @@ export default function SettingsPage() {
         api.put(`/api/settings/citation_certified_by_name`, { value: formData.citation_certified_by_name }),
         api.put(`/api/settings/citation_certified_by_position`, { value: formData.citation_certified_by_position }),
         api.put(`/api/settings/citation_certified_by_signature`, { value: formData.citation_certified_by_signature, description: 'E-signature image URL for citation certified-by signatory' }),
+        api.put(`/api/settings/billing_surcharge_enabled`, { value: formData.billing_surcharge_enabled, description: 'Apply late payment surcharge on billing statements (true/false)' }),
+        api.put(`/api/settings/billing_surcharge_percentage`, { value: formData.billing_surcharge_percentage, description: 'Late payment surcharge percentage for billing statements' }),
       ]);
       alert('Settings saved successfully');
       fetchSettings();
@@ -497,6 +505,52 @@ export default function SettingsPage() {
                 onFileSelect={(file) => handleSignatureUpload('municipal_treasurer_signature', file)}
                 onClear={() => handleSignatureClear('municipal_treasurer_signature')}
               />
+            </div>
+
+            {/* Billing Surcharge */}
+            <div className="bg-white shadow-lg shadow-gray-200/50 rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <svg className="h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-semibold text-gray-900">Billing Surcharge</h2>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-sm font-medium text-gray-700">Enable surcharge</span>
+                  <input
+                    type="checkbox"
+                    checked={formData.billing_surcharge_enabled === 'true'}
+                    onChange={(e) => setFormData({ ...formData, billing_surcharge_enabled: e.target.checked ? 'true' : 'false' })}
+                    className="w-5 h-5 rounded border-gray-300 text-amber-600 focus:ring-2 focus:ring-amber-500"
+                  />
+                </label>
+              </div>
+              <p className="text-sm text-gray-500 mb-6">
+                Configure the late payment surcharge applied to unpaid previous balances on rights and rentals billing statements.
+              </p>
+
+              <div className={`max-w-xs transition-opacity duration-200 ${formData.billing_surcharge_enabled === 'false' ? 'opacity-50 pointer-events-none' : ''}`}>
+                <label htmlFor="billing_surcharge_percentage" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Surcharge Percentage (%)
+                </label>
+                <input
+                  id="billing_surcharge_percentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 outline-none"
+                  placeholder="e.g., 20"
+                  value={formData.billing_surcharge_percentage}
+                  onChange={(e) => setFormData({ ...formData, billing_surcharge_percentage: e.target.value })}
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Example: 20 means a 20% surcharge on the previous month&apos;s unpaid balance.
+                </p>
+              </div>
             </div>
 
             {/* Permit Signatory */}

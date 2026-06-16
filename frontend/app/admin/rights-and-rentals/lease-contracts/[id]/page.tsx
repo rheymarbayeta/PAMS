@@ -416,7 +416,7 @@ export default function ViewLeaseContractPage() {
               </div>
               {(contract.outstanding_rental_balance ?? 0) > 0 && (
                 <p className="text-xs text-gray-500 mt-4">
-                  This amount is included in the BALANCE line on billing statements and is subject to the 20% surcharge when unpaid.
+                  This amount is included in the BALANCE line on billing statements and may be subject to the configured late payment surcharge when unpaid.
                 </p>
               )}
             </div>

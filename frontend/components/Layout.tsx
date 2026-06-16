@@ -151,6 +151,15 @@ export default function Layout({ children }: LayoutProps) {
       ],
     },
     {
+      paths: ['/admin/rights-and-rentals'],
+      tabs: [
+        { href: '/admin/rights-and-rentals', label: 'Lessees' },
+        { href: '/admin/rights-and-rentals/properties', label: 'Properties' },
+        { href: '/admin/rights-and-rentals/lease-contracts', label: 'Lease Contracts' },
+        { href: '/admin/rights-and-rentals/reports', label: 'Reports' },
+      ],
+    },
+    {
       paths: ['/reports'],
       tabs: [
         { href: '/reports', label: 'Permit Reports' },

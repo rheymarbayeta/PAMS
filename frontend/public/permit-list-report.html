@@ -157,6 +157,7 @@
   <div id="report-content" class="hidden"></div>
 </div>
 
+<script src="/js/report-pagination-common.js"></script>
 <script>
 // ── URL parameters ────────────────────────────────────────────────────────────
 const urlParams     = new URLSearchParams(window.location.search);
@@ -367,30 +368,23 @@ function tableHeaderRow() {
 }
 
 // ── Page geometry (px @ 96 DPI) ───────────────────────────────────────────────
-const USABLE_H    = (13 - 0.5 - 0.75) * 96; // 1128 px
-const FIRST_HDR_H = 172;
-const CONT_HDR_H  = 66;
-const THEAD_H     = 28;
+const PAG = window.ReportPaginationCommon;
+const PAGE_GEO = PAG.createGeometry({
+  usableH: (13 - 0.5 - 0.75) * 96,
+  firstHdrH: 172,
+  contHdrH: 66,
+  theadH: 28
+});
 const SUMMARY_H   = 70;
 const SIGNATORY_H = 90;
-const SAFETY_PX   = 40;
-
-function availH(isFirst, reserveH) {
-  return USABLE_H - (isFirst ? FIRST_HDR_H : CONT_HDR_H) - THEAD_H - reserveH - SAFETY_PX;
-}
 
 function measureRowHeights(apps) {
-  return new Promise(resolve => {
-    if (apps.length === 0) { resolve([]); return; }
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;top:-99999px;left:0;width:720px;visibility:hidden;pointer-events:none;overflow:hidden;';
-    const tbl   = document.createElement('table');
-    tbl.className = 'permit-table';
-    tbl.style.width = '100%';
-    const tbody = document.createElement('tbody');
-    apps.forEach((a, i) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
+  return PAG.measureTableRowHeights({
+    rows: apps,
+    tableClass: 'permit-table',
+    tableWidth: '7.5in',
+    theadHTML: tableHeaderRow(),
+    rowHTMLFn: (a, i) => `
         <td class="center" style="width:4%">${i + 1}</td>
         <td style="width:16%">${a.permit_number || a.application_number || '—'}</td>
         <td style="width:22%">${a.entity_name || '—'}</td>
@@ -398,55 +392,12 @@ function measureRowHeights(apps) {
         <td style="width:16%">${a.entity_address || '—'}</td>
         <td style="width:16%">${a.location || a.entity_address || '—'}</td>
         <td style="width:12%">${a.permit_date ? new Date(a.permit_date).toLocaleDateString('en-PH') : '—'}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody);
-    wrap.appendChild(tbl);
-    document.body.appendChild(wrap);
-    requestAnimationFrame(() => {
-      const heights = Array.from(tbody.querySelectorAll('tr')).map(tr => tr.offsetHeight || 24);
-      document.body.removeChild(wrap);
-      resolve(heights);
-    });
+      `
   });
 }
 
 function paginateApps(apps, rowHeights, reserveH) {
-  if (apps.length === 0) return [{ isFirst: true, rows: [], startIdx: 0 }];
-  const pages = [];
-  let i = 0;
-  while (i < apps.length) {
-    const isFirst  = pages.length === 0;
-    const cap      = availH(isFirst, 0);
-    let used = 0;
-    const startIdx = i;
-    const pageRows = [];
-    while (i < apps.length) {
-      const h = rowHeights[i] || 24;
-      if (pageRows.length > 0 && used + h > cap) break;
-      pageRows.push(apps[i]);
-      used += h;
-      i++;
-    }
-    pages.push({ isFirst, rows: pageRows, startIdx });
-  }
-  // Pass 2: ensure last page fits summary+signatory
-  const last      = pages[pages.length - 1];
-  const lastCap   = availH(last.isFirst, reserveH);
-  const gStart    = last.startIdx;
-  let used2 = 0, fitCount = 0;
-  for (let j = 0; j < last.rows.length; j++) {
-    const h = rowHeights[gStart + j] || 24;
-    if (used2 + h > lastCap) break;
-    used2 += h;
-    fitCount++;
-  }
-  if (fitCount < last.rows.length) {
-    const overflow = last.rows.splice(fitCount);
-    pages.push({ isFirst: false, rows: overflow, startIdx: gStart + fitCount });
-  }
-  return pages;
+  return PAG.paginateIndexedRows(apps, rowHeights, reserveH, PAGE_GEO);
 }
 
 // ── Main HTML builder ─────────────────────────────────────────────────────────

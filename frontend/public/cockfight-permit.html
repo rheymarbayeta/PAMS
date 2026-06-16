@@ -250,6 +250,7 @@
 </div>
 
 <script src="js/modal-dialog.js"></script>
+<script src="/js/report-pagination-common.js"></script>
 <script>
 // Get application ID from URL parameters
 const urlParams = new URLSearchParams(window.location.search);
@@ -489,52 +490,14 @@ function renderReport(appData, settings = {}, applicationData = {}, permitTypeDa
 }
 
 /**
- * Automatically paginate content if page 1 overflows.
- * Moves the approval section to a new page 2.
+ * Automatically paginate content when pages overflow.
+ * Moves trailing sections to continuation pages until all content fits.
  */
 function paginateContent() {
-  // Remove any previously created pages (in case this is called again)
-  document.querySelectorAll('.page:not(#page-1)').forEach(p => p.remove());
-
-  const page = document.getElementById('page-1');
-  if (!page) return;
-
-  // scrollHeight > clientHeight means content is clipped
-  if (page.scrollHeight <= page.clientHeight) return;
-
-  const pageContent = page.querySelector('.page-content');
-  if (!pageContent) return;
-
-  // Find the approval section (contains "APPROVED BY")
-  const approvalDiv = Array.from(pageContent.children).find(
-    el => el.innerHTML && el.innerHTML.includes('APPROVED BY')
-  );
-  if (!approvalDiv) return;
-
-  // Capture before removing
-  const approvalOuterHTML = approvalDiv.outerHTML;
-  const oldFooter = page.querySelector('.page-footer');
-  const footerInnerHTML = oldFooter ? oldFooter.innerHTML : '';
-
-  // Remove approval section from page 1
-  approvalDiv.remove();
-
-  // Insert page 2 after page 1
-  const page2Html = `
-    <div class="page" id="page-2">
-      <div class="page-content">
-        <div class="continuation-header">
-          <h3>— Continuation —</h3>
-        </div>
-        ${approvalOuterHTML}
-      </div>
-      <div class="page-footer">${footerInnerHTML}</div>
-    </div>
-  `;
-  page.insertAdjacentHTML('afterend', page2Html);
-
-  // Recalculate page numbers
-  updatePageNumbers();
+  window.ReportPaginationCommon.paginateDocumentPages({
+    firstPageId: 'page-1',
+    updatePageNumbers: updatePageNumbers
+  });
 }
 
 // Function to adjust permit title font size to fit on one line

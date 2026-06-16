@@ -279,14 +279,18 @@ function buildReport(data,settings){
     +'visibility:hidden;pointer-events:none;box-sizing:border-box;';
   document.body.appendChild(measDiv);
 
-  function mH(html){ measDiv.innerHTML=html; return measDiv.offsetHeight+4; }
+  function rawH(html){ measDiv.innerHTML=html; return measDiv.offsetHeight + 4; }
+  var SEC_FUDGE = 1.1;
+  function mH(html){
+    return Math.ceil(rawH(html) * SEC_FUDGE) + 2;
+  }
 
   // Page geometry (CSS px at 96 dpi)
   var PAGE_PX  = Math.round(13   * 96);  // 1248
   var PAD_T_PX = Math.round(0.45 * 96);  //   43
   var PAD_B_PX = Math.round(0.75 * 96);  //   72
-  var HDR_H    = mH(lguH);               // measured LGU header height
-  var AVAIL    = PAGE_PX - PAD_T_PX - PAD_B_PX - HDR_H - 35; // 35px safety
+  var HDR_H    = rawH(lguH);             // measured LGU header height (no fudge)
+  var AVAIL    = PAGE_PX - PAD_T_PX - PAD_B_PX - HDR_H - 72; // safety buffer
 
   // ── Pager ─────────────────────────────────────────────────────────────
   var pages=[];   // array of section-HTML arrays

@@ -123,7 +123,7 @@ export default function RightsAndRentalsPage() {
           </div>
 
           {/* Quick Access Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
             {/* Lessee Information Card */}
             <Link href="/admin/rights-and-rentals">
               <div className="bg-white shadow-lg rounded-2xl border border-gray-100 p-6 hover:shadow-xl hover:border-blue-200 transition-all duration-200 cursor-pointer h-full">
@@ -173,6 +173,24 @@ export default function RightsAndRentalsPage() {
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">Lease Contracts</h3>
                     <p className="text-sm text-gray-600 mb-3">Manage lease agreements and payments</p>
                     <span className="text-indigo-600 font-medium text-sm hover:text-indigo-700">View Contracts →</span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* Reports Card */}
+            <Link href="/admin/rights-and-rentals/reports">
+              <div className="bg-white shadow-lg rounded-2xl border border-gray-100 p-6 hover:shadow-xl hover:border-emerald-200 transition-all duration-200 cursor-pointer h-full">
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg">
+                    <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">Reports</h3>
+                    <p className="text-sm text-gray-600 mb-3">Contracts, payments, and outstanding balances</p>
+                    <span className="text-emerald-600 font-medium text-sm hover:text-emerald-700">View Reports →</span>
                   </div>
                 </div>
               </div>

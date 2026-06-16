@@ -103,8 +103,13 @@ var PAGE_H  = 8.5  * DPI;  //  816 px
 var PAD_TOP = 0.5  * DPI;  //   48 px
 var FOOT_H  = 0.75 * DPI;  //   72 px
 var CONT_H  = PAGE_H - PAD_TOP - FOOT_H;  //  696 px — CSS clip boundary
-var PACK_H  = CONT_H - 40;               //  656 px — conservative packing budget
+var PACK_H  = CONT_H - 72;               // conservative packing budget
 var CONT_W  = (13 - 1) * DPI;            // 1152 px content width
+var ROW_FUDGE = 1.1;
+
+function adjRowH(h) {
+  return Math.ceil((h || 28) * ROW_FUDGE) + 2;
+}
 
 document.addEventListener('DOMContentLoaded', loadReport);
 
@@ -298,25 +303,82 @@ function renderReport(enforcer, citations, statistics, settings, userName) {
         '<td>'           + viols                                + '</td>' +
         '<td class="r">' + fmtCur(c.fine_amount)               + '</td>' +
       '</tr>';
-    return { html: html, h: measure('<table class="citation-table">' + THEAD_HTML + '<tbody>' + html + '</tbody></table>') - theadOnlyH };
+    return { html: html, h: adjRowH(measure('<table class="citation-table">' + THEAD_HTML + '<tbody>' + html + '</tbody></table>') - theadOnlyH) };
   });
 
-  // Pack rows into pages
+  // Pack rows into pages (conservative heights to avoid overflow clipping)
   var pages = [], curRows = [], curH = 0, pgIdx = 0;
   for (var i = 0; i < rowItems.length; i++) {
     var row    = rowItems[i];
     var isLast = (i === rowItems.length - 1);
-    var maxH   = Math.max(pgIdx === 0 ? rowArea1 : rowAreaN, row.h);
-    var needed = curH + row.h + (isLast ? (sumH + tfootH) : 0);
+    var maxH   = pgIdx === 0 ? rowArea1 : rowAreaN;
+    var needed = curH + row.h + (isLast ? adjRowH(sumH + tfootH) : 0);
     if (needed > maxH && curRows.length > 0) {
       pages.push(curRows);
       curRows = []; curH = 0; pgIdx++;
-      maxH = Math.max(rowAreaN, row.h);
+      maxH = rowAreaN;
+      needed = row.h + (isLast ? adjRowH(sumH + tfootH) : 0);
     }
     curRows.push(row.html);
     curH += row.h;
   }
-  pages.push(curRows);
+  if (curRows.length > 0) pages.push(curRows);
+
+  function pageStartIndex(pageIdx) {
+    var n = 0;
+    for (var k = 0; k < pageIdx; k++) n += pages[k].length;
+    return n;
+  }
+
+  function pageRowCap(pageIdx) {
+    return pageIdx === 0 ? rowArea1 : rowAreaN;
+  }
+
+  function splitPageRows(pageIdx, fitCount) {
+    if (fitCount <= 0 || fitCount >= pages[pageIdx].length) return false;
+    var overflow = pages[pageIdx].splice(fitCount);
+    pages.splice(pageIdx + 1, 0, overflow);
+    return true;
+  }
+
+  // Re-validate non-last pages
+  for (var p = 0; p < pages.length; p++) {
+    if (p >= pages.length - 1) break;
+    var pg = pages[p];
+    var cap = pageRowCap(p);
+    var start = pageStartIndex(p);
+    var used = 0, fit = 0;
+    for (var j = 0; j < pg.length; j++) {
+      var rh = rowItems[start + j].h;
+      if (fit > 0 && used + rh > cap) break;
+      used += rh;
+      fit++;
+    }
+    if (fit < pg.length) {
+      if (fit === 0) fit = 1;
+      splitPageRows(p, fit);
+      p = Math.max(-1, p - 1);
+    }
+  }
+
+  // Ensure last page fits summary + tfoot
+  var guard = 0;
+  while (pages.length > 0 && guard++ < pages.length + 10) {
+    var lastIdx = pages.length - 1;
+    var lastPg = pages[lastIdx];
+    var cap = pageRowCap(lastIdx) - adjRowH(sumH + tfootH);
+    var start = pageStartIndex(lastIdx);
+    var used = 0, fit = 0;
+    for (var j = 0; j < lastPg.length; j++) {
+      var rh = rowItems[start + j].h;
+      if (fit > 0 && used + rh > cap) break;
+      used += rh;
+      fit++;
+    }
+    if (fit >= lastPg.length) break;
+    if (fit === 0) fit = 1;
+    splitPageRows(lastIdx, fit);
+  }
 
   var totalPages = pages.length;
   var pagesHTML  = '';

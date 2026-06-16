@@ -307,6 +307,7 @@
 </div>
 
 <script src="js/modal-dialog.js"></script>
+<script src="/js/report-pagination-common.js"></script>
 <script>
 // ── URL parameters ──────────────────────────────────────────────────────────
 const urlParams    = new URLSearchParams(window.location.search);
@@ -502,55 +503,12 @@ function tableHeaderRow() {
   `;
 }
 
-// ── Page geometry constants (px at 96 DPI) ───────────────────────────────────
-// Page 13 × 8.5 in landscape  |  padding: 0.5 in top, 0.75 in bottom
-const USABLE_H    = (8.5 - 0.5 - 0.75) * 96; // 696 px — between top/bottom padding
-const FIRST_HDR_H = 172;  // page-1 overhead: logo block + title/date + dividers
-const CONT_HDR_H  = 66;   // continuation-page overhead: header block
-const THEAD_H     = 28;   // <thead> row
-const SUMMARY_H   = 80;   // <tfoot> totals row + .summary-box (last page only)
-const SIGNATORY_H = 90;   // .signatory-block height reserve (when enabled)
-const SAFETY_PX   = 40;   // guard buffer before the white footer blocker
-
-// Available px for <tbody> rows on a given page.
-// reserveH: number of px to reserve at the bottom (pass 0 for non-last pages).
-function availH(isFirst, reserveH) {
-  return USABLE_H
-    - (isFirst ? FIRST_HDR_H : CONT_HDR_H)
-    - THEAD_H
-    - reserveH
-    - SAFETY_PX;
-}
-
-/**
- * Measure the actual rendered height of every citation row by injecting a
- * hidden table at exact page-content width (7.5 in = 720 px) and reading
- * each <tr>.offsetHeight.  Returns Promise<number[]>.
- */
-function measureRowHeights(citations) {
-  return new Promise(resolve => {
-    if (citations.length === 0) { resolve([]); return; }
-
-    const wrap = document.createElement('div');
-    // Position off-screen but fully rendered so offsetHeight is accurate.
-    wrap.style.cssText = [
-      'position:absolute', 'top:-99999px', 'left:0',
-      'width:1152px',  // 13 in − 0.5 in left pad − 0.5 in right pad = 12 in = 1152 px
-      'visibility:hidden', 'pointer-events:none', 'overflow:hidden'
-    ].join(';');
-
-    const tbl   = document.createElement('table');
-    tbl.className = 'citation-table';
-    tbl.style.width = '100%';
-    const tbody = document.createElement('tbody');
-
-    citations.forEach((c, idx) => {
-      const violations = Array.isArray(c.violations)
-        ? c.violations.join('; ')
-        : (c.violations || 'N/A');
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="center" style="width:3%">${idx + 1}</td>
+function citationRowCellsHTML(c, rowNum) {
+  const violations = Array.isArray(c.violations)
+    ? c.violations.join('; ')
+    : (c.violations || 'N/A');
+  return `
+        <td class="center" style="width:3%">${rowNum}</td>
         <td class="center" style="width:8%">${c.ticket_number  || 'N/A'}</td>
         <td class="center" style="width:6%">${formatDate(c.violation_date)}</td>
         <td style="width:11%">${c.driver_name  || 'N/A'}</td>
@@ -561,70 +519,32 @@ function measureRowHeights(citations) {
         <td style="width:27%">${violations}</td>
         <td class="right"  style="width:12%">${formatCurrency(c.fine_amount)}</td>
       `;
-      tbody.appendChild(tr);
-    });
+}
 
-    tbl.appendChild(tbody);
-    wrap.appendChild(tbl);
-    document.body.appendChild(wrap);
+// ── Page geometry constants (px at 96 DPI) ───────────────────────────────────
+// Page 13 × 8.5 in landscape  |  padding: 0.5 in top, 0.75 in bottom
+const PAG = window.ReportPaginationCommon;
+const PAGE_GEO = PAG.createGeometry({
+  usableH: (8.5 - 0.5 - 0.75) * 96,
+  firstHdrH: 172,
+  contHdrH: 66,
+  theadH: 28
+});
+const SUMMARY_H   = 80;
+const SIGNATORY_H = 90;
 
-    // One animation frame so the browser finishes layout before we read heights.
-    requestAnimationFrame(() => {
-      const heights = Array.from(tbody.querySelectorAll('tr'))
-        .map(tr => tr.offsetHeight || 28); // fallback 28 px
-      document.body.removeChild(wrap);
-      resolve(heights);
-    });
+function measureRowHeights(citations) {
+  return PAG.measureTableRowHeights({
+    rows: citations,
+    tableClass: 'citation-table',
+    tableWidth: '12in',
+    theadHTML: tableHeaderRow(),
+    rowHTMLFn: (c, i) => citationRowCellsHTML(c, i + 1)
   });
 }
 
-/**
- * Adaptive two-pass pagination using real DOM-measured row heights.
- *
- * Pass 1 – greedy pack without summary reserve → maximises every page.
- * Pass 2 – if the last page cannot also fit the totals+summary block,
- *           overflow the excess rows onto a new final page.
- */
 function paginateCitations(citations, rowHeights, reserveH) {
-  if (citations.length === 0) return [{ isFirst: true, rows: [] }];
-
-  // Pass 1: fill pages as full as possible (no summary reserve yet)
-  const pages = [];
-  let i = 0;
-  while (i < citations.length) {
-    const isFirst = pages.length === 0;
-    const cap     = availH(isFirst, /*reserveH=*/0);
-    let used = 0;
-    const pageRows = [];
-    while (i < citations.length) {
-      const h = rowHeights[i] || 28;
-      // Always admit at least one row per page to avoid infinite loop.
-      if (pageRows.length > 0 && used + h > cap) break;
-      pageRows.push(citations[i]);
-      used += h;
-      i++;
-    }
-    pages.push({ isFirst, rows: pageRows });
-  }
-
-  // Pass 2: ensure the last page fits the summary+signatory block
-  const last     = pages[pages.length - 1];
-  const lastCap  = availH(last.isFirst, reserveH);
-  const startIdx = citations.length - last.rows.length; // global index of first row on last page
-  let used = 0, fitCount = 0;
-  for (let j = 0; j < last.rows.length; j++) {
-    const h = rowHeights[startIdx + j] || 28;
-    if (used + h > lastCap) break;
-    used += h;
-    fitCount++;
-  }
-  if (fitCount < last.rows.length) {
-    // Move the rows that don't fit onto a fresh final page.
-    const overflow = last.rows.splice(fitCount);
-    pages.push({ isFirst: false, rows: overflow });
-  }
-
-  return pages;
+  return PAG.paginateIndexedRows(citations, rowHeights, reserveH, PAGE_GEO);
 }
 
 // ── Main HTML builder (paginated) ─────────────────────────────────────────────
@@ -896,53 +816,14 @@ function buildGroupedItems(groups) {
  * Prevents orphaned group-headers (requires at least one following row on the same page).
  */
 function paginateGroupedItems(items, reserveH) {
-  if (items.length === 0) return [{ isFirst: true, items: [] }];
-
-  const pages = [];
-  let i = 0;
-
-  while (i < items.length) {
-    const isFirst = pages.length === 0;
-    const cap = availH(isFirst, 0);
-    let used = 0;
-    const pageItems = [];
-
-    while (i < items.length) {
-      const item = items[i];
-      // Orphan protection: group-header needs at least one more row after it
-      if (item.type === 'group-header' && pageItems.length > 0) {
-        const nextH = items[i + 1] ? items[i + 1].h : 0;
-        if (used + item.h + nextH > cap) break;
-      }
-      if (pageItems.length > 0 && used + item.h > cap) break;
-      pageItems.push(item);
-      used += item.h;
-      i++;
+  return PAG.paginateFlatItems(items, reserveH, PAGE_GEO, function (allItems, idx, fit, used, cap, h) {
+    var item = allItems[idx];
+    if (item.type === 'group-header' && fit > 0) {
+      var nextH = allItems[idx + 1] ? PAG.adjustedItemHeight(PAGE_GEO, allItems[idx + 1].h) : 0;
+      if (used + h + nextH > cap) return true;
     }
-
-    // Safety: always admit at least one item to avoid infinite loop
-    if (pageItems.length === 0 && i < items.length) {
-      pageItems.push(items[i++]);
-    }
-
-    pages.push({ isFirst, items: pageItems });
-  }
-
-  // Pass 2: ensure last page has room for grand-total + summary
-  const last = pages[pages.length - 1];
-  const lastCap = availH(last.isFirst, reserveH);
-  let usedLast = 0, fitCount = 0;
-  for (let j = 0; j < last.items.length; j++) {
-    if (usedLast + last.items[j].h > lastCap) break;
-    usedLast += last.items[j].h;
-    fitCount++;
-  }
-  if (fitCount < last.items.length) {
-    const overflow = last.items.splice(fitCount);
-    pages.push({ isFirst: false, items: overflow });
-  }
-
-  return pages;
+    return false;
+  });
 }
 
 /**
