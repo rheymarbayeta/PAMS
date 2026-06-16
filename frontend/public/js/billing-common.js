@@ -208,6 +208,15 @@
     return '—';
   }
 
+  function isShowLastPaymentEnabled(value) {
+    if (value === true || value === 1) return true;
+    if (typeof value === 'string') {
+      var normalized = value.toLowerCase();
+      return normalized === '1' || normalized === 'true' || normalized === 'yes';
+    }
+    return false;
+  }
+
   function buildOrDetailRows(rightsPayment, rentalPayment) {
     return (
       '<tr>' +
@@ -244,7 +253,7 @@
     );
   }
 
-  function buildRightsRentalTableHtml(b, r, rn, compact) {
+  function buildRightsRentalTableHtml(b, r, rn, compact, showLastPayment) {
     var prevMonthIdx = b.billing_month === 1 ? 11 : b.billing_month - 2;
     var prevYear = b.billing_month === 1 ? b.billing_year - 1 : b.billing_year;
     var monthName = MONTHS[b.billing_month - 1];
@@ -319,7 +328,7 @@
       '</span>' +
       '</div></td>' +
       '</tr>' +
-      buildOrDetailRows(rightsPayment, rentalPayment) +
+      (isShowLastPaymentEnabled(showLastPayment) ? buildOrDetailRows(rightsPayment, rentalPayment) : '') +
       '<tr><td colspan="4">&nbsp;</td>' +
       '<td class="rental-col"><div class="rental-line monthly-rental-line">' +
       '<span>Monthly Rental:</span><span class="num">₱ ' +
@@ -372,11 +381,12 @@
    * Render one billing statement as an HTML string.
    * @param {object} data - API response { contract, billing }
    * @param {object} ctx - { headerSettings, treasurerName, treasurerPosition, treasurerSignatureUrl? }
-   * @param {{ compact?: boolean }} options - compact=true for A4 half-page bulk layout
+   * @param {{ compact?: boolean, showLastPayment?: boolean|string }} options - compact=true for A4 half-page bulk layout
    */
   function renderBillingStatement(data, ctx, options) {
     options = options || {};
     var compact = !!options.compact;
+    var showLastPayment = isShowLastPaymentEnabled(options.showLastPayment);
     var c = data.contract;
     var b = data.billing;
     var r = b.rights;
@@ -435,7 +445,7 @@
       '</span>' +
       '</div>' +
       '<div class="bill-note">Note: 20% surcharge for late payments.</div>' +
-      buildRightsRentalTableHtml(b, r, rn, compact) +
+      buildRightsRentalTableHtml(b, r, rn, compact, showLastPayment) +
       buildSignatoryHtml(ctx, compact) +
       '<div class="bill-footer">** This is an electronically generated statement of account.</div>' +
       '</div>';
@@ -443,17 +453,22 @@
     return html;
   }
 
-  function renderBulkPages(statements, ctx) {
+  function renderBulkPages(statements, ctx, options) {
+    options = options || {};
+    var renderOptions = {
+      compact: true,
+      showLastPayment: options.showLastPayment
+    };
     var html = '';
     for (var i = 0; i < statements.length; i += 2) {
       html += '<div class="bulk-page">';
       html +=
         '<div class="statement-wrapper">' +
-        renderBillingStatement(statements[i], ctx, { compact: true }) +
+        renderBillingStatement(statements[i], ctx, renderOptions) +
         '</div>';
       html += '<div class="statement-wrapper">';
       if (i + 1 < statements.length) {
-        html += renderBillingStatement(statements[i + 1], ctx, { compact: true });
+        html += renderBillingStatement(statements[i + 1], ctx, renderOptions);
       }
       html += '</div></div>';
     }
@@ -471,6 +486,7 @@
     loadBillingContext: loadBillingContext,
     fetchBillingData: fetchBillingData,
     paymentDateLabel: paymentDateLabel,
+    isShowLastPaymentEnabled: isShowLastPaymentEnabled,
     getLatestPayment: getLatestPayment,
     buildOrDetailRows: buildOrDetailRows,
     buildSignatoryHtml: buildSignatoryHtml,

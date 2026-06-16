@@ -58,7 +58,9 @@ export default function ViewLeaseContractPage() {
     const token = localStorage.getItem('token') || '';
     const month = now.getMonth() + 1;
     const year  = now.getFullYear();
-    const url = `/billing-statement.html?id=${contractId}&month=${month}&year=${year}&token=${encodeURIComponent(token)}&_v=${Date.now()}`;
+    const showLastPayment = typeof window !== 'undefined' && localStorage.getItem('billing_show_last_payment') === '1';
+    const showLastPaymentParam = showLastPayment ? '&showLastPayment=1' : '';
+    const url = `/billing-statement.html?id=${contractId}&month=${month}&year=${year}${showLastPaymentParam}&token=${encodeURIComponent(token)}&_v=${Date.now()}`;
     setBillingUrl(url);
     setShowBillingModal(true);
   };

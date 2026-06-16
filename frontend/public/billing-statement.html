@@ -43,6 +43,15 @@
   .btn:disabled { background: #6c757d; cursor: not-allowed; }
   .spacer { flex: 1; }
   #loadStatus { font-size: 13px; color: #555; }
+  .controls .option-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #333;
+    user-select: none;
+  }
+  .controls .option-toggle input { margin: 0; cursor: pointer; }
 
   /* ── Page wrapper ── */
   #bill-wrap {
@@ -329,6 +338,10 @@
   <select id="selMonth"></select>
   <label>Year:</label>
   <select id="selYear"></select>
+  <label class="option-toggle">
+    <input type="checkbox" id="chkShowLastPayment" />
+    Show last payment
+  </label>
   <button class="btn btn-reload" id="btnReload">&#8635; Refresh</button>
   <span id="loadStatus"></span>
   <span class="spacer"></span>
@@ -347,11 +360,30 @@ var ID = p.get('id') || '';
 var TOKEN = p.get('token') || localStorage.getItem('token') || '';
 var API = location.origin;
 var billingCtx = null;
+var SHOW_LAST_PAYMENT_KEY = 'billing_show_last_payment';
+
+function getShowLastPaymentSetting() {
+  if (p.has('showLastPayment')) {
+    return BC.isShowLastPaymentEnabled(p.get('showLastPayment'));
+  }
+  return localStorage.getItem(SHOW_LAST_PAYMENT_KEY) === '1';
+}
+
+function saveShowLastPaymentSetting(enabled) {
+  localStorage.setItem(SHOW_LAST_PAYMENT_KEY, enabled ? '1' : '0');
+}
 
 /* Populate selects */
 var now = new Date();
 var selMonth = document.getElementById('selMonth');
 var selYear  = document.getElementById('selYear');
+var chkShowLastPayment = document.getElementById('chkShowLastPayment');
+
+chkShowLastPayment.checked = getShowLastPaymentSetting();
+chkShowLastPayment.addEventListener('change', function() {
+  saveShowLastPaymentSetting(chkShowLastPayment.checked);
+  loadBilling();
+});
 
 BC.MONTHS.forEach(function(m, i) {
   var o = document.createElement('option');
@@ -407,7 +439,9 @@ function loadBilling() {
     .then(function(result) {
       document.getElementById('loading').style.display = 'none';
       document.getElementById('loadStatus').textContent = '';
-      document.getElementById('bill-wrap').innerHTML = BC.renderBillingStatement(result.data, result.ctx);
+      document.getElementById('bill-wrap').innerHTML = BC.renderBillingStatement(result.data, result.ctx, {
+        showLastPayment: chkShowLastPayment.checked
+      });
       document.getElementById('bill-wrap').classList.remove('hidden');
       document.getElementById('btnPrint').disabled = false;
     })

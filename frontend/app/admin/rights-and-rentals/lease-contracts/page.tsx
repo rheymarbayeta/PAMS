@@ -46,6 +46,10 @@ export default function LeaseContractsPage() {
   const [bulkBillingMonth, setBulkBillingMonth] = useState<number>(new Date().getMonth() + 1);
   const [bulkBillingYear, setBulkBillingYear] = useState<number>(new Date().getFullYear());
   const [bulkBillingUrl, setBulkBillingUrl] = useState<string>('');
+  const [bulkShowLastPayment, setBulkShowLastPayment] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('billing_show_last_payment') === '1';
+  });
 
   useEffect(() => {
     setCurrentPage(1);
@@ -128,7 +132,8 @@ export default function LeaseContractsPage() {
 
     const token = localStorage.getItem('token') || '';
     const ids = filteredContracts.map(c => c.id).join(',');
-    const url = `/bulk-billing-statements.html?ids=${ids}&month=${bulkBillingMonth}&year=${bulkBillingYear}&token=${encodeURIComponent(token)}&_v=${Date.now()}`;
+    const showLastPaymentParam = bulkShowLastPayment ? '&showLastPayment=1' : '';
+    const url = `/bulk-billing-statements.html?ids=${ids}&month=${bulkBillingMonth}&year=${bulkBillingYear}${showLastPaymentParam}&token=${encodeURIComponent(token)}&_v=${Date.now()}`;
     setBulkBillingUrl(url);
   };
 
@@ -460,6 +465,19 @@ export default function LeaseContractsPage() {
                       max={2099}
                     />
                   </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bulkShowLastPayment}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setBulkShowLastPayment(checked);
+                        localStorage.setItem('billing_show_last_payment', checked ? '1' : '0');
+                      }}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                    />
+                    Show last payment on statements
+                  </label>
                   <p className="text-xs text-gray-600">Billing statements will be formatted with 2 statements per A4 page</p>
                 </div>
                 <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end">
