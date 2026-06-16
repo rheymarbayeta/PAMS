@@ -167,6 +167,184 @@
     return html;
   }
 
+  function paymentDateLabel(d) {
+    if (!d) return '—';
+    var raw = String(d);
+    var dateOnly = raw.indexOf('T') >= 0 ? raw.split('T')[0] : raw;
+    var parts = dateOnly.split('-');
+    if (parts.length === 3) {
+      var month = MONTHS[parseInt(parts[1], 10) - 1];
+      if (month) {
+        return month.substring(0, 3) + '. ' + parts[2] + ', ' + parts[0];
+      }
+    }
+    var date = new Date(d);
+    if (isNaN(date.getTime())) return '—';
+    var monthName = MONTHS[date.getMonth()].substring(0, 3) + '.';
+    var day = String(date.getDate()).padStart(2, '0');
+    return monthName + ' ' + day + ', ' + date.getFullYear();
+  }
+
+  function getLatestPayment(side) {
+    if (!side) return null;
+    if (side.latest_payment) return side.latest_payment;
+    if (side.late_payment_amount > 0 || side.late_payment_or) {
+      return {
+        or_number: side.late_payment_or || null,
+        payment_date: null,
+        amount_paid: side.late_payment_amount || 0
+      };
+    }
+    return null;
+  }
+
+  function orDetailValue(payment, field) {
+    if (!payment) return '—';
+    if (field === 'or_number') return payment.or_number ? esc(payment.or_number) : '—';
+    if (field === 'payment_date') return payment.payment_date ? paymentDateLabel(payment.payment_date) : '—';
+    if (field === 'amount_paid') {
+      return parseFloat(payment.amount_paid) > 0 ? '₱ ' + fmt(payment.amount_paid) : '—';
+    }
+    return '—';
+  }
+
+  function buildOrDetailRows(rightsPayment, rentalPayment) {
+    return (
+      '<tr>' +
+      '<td colspan="4" class="or-section-head">Latest Payment</td>' +
+      '<td class="rental-col or-section-head">Latest Payment</td>' +
+      '</tr>' +
+      '<tr>' +
+      '<td colspan="2" class="monthly-label">OR Number:</td>' +
+      '<td colspan="2" class="num">' +
+      orDetailValue(rightsPayment, 'or_number') +
+      '</td>' +
+      '<td class="rental-col"><div class="rental-line"><span>OR Number:</span><span class="num">' +
+      orDetailValue(rentalPayment, 'or_number') +
+      '</span></div></td>' +
+      '</tr>' +
+      '<tr>' +
+      '<td colspan="2" class="monthly-label">Date:</td>' +
+      '<td colspan="2" class="num">' +
+      orDetailValue(rightsPayment, 'payment_date') +
+      '</td>' +
+      '<td class="rental-col"><div class="rental-line"><span>Date:</span><span class="num">' +
+      orDetailValue(rentalPayment, 'payment_date') +
+      '</span></div></td>' +
+      '</tr>' +
+      '<tr>' +
+      '<td colspan="2" class="monthly-label">Amount:</td>' +
+      '<td colspan="2" class="num or-amount">' +
+      orDetailValue(rightsPayment, 'amount_paid') +
+      '</td>' +
+      '<td class="rental-col"><div class="rental-line"><span>Amount:</span><span class="num or-amount">' +
+      orDetailValue(rentalPayment, 'amount_paid') +
+      '</span></div></td>' +
+      '</tr>'
+    );
+  }
+
+  function buildRightsRentalTableHtml(b, r, rn, compact) {
+    var prevMonthIdx = b.billing_month === 1 ? 11 : b.billing_month - 2;
+    var prevYear = b.billing_month === 1 ? b.billing_year - 1 : b.billing_year;
+    var monthName = MONTHS[b.billing_month - 1];
+    var prevMonthName = MONTHS[prevMonthIdx];
+    var tableClass = compact ? 'bill-table bill-table-compact' : 'bill-table';
+    var rightsPayment = getLatestPayment(r);
+    var rentalPayment = getLatestPayment(rn);
+
+    var html =
+      '<table class="' +
+      tableClass +
+      '">' +
+      '<colgroup><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:12.5%"><col style="width:50%"></colgroup>' +
+      '<thead>' +
+      '<tr><th colspan="4" class="section-head">RIGHTS</th><th class="section-head">RENTAL</th></tr>' +
+      '<tr><th>PRINCIPAL</th><th>DOWNPAYMENT</th><th>TOTAL<br>AMOUNT PAID</th><th>BALANCE</th><th class="rental-col">&nbsp;</th></tr>' +
+      '</thead>' +
+      '<tbody>' +
+      '<tr>' +
+      '<td class="num">₱ ' +
+      fmt(r.principal) +
+      '</td>' +
+      '<td class="num">₱ ' +
+      fmt(r.downpayment) +
+      '</td>' +
+      '<td class="num">₱ ' +
+      fmt(r.total_paid) +
+      '</td>' +
+      '<td class="num">₱ ' +
+      fmt(r.balance) +
+      '</td>' +
+      '<td class="rental-col"><div class="rental-line">' +
+      '<span>BALANCE (' +
+      prevMonthName.toUpperCase() +
+      ' ' +
+      prevYear +
+      '):</span>' +
+      '<span class="num">' +
+      (rn.previous_balance > 0 ? '₱ ' + fmt(rn.previous_balance) : '-') +
+      '</span>' +
+      '</div></td>' +
+      '</tr>' +
+      '<tr>' +
+      '<td colspan="3" class="monthly-label">Monthly Rights:</td>' +
+      '<td class="num">₱ ' +
+      fmt(r.monthly_amount) +
+      '</td>' +
+      '<td class="rental-col"><div class="rental-line">' +
+      '<span>Surcharge (20%):</span>' +
+      '<span class="num">' +
+      (rn.surcharge > 0 ? '₱ ' + fmt(rn.surcharge) : '-') +
+      '</span>' +
+      '</div></td>' +
+      '</tr>' +
+      '<tr>' +
+      '<td colspan="3" class="dues-label">Dues (' +
+      monthName +
+      ' ' +
+      b.billing_year +
+      '):</td>' +
+      '<td class="num dues-amount">₱ ' +
+      fmt(r.dues) +
+      '</td>' +
+      '<td class="rental-col"><div class="rental-line">' +
+      '<span>This Month (' +
+      monthName +
+      ' ' +
+      b.billing_year +
+      '):</span>' +
+      '<span class="num">₱ ' +
+      fmt(rn.this_month) +
+      '</span>' +
+      '</div></td>' +
+      '</tr>' +
+      buildOrDetailRows(rightsPayment, rentalPayment) +
+      '<tr><td colspan="4">&nbsp;</td>' +
+      '<td class="rental-col"><div class="rental-line monthly-rental-line">' +
+      '<span>Monthly Rental:</span><span class="num">₱ ' +
+      fmt(rn.monthly_rental) +
+      '</span>' +
+      '</div></td>' +
+      '</tr>' +
+      '<tr><td colspan="4">&nbsp;</td>' +
+      '<td class="rental-col"><div class="rental-line">' +
+      '<span>Dues (' +
+      monthName +
+      ' ' +
+      b.billing_year +
+      '):</span>' +
+      '<span class="num dues-amount">₱ ' +
+      fmt(rn.dues) +
+      '</span>' +
+      '</div></td>' +
+      '</tr>' +
+      '</tbody>' +
+      '</table>';
+
+    return html;
+  }
+
   function buildSignatoryHtml(ctx, compact) {
     var sigH = compact ? 28 : 45;
     var html = '<div class="bill-signatory">';
@@ -201,10 +379,8 @@
     var compact = !!options.compact;
     var c = data.contract;
     var b = data.billing;
+    var r = b.rights;
     var rn = b.rental;
-
-    var prevMonthIdx = b.billing_month === 1 ? 11 : b.billing_month - 2;
-    var prevYear = b.billing_month === 1 ? b.billing_year - 1 : b.billing_year;
 
     var units = c.property_units && c.property_units.length > 0 ? c.property_units : [];
     var unitNo = formatUnitStalls(units);
@@ -259,52 +435,7 @@
       '</span>' +
       '</div>' +
       '<div class="bill-note">Note: 20% surcharge for late payments.</div>' +
-      '<div class="bill-section-title">M O N T H L Y &nbsp;&nbsp;R E N T A L S</div>' +
-      '<table class="bill-rental-table">' +
-      '<tr><td class="bill-rental-label">BALANCE (' +
-      MONTHS[prevMonthIdx].toUpperCase() +
-      ' ' +
-      prevYear +
-      '):</td><td class="bill-rental-value">₱ ' +
-      fmt(rn.previous_balance) +
-      '</td></tr>' +
-      '<tr><td class="bill-rental-label">Surcharge (20%)</td><td class="bill-rental-value">₱ ' +
-      fmt(rn.surcharge) +
-      '</td></tr>' +
-      '<tr><td class="bill-rental-label">This Month (' +
-      MONTHS[b.billing_month - 1].toUpperCase() +
-      ' ' +
-      b.billing_year +
-      '):</td><td class="bill-rental-value">₱ ' +
-      fmt(rn.this_month) +
-      '</td></tr>' +
-      '<tr><td class="bill-rental-label"><div style="margin-left:' +
-      (compact ? 8 : 16) +
-      'px;">Less: Late Payment</div></td><td class="bill-rental-value"></td></tr>';
-
-    if (rn.late_payment_or) {
-      html +=
-        '<tr><td class="bill-rental-label"><div style="margin-left:' +
-        (compact ? 16 : 32) +
-        'px;">with OR#' +
-        esc(rn.late_payment_or) +
-        '</div></td><td class="bill-rental-value">₱ ' +
-        fmt(rn.late_payment_amount) +
-        '</td></tr>';
-    }
-
-    html +=
-      '<tr><td class="bill-rental-label">Monthly Rental:</td><td class="bill-rental-value">₱ ' +
-      fmt(rn.monthly_rental) +
-      '</td></tr>' +
-      '<tr><td class="bill-rental-label"><strong>Dues (' +
-      MONTHS[b.billing_month - 1].toUpperCase() +
-      ' ' +
-      b.billing_year +
-      '):</strong></td><td class="bill-rental-value"><strong>₱ ' +
-      fmt(rn.dues) +
-      '</strong></td></tr>' +
-      '</table>' +
+      buildRightsRentalTableHtml(b, r, rn, compact) +
       buildSignatoryHtml(ctx, compact) +
       '<div class="bill-footer">** This is an electronically generated statement of account.</div>' +
       '</div>';
@@ -339,7 +470,11 @@
     formatFloorLevels: formatFloorLevels,
     loadBillingContext: loadBillingContext,
     fetchBillingData: fetchBillingData,
+    paymentDateLabel: paymentDateLabel,
+    getLatestPayment: getLatestPayment,
+    buildOrDetailRows: buildOrDetailRows,
     buildSignatoryHtml: buildSignatoryHtml,
+    buildRightsRentalTableHtml: buildRightsRentalTableHtml,
     renderBillingStatement: renderBillingStatement,
     renderBulkPages: renderBulkPages
   };

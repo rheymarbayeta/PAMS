@@ -1435,18 +1435,63 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
       const previousBalance      = parseFloat((previousMonthBalance + outstandingBalance).toFixed(2));
       const surcharge       = previousBalance > 0 ? parseFloat((previousBalance * 0.20).toFixed(2)) : 0;
 
-      // Current month rental payment (if any – for "Less: Late Payments" line)
-      const [currRentalRow] = await connection.query(`
-        SELECT or_number, COALESCE(amount_paid, 0) AS amount_paid
+      // Payments recorded for the billing period (used for dues calculation)
+      const [currRightsRows] = await connection.query(`
+        SELECT or_number, payment_date, COALESCE(amount_paid, 0) AS amount_paid
+        FROM payment_history_rights
+        WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
+        ORDER BY payment_date DESC, id DESC
+      `, [contract_id, billingMonth, billingYear]);
+
+      const [currRentalRows] = await connection.query(`
+        SELECT or_number, payment_date, COALESCE(amount_paid, 0) AS amount_paid
         FROM payment_history_rental
         WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
-        ORDER BY id DESC LIMIT 1
+        ORDER BY payment_date DESC, id DESC
       `, [contract_id, billingMonth, billingYear]);
-      const latePaymentOR     = currRentalRow.length > 0 ? currRentalRow[0].or_number : null;
-      const latePaymentAmount = currRentalRow.length > 0 ? parseFloat(currRentalRow[0].amount_paid) || 0 : 0;
 
-      const rentalDues = parseFloat((previousBalance + surcharge + monthlyRental - latePaymentAmount).toFixed(2));
-      const rightsDues = monthlyRights;
+      const rightsPaymentAmount = currRightsRows.reduce(
+        (sum, row) => sum + (parseFloat(row.amount_paid) || 0),
+        0
+      );
+      const rentalPaymentAmount = currRentalRows.reduce(
+        (sum, row) => sum + (parseFloat(row.amount_paid) || 0),
+        0
+      );
+
+      // Latest payment record overall (for OR details on the statement)
+      const [latestRightsRows] = await connection.query(`
+        SELECT or_number, payment_date, COALESCE(amount_paid, 0) AS amount_paid
+        FROM payment_history_rights
+        WHERE lease_contract_id = ?
+        ORDER BY payment_date DESC, id DESC
+        LIMIT 1
+      `, [contract_id]);
+
+      const [latestRentalRows] = await connection.query(`
+        SELECT or_number, payment_date, COALESCE(amount_paid, 0) AS amount_paid
+        FROM payment_history_rental
+        WHERE lease_contract_id = ?
+        ORDER BY payment_date DESC, id DESC
+        LIMIT 1
+      `, [contract_id]);
+
+      const latestRightsPayment = latestRightsRows.length > 0 ? latestRightsRows[0] : null;
+      const latestRentalPayment = latestRentalRows.length > 0 ? latestRentalRows[0] : null;
+
+      const formatPaymentRecord = (row) => {
+        if (!row) return null;
+        const amount = parseFloat(row.amount_paid) || 0;
+        if (amount <= 0 && !row.or_number) return null;
+        return {
+          or_number: row.or_number || null,
+          payment_date: row.payment_date || null,
+          amount_paid: amount
+        };
+      };
+
+      const rentalDues = parseFloat((previousBalance + surcharge + monthlyRental - rentalPaymentAmount).toFixed(2));
+      const rightsDues = parseFloat((monthlyRights - rightsPaymentAmount).toFixed(2));
       const totalDue   = parseFloat((rightsDues + rentalDues).toFixed(2));
 
       // Billing statement number: {property_code}-{year}-{mm}-{contractId padded}
@@ -1468,7 +1513,8 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             total_paid: totalRightsPaid,
             balance:    rightsBalance,
             monthly_amount: monthlyRights,
-            dues:       rightsDues
+            dues:       rightsDues,
+            latest_payment: formatPaymentRecord(latestRightsPayment)
           },
           rental: {
             previous_balance:    previousBalance,
@@ -1477,8 +1523,9 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             outstanding_balance_notes: contract.outstanding_balance_notes || null,
             surcharge,
             this_month:          monthlyRental,
-            late_payment_or:     latePaymentOR,
-            late_payment_amount: latePaymentAmount,
+            late_payment_or:     latestRentalPayment ? latestRentalPayment.or_number || null : null,
+            late_payment_amount: rentalPaymentAmount,
+            latest_payment: formatPaymentRecord(latestRentalPayment),
             monthly_rental:      monthlyRental,
             dues:                rentalDues
           },

@@ -185,7 +185,70 @@
     text-transform: uppercase;
   }
 
-  /* Rental details table */
+  /* Combined RIGHTS / RENTAL table */
+  .bill-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+    font-size: 10pt;
+    background: #fff;
+  }
+  .bill-table th,
+  .bill-table td {
+    border: 1px solid #555;
+    padding: 5px 6px;
+    vertical-align: top;
+  }
+  .bill-table .section-head {
+    background: #1e3a8a;
+    color: #fff;
+    text-align: center;
+    font-size: 10pt;
+    font-weight: bold;
+    padding: 4px 6px;
+  }
+  .bill-table thead tr:last-child th {
+    background: #dbeafe;
+    color: #1e3a8a;
+    font-weight: bold;
+    text-align: center;
+    font-size: 8.5pt;
+  }
+  .bill-table .num { text-align: right; font-weight: 600; }
+  .bill-table .monthly-label,
+  .bill-table .dues-label {
+    font-size: 9pt;
+    padding-left: 6px;
+    font-weight: 600;
+  }
+  .bill-table .dues-label { font-style: italic; }
+  .bill-table .dues-amount { font-weight: bold; }
+  .bill-table .rental-col { border-left: 2px solid #555; }
+  .bill-table .rental-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    font-weight: 600;
+  }
+  .bill-table .or-line { font-size: 9pt; color: #555; font-weight: 500; }
+  .bill-table .monthly-rental-line {
+    border-top: 1px solid #aaa;
+    padding-top: 2px;
+  }
+  .bill-table .or-section-head {
+    background: #eff6ff;
+    color: #1e3a8a;
+    text-align: center;
+    font-weight: bold;
+    font-size: 9pt;
+    padding: 4px 6px;
+  }
+  .bill-table .or-amount {
+    font-weight: bold;
+    color: #1e3a8a;
+  }
+
+  /* Rental details table (legacy) */
   .bill-rental-table {
     width: 100%;
     border-collapse: collapse;
