@@ -1393,6 +1393,91 @@ async function getBillingSurchargeSettings(connection) {
   };
 }
 
+function countBillableRentalMonthsThrough(contractEffectiveDate, throughMonth, throughYear) {
+  const effective = new Date(contractEffectiveDate);
+  const effectiveMonth = effective.getMonth() + 1;
+  const effectiveYear = effective.getFullYear();
+
+  if (throughYear < effectiveYear || (throughYear === effectiveYear && throughMonth < effectiveMonth)) {
+    return 0;
+  }
+
+  return (throughYear - effectiveYear) * 12 + (throughMonth - effectiveMonth) + 1;
+}
+
+function isBillableRentalMonth(contractEffectiveDate, month, year) {
+  return countBillableRentalMonthsThrough(contractEffectiveDate, month, year) > 0;
+}
+
+async function getRentalPaymentsTotalThrough(connection, contractId, throughMonth, throughYear) {
+  const [rows] = await connection.query(`
+    SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
+    FROM payment_history_rental
+    WHERE lease_contract_id = ?
+      AND (
+        period_year < ?
+        OR (period_year = ? AND period_month <= ?)
+      )
+  `, [contractId, throughYear, throughYear, throughMonth]);
+
+  return parseFloat(rows[0].total_paid) || 0;
+}
+
+async function getRentalPaymentsForPeriod(connection, contractId, month, year) {
+  const [rows] = await connection.query(`
+    SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
+    FROM payment_history_rental
+    WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
+  `, [contractId, month, year]);
+
+  return parseFloat(rows[0].total_paid) || 0;
+}
+
+function calculateRentalBillingBalances({
+  contractEffectiveDate,
+  monthlyRental,
+  outstandingRentalBalance,
+  billingMonth,
+  billingYear,
+  totalRentalPaidThroughPrev,
+  prevMonthPaid,
+}) {
+  const prevMonth = billingMonth === 1 ? 12 : billingMonth - 1;
+  const prevYear = billingMonth === 1 ? billingYear - 1 : billingYear;
+  const outstandingBalance = parseFloat(outstandingRentalBalance) || 0;
+
+  const billableMonthsThroughPrev = countBillableRentalMonthsThrough(
+    contractEffectiveDate,
+    prevMonth,
+    prevYear
+  );
+  const totalRentalDueThroughPrev = parseFloat(
+    (billableMonthsThroughPrev * monthlyRental + outstandingBalance).toFixed(2)
+  );
+  const previousBalance = Math.max(
+    0,
+    parseFloat((totalRentalDueThroughPrev - totalRentalPaidThroughPrev).toFixed(2))
+  );
+
+  let previousMonthBalance = 0;
+  if (isBillableRentalMonth(contractEffectiveDate, prevMonth, prevYear)) {
+    previousMonthBalance = Math.max(
+      0,
+      parseFloat((monthlyRental - prevMonthPaid).toFixed(2))
+    );
+  }
+
+  return {
+    prevMonth,
+    prevYear,
+    outstandingBalance,
+    previousMonthBalance,
+    previousBalance,
+    totalRentalDueThroughPrev,
+    totalRentalPaidThroughPrev,
+  };
+}
+
 // Get billing statement data for a lease contract
 router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
   try {
@@ -1445,19 +1530,37 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
       const totalRightsPaid = parseFloat(rightsTotalRow[0].total_paid) || 0;
       const rightsBalance   = principal - downpayment - totalRightsPaid;
 
-      // Previous month unpaid rental balance
+      // Previous month unpaid rental balance (not total collected)
       const prevMonth = billingMonth === 1 ? 12 : billingMonth - 1;
       const prevYear  = billingMonth === 1 ? billingYear - 1 : billingYear;
 
-      const [prevBalRow] = await connection.query(`
-        SELECT COALESCE(balance, 0) AS balance
-        FROM payment_history_rental
-        WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
-        ORDER BY id DESC LIMIT 1
-      `, [contract_id, prevMonth, prevYear]);
-      const previousMonthBalance = prevBalRow.length > 0 ? parseFloat(prevBalRow[0].balance) || 0 : 0;
-      const outstandingBalance   = parseFloat(contract.outstanding_rental_balance) || 0;
-      const previousBalance      = parseFloat((previousMonthBalance + outstandingBalance).toFixed(2));
+      const totalRentalPaidThroughPrev = await getRentalPaymentsTotalThrough(
+        connection,
+        contract_id,
+        prevMonth,
+        prevYear
+      );
+      const prevMonthPaid = await getRentalPaymentsForPeriod(
+        connection,
+        contract_id,
+        prevMonth,
+        prevYear
+      );
+      const rentalBalances = calculateRentalBillingBalances({
+        contractEffectiveDate: contract.contract_effective_date,
+        monthlyRental,
+        outstandingRentalBalance: contract.outstanding_rental_balance,
+        billingMonth,
+        billingYear,
+        totalRentalPaidThroughPrev,
+        prevMonthPaid,
+      });
+      const {
+        outstandingBalance,
+        previousMonthBalance,
+        previousBalance,
+        totalRentalDueThroughPrev,
+      } = rentalBalances;
       const surchargeSettings = await getBillingSurchargeSettings(connection);
       const surcharge = surchargeSettings.enabled && previousBalance > 0
         ? parseFloat((previousBalance * surchargeSettings.rate).toFixed(2))
@@ -1553,6 +1656,8 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             previous_month_balance: previousMonthBalance,
             outstanding_balance: outstandingBalance,
             outstanding_balance_notes: contract.outstanding_balance_notes || null,
+            total_rental_due_through_prev: totalRentalDueThroughPrev,
+            total_rental_collected_through_prev: totalRentalPaidThroughPrev,
             surcharge,
             surcharge_enabled: surchargeSettings.enabled,
             surcharge_percentage: surchargeSettings.percentage,
