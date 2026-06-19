@@ -391,7 +391,7 @@ export default function PaymentDetailPage() {
                     </div>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Leave period month/year blank to derive from the payment date. Balances are recalculated after saving.
+                    Multiple payments for the same billing month are allowed. Leave period month/year blank to derive from the payment date. Balances are recalculated after saving.
                   </p>
                   <div className="flex gap-3 pt-2">
                     <button

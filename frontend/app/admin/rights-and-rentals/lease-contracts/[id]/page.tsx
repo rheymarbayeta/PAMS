@@ -55,6 +55,15 @@ export default function ViewLeaseContractPage() {
   const [outstandingNotes, setOutstandingNotes] = useState('');
   const [savingOutstanding, setSavingOutstanding] = useState(false);
 
+  // Property units
+  const [showAddUnitModal, setShowAddUnitModal] = useState(false);
+  const [availableUnits, setAvailableUnits] = useState<
+    { id: number; stall_number: string; floor_level: string | null; unit_description: string | null; status: string }[]
+  >([]);
+  const [unitsToAdd, setUnitsToAdd] = useState<number[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [savingUnits, setSavingUnits] = useState(false);
+
   const openBillingModal = () => {
     const token = localStorage.getItem('token') || '';
     const month = now.getMonth() + 1;
@@ -80,6 +89,76 @@ export default function ViewLeaseContractPage() {
 
   const closeOutstandingModal = () => {
     setShowOutstandingModal(false);
+  };
+
+  const openAddUnitModal = async () => {
+    if (!contract) return;
+    setUnitsToAdd([]);
+    setShowAddUnitModal(true);
+    setUnitsLoading(true);
+    try {
+      const response = await api.get(`/api/rights-and-rentals/properties/${contract.property_id}/units`);
+      const assignedIds = new Set((contract.property_units || []).map((u) => u.id));
+      const available = (response.data || []).filter(
+        (u: { id: number; status: string }) =>
+          u.status === 'available' && !assignedIds.has(u.id)
+      );
+      setAvailableUnits(available);
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || 'Error loading property units', 'Error');
+      setShowAddUnitModal(false);
+    } finally {
+      setUnitsLoading(false);
+    }
+  };
+
+  const closeAddUnitModal = () => {
+    setShowAddUnitModal(false);
+    setUnitsToAdd([]);
+  };
+
+  const handleAddUnits = async () => {
+    if (unitsToAdd.length === 0) {
+      showAlert('Select at least one unit to add', 'Validation Error');
+      return;
+    }
+
+    setSavingUnits(true);
+    try {
+      const response = await api.post(`/api/rights-and-rentals/lease-contracts/${contractId}/units`, {
+        property_unit_ids: unitsToAdd,
+      });
+      setContract((prev) => (prev ? { ...prev, property_units: response.data.property_units } : prev));
+      closeAddUnitModal();
+      showAlert(
+        `Added ${response.data.added_unit_ids?.length || unitsToAdd.length} unit(s) to the contract`,
+        'Success'
+      );
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || 'Error adding units', 'Error');
+    } finally {
+      setSavingUnits(false);
+    }
+  };
+
+  const handleRemoveUnit = (unit: LeaseContract['property_units'][number]) => {
+    showConfirm(
+      `Remove stall ${unit.stall_number} from this contract? The unit will be marked as available.`,
+      'Remove Unit',
+      async () => {
+        try {
+          const response = await api.delete(
+            `/api/rights-and-rentals/lease-contracts/${contractId}/units/${unit.id}`
+          );
+          setContract((prev) => (prev ? { ...prev, property_units: response.data.property_units } : prev));
+          showAlert('Unit removed from contract', 'Success');
+        } catch (error: any) {
+          showAlert(error.response?.data?.error || 'Error removing unit', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
   };
 
   const handleSaveOutstandingBalance = async () => {
@@ -293,23 +372,56 @@ export default function ViewLeaseContractPage() {
                   <p className="text-sm text-gray-600">Address</p>
                   <p className="text-lg font-medium text-gray-900">{contract.property_address}</p>
                 </div>
-                {contract.property_units && contract.property_units.length > 0 && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-600 mb-2">Units / Stalls</p>
+                <div className="md:col-span-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-gray-600">Units / Stalls</p>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={openAddUnitModal}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Unit
+                      </button>
+                    )}
+                  </div>
+                  {contract.property_units && contract.property_units.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {contract.property_units.map(unit => (
                         <span
                           key={unit.id}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-800"
                         >
-                          {unit.stall_number}
-                          {unit.floor_level ? ` (${unit.floor_level})` : ''}
-                          {unit.unit_description ? ` – ${unit.unit_description}` : ''}
+                          <Link
+                            href={`/admin/rights-and-rentals/property/${contract.property_id}/units/${unit.id}`}
+                            className="hover:text-indigo-900"
+                          >
+                            {unit.stall_number}
+                            {unit.floor_level ? ` (${unit.floor_level})` : ''}
+                            {unit.unit_description ? ` – ${unit.unit_description}` : ''}
+                          </Link>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveUnit(unit)}
+                              className="ml-1 p-0.5 text-indigo-400 hover:text-red-600 rounded"
+                              title="Remove unit"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
                         </span>
                       ))}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-sm text-gray-500">No units assigned yet.</p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -607,6 +719,77 @@ export default function ViewLeaseContractPage() {
                 className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-50"
               >
                 {savingOutstanding ? 'Saving...' : 'Save Balance'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Property Unit Modal */}
+      {showAddUnitModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Add Property Unit</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Select available units to add to this contract. Existing units will be kept.
+              </p>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              {unitsLoading ? (
+                <p className="text-sm text-gray-500 text-center py-8">Loading available units...</p>
+              ) : availableUnits.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">
+                  No available units for this property. All units may already be assigned.
+                </p>
+              ) : (
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {availableUnits.map((unit) => {
+                    const isSelected = unitsToAdd.includes(unit.id);
+                    return (
+                      <label
+                        key={unit.id}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
+                          isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            setUnitsToAdd((prev) =>
+                              prev.includes(unit.id)
+                                ? prev.filter((id) => id !== unit.id)
+                                : [...prev, unit.id]
+                            );
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-800">
+                          <span className="font-medium">{unit.stall_number}</span>
+                          {unit.floor_level ? ` (${unit.floor_level})` : ''}
+                          {unit.unit_description ? ` – ${unit.unit_description}` : ''}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={closeAddUnitModal}
+                disabled={savingUnits}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddUnits}
+                disabled={savingUnits || unitsToAdd.length === 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {savingUnits ? 'Adding...' : `Add ${unitsToAdd.length || ''} Unit${unitsToAdd.length === 1 ? '' : 's'}`}
               </button>
             </div>
           </div>

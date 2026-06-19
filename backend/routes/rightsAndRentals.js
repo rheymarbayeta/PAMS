@@ -751,14 +751,7 @@ router.get('/lease-contracts/:id', async (req, res) => {
       // Fetch associated property units from junction table
       let property_units = [];
       try {
-        const [unitRows] = await connection.query(`
-          SELECT pu.id, pu.stall_number, pu.floor_level, pu.unit_description, pu.area_sqm, pu.status
-          FROM lease_contract_units lcu
-          JOIN property_units pu ON lcu.property_unit_id = pu.id
-          WHERE lcu.lease_contract_id = ?
-          ORDER BY pu.stall_number ASC
-        `, [id]);
-        property_units = unitRows;
+        property_units = await fetchContractPropertyUnits(connection, id, contract[0].property_unit_id);
       } catch (e) {
         // Junction table may not exist yet during migration
       }
@@ -1043,6 +1036,187 @@ router.put('/lease-contracts/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Update lease contract error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add property unit(s) to a lease contract (append — does not remove existing)
+router.post('/lease-contracts/:id/units', async (req, res) => {
+  try {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
+      const { id } = req.params;
+      const { property_unit_ids } = req.body;
+
+      const unitIds = Array.isArray(property_unit_ids)
+        ? [...new Set(property_unit_ids.map(Number).filter(Boolean))]
+        : [];
+
+      if (unitIds.length === 0) {
+        return res.status(400).json({ error: 'At least one property unit is required' });
+      }
+
+      const connection = await pool.getConnection();
+      try {
+        const [contracts] = await connection.query(
+          'SELECT id, property_id, lessee_id, status, property_unit_id FROM lease_contracts WHERE id = ?',
+          [id]
+        );
+        if (!contracts.length) {
+          return res.status(404).json({ error: 'Lease contract not found' });
+        }
+        const contract = contracts[0];
+
+        await ensureContractUnitsFromLegacy(connection, id, contract.property_unit_id);
+
+        const [units] = await connection.query(
+          'SELECT id, property_id FROM property_units WHERE id IN (?)',
+          [unitIds]
+        );
+        if (units.length !== unitIds.length) {
+          return res.status(400).json({ error: 'One or more property units were not found' });
+        }
+        const invalidProperty = units.find((u) => u.property_id !== contract.property_id);
+        if (invalidProperty) {
+          return res.status(400).json({ error: 'All units must belong to the contract property' });
+        }
+
+        const [existingRows] = await connection.query(
+          'SELECT property_unit_id FROM lease_contract_units WHERE lease_contract_id = ?',
+          [id]
+        );
+        const existingIds = new Set(existingRows.map((r) => r.property_unit_id));
+        if (contract.property_unit_id) {
+          existingIds.add(contract.property_unit_id);
+        }
+
+        const toAdd = unitIds.filter((unitId) => !existingIds.has(unitId));
+        if (toAdd.length === 0) {
+          return res.status(409).json({ error: 'All selected units are already on this contract' });
+        }
+
+        await connection.beginTransaction();
+
+        for (const unitId of toAdd) {
+          await connection.query(
+            'INSERT IGNORE INTO lease_contract_units (lease_contract_id, property_unit_id) VALUES (?, ?)',
+            [id, unitId]
+          );
+          if (contract.status === 'active') {
+            await connection.query(
+              'UPDATE property_units SET status = ?, lessee_id = ? WHERE id = ?',
+              ['occupied', contract.lessee_id, unitId]
+            );
+          }
+        }
+
+        if (!contract.property_unit_id) {
+          await connection.query(
+            'UPDATE lease_contracts SET property_unit_id = ? WHERE id = ?',
+            [toAdd[0], id]
+          );
+        }
+
+        await logAction(
+          req.user.user_id,
+          'UPDATE',
+          'lease_contracts',
+          id,
+          `Added unit(s) ${toAdd.join(', ')} to lease contract`
+        );
+
+        await connection.commit();
+
+        const unitRows = await fetchContractPropertyUnits(connection, id, contract.property_unit_id);
+
+        res.json({ property_units: unitRows, added_unit_ids: toAdd });
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Add lease contract units error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Remove a property unit from a lease contract
+router.delete('/lease-contracts/:id/units/:unitId', async (req, res) => {
+  try {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
+      const { id, unitId } = req.params;
+      const parsedUnitId = Number(unitId);
+
+      const connection = await pool.getConnection();
+      try {
+        const [contracts] = await connection.query(
+          'SELECT id, lessee_id, status, property_unit_id FROM lease_contracts WHERE id = ?',
+          [id]
+        );
+        if (!contracts.length) {
+          return res.status(404).json({ error: 'Lease contract not found' });
+        }
+        const contract = contracts[0];
+
+        const [linked] = await connection.query(
+          'SELECT property_unit_id FROM lease_contract_units WHERE lease_contract_id = ? AND property_unit_id = ?',
+          [id, parsedUnitId]
+        );
+        const isLegacyOnly =
+          linked.length === 0 && Number(contract.property_unit_id) === parsedUnitId;
+
+        if (linked.length === 0 && !isLegacyOnly) {
+          return res.status(404).json({ error: 'Unit is not assigned to this contract' });
+        }
+
+        await connection.beginTransaction();
+
+        if (linked.length > 0) {
+          await connection.query(
+            'DELETE FROM lease_contract_units WHERE lease_contract_id = ? AND property_unit_id = ?',
+            [id, parsedUnitId]
+          );
+        }
+
+        await connection.query(
+          'UPDATE property_units SET status = ?, lessee_id = NULL WHERE id = ?',
+          ['available', parsedUnitId]
+        );
+
+        const [remaining] = await connection.query(
+          'SELECT property_unit_id FROM lease_contract_units WHERE lease_contract_id = ? ORDER BY property_unit_id ASC',
+          [id]
+        );
+        const nextPrimary = remaining.length > 0 ? remaining[0].property_unit_id : null;
+        await connection.query(
+          'UPDATE lease_contracts SET property_unit_id = ? WHERE id = ?',
+          [nextPrimary, id]
+        );
+
+        await logAction(
+          req.user.user_id,
+          'UPDATE',
+          'lease_contracts',
+          id,
+          `Removed unit ${parsedUnitId} from lease contract`
+        );
+
+        await connection.commit();
+
+        const unitRows = await fetchContractPropertyUnits(connection, id);
+
+        res.json({ property_units: unitRows });
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Remove lease contract unit error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1443,6 +1617,28 @@ async function fetchPaymentWithContext(connection, type, id) {
   return rows.length > 0 ? rows[0] : null;
 }
 
+async function ensureContractUnitsFromLegacy(connection, contractId, propertyUnitId) {
+  if (!propertyUnitId) return;
+  await connection.query(
+    'INSERT IGNORE INTO lease_contract_units (lease_contract_id, property_unit_id) VALUES (?, ?)',
+    [contractId, propertyUnitId]
+  );
+}
+
+async function fetchContractPropertyUnits(connection, contractId, legacyPropertyUnitId = null) {
+  if (legacyPropertyUnitId) {
+    await ensureContractUnitsFromLegacy(connection, contractId, legacyPropertyUnitId);
+  }
+  const [unitRows] = await connection.query(`
+    SELECT pu.id, pu.stall_number, pu.floor_level, pu.unit_description, pu.area_sqm, pu.status
+    FROM lease_contract_units lcu
+    JOIN property_units pu ON lcu.property_unit_id = pu.id
+    WHERE lcu.lease_contract_id = ?
+    ORDER BY pu.stall_number ASC
+  `, [contractId]);
+  return unitRows;
+}
+
 // Get a single payment record with contract context
 router.get('/payments/:type/:id', async (req, res) => {
   try {
@@ -1518,18 +1714,6 @@ router.patch('/payments/:type/:id', async (req, res) => {
         }
 
         await connection.beginTransaction();
-
-        const [duplicateRows] = await connection.query(
-          `SELECT id FROM ${table}
-           WHERE lease_contract_id = ? AND period_month = ? AND period_year = ? AND id <> ?`,
-          [existing.lease_contract_id, nextPeriodMonth, nextPeriodYear, id]
-        );
-        if (duplicateRows.length > 0) {
-          await connection.rollback();
-          return res.status(409).json({
-            error: `Another ${type} payment already exists for ${nextPeriodMonth}/${nextPeriodYear} on this contract`,
-          });
-        }
 
         await connection.query(
           `UPDATE ${table}
@@ -1976,56 +2160,56 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
         const contract = leaseContract[0];
         const initialBalance = (contract.principal_amount || 0) - (contract.downpayment || 0);
 
-        // Get sum of all previous rights payments
-        const [rightsPaid] = await connection.query(`
-          SELECT COALESCE(SUM(amount_paid), 0) as total_paid
-          FROM payment_history_rights
-          WHERE lease_contract_id = ?
-        `, [contract_id]);
-
-        const totalRightsPaid = parseFloat(rightsPaid[0].total_paid) || 0;
-        // Rights balance = initial minus all rights payments deducted
-        let currentRightsBalance = initialBalance - totalRightsPaid;
-
-        // Get sum of all previous rental payments
-        const [rentalPaid] = await connection.query(`
-          SELECT COALESCE(SUM(amount_paid), 0) as total_paid
-          FROM payment_history_rental
-          WHERE lease_contract_id = ?
-        `, [contract_id]);
-
-        const totalRentalPaid = parseFloat(rentalPaid[0].total_paid) || 0;
-        // Rental balance = cumulative total of all rental payments collected
-        let currentRentalBalance = totalRentalPaid;
+        let recordedRights = false;
+        let recordedRental = false;
 
         // Record rights payment if amount provided
         if (rights_amount && parseFloat(rights_amount) > 0) {
           const rightsPaymentAmount = parseFloat(rights_amount);
-          const newRightsBalance = currentRightsBalance - rightsPaymentAmount;
 
           await connection.query(`
             INSERT INTO payment_history_rights 
             (lease_contract_id, period_month, period_year, or_number, payment_date, amount_paid, collectible, delinquent, balance)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [contract_id, period_month, period_year, or_number || null, payment_date, rightsPaymentAmount, rightsPaymentAmount, 0, newRightsBalance]);
+          `, [contract_id, period_month, period_year, or_number || null, payment_date, rightsPaymentAmount, rightsPaymentAmount, 0, 0]);
 
-          currentRightsBalance = newRightsBalance;
+          recordedRights = true;
         }
 
         // Record rental payment if amount provided
         if (rental_amount && parseFloat(rental_amount) > 0) {
           const rentalPaymentAmount = parseFloat(rental_amount);
-          // Rental balance is cumulative: add this payment to the running total
-          const newRentalBalance = currentRentalBalance + rentalPaymentAmount;
 
           await connection.query(`
             INSERT INTO payment_history_rental 
             (lease_contract_id, period_month, period_year, or_number, payment_date, amount_paid, collectible, delinquent, balance)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [contract_id, period_month, period_year, or_number || null, payment_date, rentalPaymentAmount, rentalPaymentAmount, 0, newRentalBalance]);
+          `, [contract_id, period_month, period_year, or_number || null, payment_date, rentalPaymentAmount, rentalPaymentAmount, 0, 0]);
 
-          currentRentalBalance = newRentalBalance;
+          recordedRental = true;
         }
+
+        if (recordedRights) {
+          await recalculateRightsPaymentBalances(connection, contract_id);
+        }
+        if (recordedRental) {
+          await recalculateRentalPaymentBalances(connection, contract_id);
+        }
+
+        const [rightsPaid] = await connection.query(`
+          SELECT COALESCE(SUM(amount_paid), 0) as total_paid
+          FROM payment_history_rights
+          WHERE lease_contract_id = ?
+        `, [contract_id]);
+        const totalRightsPaid = parseFloat(rightsPaid[0].total_paid) || 0;
+        const currentRightsBalance = initialBalance - totalRightsPaid;
+
+        const [rentalPaid] = await connection.query(`
+          SELECT COALESCE(SUM(amount_paid), 0) as total_paid
+          FROM payment_history_rental
+          WHERE lease_contract_id = ?
+        `, [contract_id]);
+        const currentRentalBalance = parseFloat(rentalPaid[0].total_paid) || 0;
 
         // Log the action
         await logAction(req.user.user_id, 'CREATE', 'payments', contract_id, 

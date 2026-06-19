@@ -336,6 +336,9 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                         Cancel
                       </button>
                     </div>
+                    <p className="text-xs text-gray-500">
+                      You can record multiple payments for the same billing month (e.g. partial payments).
+                    </p>
                   </form>
                 </div>
               )}

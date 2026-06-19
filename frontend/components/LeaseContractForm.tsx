@@ -99,13 +99,13 @@ export default function LeaseContractForm({
     }
   }, [initialData]);
 
-  // Fetch property units when property changes
+  // Fetch property units when property changes (do not clear selected units here —
+  // that wiped existing selections on edit before initialData finished loading)
   useEffect(() => {
     if (formData.property_id) {
       fetchPropertyUnits(formData.property_id);
     } else {
       setPropertyUnits([]);
-      setSelectedUnitIds([]);
     }
   }, [formData.property_id]);
 
@@ -140,6 +140,9 @@ export default function LeaseContractForm({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === 'property_id') {
+      setSelectedUnitIds([]);
+    }
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -296,6 +299,9 @@ export default function LeaseContractForm({
                 </span>
               )}
             </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Select all units for this contract. Existing selections are kept when adding more.
+            </p>
             {unitsLoading ? (
               <div className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
                 Loading units...
