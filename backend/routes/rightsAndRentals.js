@@ -2063,6 +2063,20 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
 
 // ========== REPORTS ==========
 
+const NO_FLOOR_LABEL = 'No Floor Assigned';
+
+function applyFloorLevelFilter(whereParts, params, floorLevel) {
+  const label = (floorLevel || '').trim();
+  if (!label) return;
+  whereParts.push(`EXISTS (
+    SELECT 1 FROM lease_contract_units lcu_fl
+    JOIN property_units pu_fl ON lcu_fl.property_unit_id = pu_fl.id
+    WHERE lcu_fl.lease_contract_id = lc.id
+    AND COALESCE(NULLIF(TRIM(pu_fl.floor_level), ''), ?) = ?
+  )`);
+  params.push(NO_FLOOR_LABEL, label);
+}
+
 router.get('/reports', async (req, res) => {
   try {
     authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
@@ -2073,6 +2087,7 @@ router.get('/reports', async (req, res) => {
       const dateFrom = req.query.dateFrom || '';
       const dateTo = req.query.dateTo || '';
       const search = (req.query.search || '').trim().toLowerCase();
+      const floorLevel = (req.query.floorLevel || '').trim();
 
       const validTypes = ['contracts', 'payments', 'outstanding'];
       if (!validTypes.includes(reportType)) {
@@ -2081,7 +2096,7 @@ router.get('/reports', async (req, res) => {
 
       const connection = await pool.getConnection();
       try {
-        const filters = { reportType, propertyId, status, paymentType, dateFrom, dateTo, search };
+        const filters = { reportType, propertyId, status, paymentType, dateFrom, dateTo, search, floorLevel };
 
         if (reportType === 'payments') {
           const rightsWhere = ['1=1'];
@@ -2120,6 +2135,8 @@ router.get('/reports', async (req, res) => {
             rightsParams.push(like, like, like);
             rentalParams.push(like, like, like);
           }
+          applyFloorLevelFilter(rightsWhere, rightsParams, floorLevel);
+          applyFloorLevelFilter(rentalWhere, rentalParams, floorLevel);
 
           let paymentRows = [];
 
@@ -2224,6 +2241,7 @@ router.get('/reports', async (req, res) => {
           contractWhere.push('(LOWER(l.name) LIKE ? OR LOWER(p.property_name) LIKE ? OR LOWER(p.property_code) LIKE ?)');
           contractParams.push(like, like, like);
         }
+        applyFloorLevelFilter(contractWhere, contractParams, floorLevel);
 
         const [contracts] = await connection.query(`
           SELECT

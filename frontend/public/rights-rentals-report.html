@@ -146,6 +146,7 @@
   var dateFrom = urlParams.get('dateFrom') || '';
   var dateTo = urlParams.get('dateTo') || '';
   var search = urlParams.get('search') || '';
+  var floorLevel = urlParams.get('floorLevel') || '';
   var authToken = urlParams.get('token') || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || '';
   var apiBaseUrl = window.location.origin;
 
@@ -194,6 +195,7 @@
       if (dateFrom) qs.set('dateFrom', dateFrom);
       if (dateTo) qs.set('dateTo', dateTo);
       if (search) qs.set('search', search);
+      if (floorLevel) qs.set('floorLevel', floorLevel);
 
       var res = await fetch(apiBaseUrl + '/api/rights-and-rentals/reports?' + qs.toString(), {
         method: 'GET', headers: headers, credentials: 'include'

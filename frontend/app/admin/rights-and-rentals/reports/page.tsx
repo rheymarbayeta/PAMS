@@ -47,6 +47,11 @@ const REPORT_TYPES: { value: ReportType; label: string; description: string }[] 
 ];
 
 const CONTRACT_STATUSES = ['active', 'terminated', 'pending', 'expired'];
+const NO_FLOOR_LABEL = 'No Floor Assigned';
+
+function getFloorLabel(floorLevel: string | null | undefined): string {
+  return floorLevel || NO_FLOOR_LABEL;
+}
 
 export default function RightsRentalsReportsPage() {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -59,6 +64,8 @@ export default function RightsRentalsReportsPage() {
 
   const [reportType, setReportType] = useState<ReportType>('contracts');
   const [propertyId, setPropertyId] = useState('');
+  const [floorLevel, setFloorLevel] = useState('');
+  const [floorLevels, setFloorLevels] = useState<string[]>([]);
   const [status, setStatus] = useState('');
   const [paymentType, setPaymentType] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
@@ -70,8 +77,17 @@ export default function RightsRentalsReportsPage() {
   }, []);
 
   useEffect(() => {
+    if (!propertyId) {
+      setFloorLevels([]);
+      setFloorLevel('');
+      return;
+    }
+    fetchFloorLevelsForProperty(parseInt(propertyId, 10));
+  }, [propertyId]);
+
+  useEffect(() => {
     fetchSummaryPreview();
-  }, [reportType, propertyId, status, paymentType, dateFrom, dateTo, search]);
+  }, [reportType, propertyId, floorLevel, status, paymentType, dateFrom, dateTo, search]);
 
   const fetchProperties = async () => {
     try {
@@ -84,9 +100,27 @@ export default function RightsRentalsReportsPage() {
     }
   };
 
+  const fetchFloorLevelsForProperty = async (id: number) => {
+    try {
+      const response = await api.get(`/api/rights-and-rentals/properties/${id}/units`);
+      const floors = new Set<string>();
+      (response.data || []).forEach((unit: { floor_level: string | null }) => {
+        floors.add(getFloorLabel(unit.floor_level));
+      });
+      const sorted = Array.from(floors).sort((a, b) => a.localeCompare(b));
+      setFloorLevels(sorted);
+      setFloorLevel((prev) => (prev && sorted.includes(prev) ? prev : ''));
+    } catch (err) {
+      console.error('Error fetching floor levels:', err);
+      setFloorLevels([]);
+      setFloorLevel('');
+    }
+  };
+
   const buildParams = () => {
     const params: Record<string, string> = { reportType };
     if (propertyId) params.propertyId = propertyId;
+    if (floorLevel) params.floorLevel = floorLevel;
     if (status) params.status = status;
     if (reportType === 'payments' && paymentType) params.paymentType = paymentType;
     if (dateFrom) params.dateFrom = dateFrom;
@@ -122,6 +156,7 @@ export default function RightsRentalsReportsPage() {
 
   const clearFilters = () => {
     setPropertyId('');
+    setFloorLevel('');
     setStatus('');
     setPaymentType('all');
     setDateFrom('');
@@ -129,7 +164,7 @@ export default function RightsRentalsReportsPage() {
     setSearch('');
   };
 
-  const hasActiveFilters = propertyId || status || paymentType !== 'all' || dateFrom || dateTo || search.trim();
+  const hasActiveFilters = propertyId || floorLevel || status || paymentType !== 'all' || dateFrom || dateTo || search.trim();
 
   const formatCurrency = (n?: number) =>
     Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -274,7 +309,10 @@ export default function RightsRentalsReportsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Property</label>
                     <select
                       value={propertyId}
-                      onChange={(e) => setPropertyId(e.target.value)}
+                      onChange={(e) => {
+                        setPropertyId(e.target.value);
+                        setFloorLevel('');
+                      }}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
                     >
                       <option value="">All properties</option>
@@ -282,6 +320,29 @@ export default function RightsRentalsReportsPage() {
                         <option key={p.id} value={p.id}>
                           {p.property_name}
                           {p.property_code ? ` (${p.property_code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Floor level</label>
+                    <select
+                      value={floorLevel}
+                      onChange={(e) => setFloorLevel(e.target.value)}
+                      disabled={!propertyId || floorLevels.length === 0}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="">
+                        {!propertyId
+                          ? 'Select a property first'
+                          : floorLevels.length === 0
+                          ? 'No floors found'
+                          : 'All floors'}
+                      </option>
+                      {floorLevels.map((floor) => (
+                        <option key={floor} value={floor}>
+                          {floor}
                         </option>
                       ))}
                     </select>

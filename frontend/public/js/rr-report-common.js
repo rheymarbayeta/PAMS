@@ -109,6 +109,7 @@
     if (filters.propertyName) parts.push('Property: ' + filters.propertyName);
     if (filters.status) parts.push('Status: ' + filters.status);
     if (filters.paymentType && filters.paymentType !== 'all') parts.push('Payment: ' + filters.paymentType);
+    if (filters.floorLevel) parts.push('Floor: ' + filters.floorLevel);
     if (filters.dateFrom) parts.push('From: ' + filters.dateFrom);
     if (filters.dateTo) parts.push('To: ' + filters.dateTo);
     if (filters.search) parts.push('Search: "' + filters.search + '"');
