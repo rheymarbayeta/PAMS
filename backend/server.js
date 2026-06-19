@@ -51,15 +51,35 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     const allowedOrigins = [
       process.env.FRONTEND_URL || 'http://localhost:3000',
       'http://localhost:6070',
       'http://127.0.0.1:6070',
       'http://192.168.11.17:6070',
+      // Expo dev server (web + Metro)
+      'http://localhost:8081',
+      'http://localhost:8082',
+      'http://127.0.0.1:8081',
+      'http://127.0.0.1:8082',
+      'http://192.168.11.17:8081',
+      'http://192.168.11.17:8082',
     ];
-    
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+
+    if (process.env.CORS_ALLOWED_ORIGINS) {
+      allowedOrigins.push(
+        ...process.env.CORS_ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
+      );
+    }
+
+    const expoDevOrigin =
+      /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):(8081|8082|19006)$/;
+
+    if (
+      allowedOrigins.includes(origin) ||
+      expoDevOrigin.test(origin) ||
+      process.env.NODE_ENV === 'development'
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -67,7 +87,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 app.use(cors(corsOptions));

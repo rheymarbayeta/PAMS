@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { submitReading } from '../src/api/waterworks';
+import { submitReading } from '../../src/api/waterworks';
 
 export default function ReadingScreen() {
   const { accountId, number, last } = useLocalSearchParams<{ accountId: string; number?: string; last?: string }>();

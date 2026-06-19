@@ -3,8 +3,8 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, RefreshControl, Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { getSupplyAccounts } from '../src/api/waterworks';
-import type { ConsumerAccount } from '../src/types/waterworks';
+import { getSupplyAccounts } from '../../src/api/waterworks';
+import type { ConsumerAccount } from '../../src/types/waterworks';
 
 export default function AccountsScreen() {
   const { supplyId, name } = useLocalSearchParams<{ supplyId: string; name?: string }>();

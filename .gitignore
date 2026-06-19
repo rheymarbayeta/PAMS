@@ -1,6 +1,8 @@
 clearnode_modules/
 frontend/node_modules/
 backend/nodes_modules/
+mobile/node_modules/
+mobile/waterworks-meter-reader/node_modules
 .next/
 build/
 dist/

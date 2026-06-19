@@ -1351,7 +1351,7 @@ router.get('/mobile/supplies/:id/accounts', async (req, res) => {
        ${where}
        ORDER BY a.account_number ASC
        LIMIT ${offset}, ${limit}`,
-      [...params, periodMonth, periodYear]
+      [periodMonth, periodYear, ...params]
     );
 
     res.json({
