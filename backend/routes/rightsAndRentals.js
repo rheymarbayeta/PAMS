@@ -1368,6 +1368,214 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
   }
 });
 
+function getPaymentTableName(type) {
+  return type === 'rights' ? 'payment_history_rights' : 'payment_history_rental';
+}
+
+async function recalculateRightsPaymentBalances(connection, contractId) {
+  const [contract] = await connection.query(
+    'SELECT principal_amount, downpayment FROM lease_contracts WHERE id = ?',
+    [contractId]
+  );
+  if (!contract.length) return;
+
+  const initialBalance =
+    (parseFloat(contract[0].principal_amount) || 0) - (parseFloat(contract[0].downpayment) || 0);
+
+  const [payments] = await connection.query(
+    `SELECT id, amount_paid FROM payment_history_rights
+     WHERE lease_contract_id = ? ORDER BY payment_date ASC, id ASC`,
+    [contractId]
+  );
+
+  let runningBalance = initialBalance;
+  for (const payment of payments) {
+    runningBalance -= parseFloat(payment.amount_paid) || 0;
+    await connection.query(
+      'UPDATE payment_history_rights SET balance = ?, collectible = ? WHERE id = ?',
+      [runningBalance, parseFloat(payment.amount_paid) || 0, payment.id]
+    );
+  }
+}
+
+async function recalculateRentalPaymentBalances(connection, contractId) {
+  const [payments] = await connection.query(
+    `SELECT id, amount_paid FROM payment_history_rental
+     WHERE lease_contract_id = ? ORDER BY payment_date ASC, id ASC`,
+    [contractId]
+  );
+
+  let runningTotal = 0;
+  for (const payment of payments) {
+    runningTotal += parseFloat(payment.amount_paid) || 0;
+    await connection.query(
+      'UPDATE payment_history_rental SET balance = ?, collectible = ? WHERE id = ?',
+      [runningTotal, parseFloat(payment.amount_paid) || 0, payment.id]
+    );
+  }
+}
+
+async function fetchPaymentWithContext(connection, type, id) {
+  const table = getPaymentTableName(type);
+  const [rows] = await connection.query(`
+    SELECT
+      ph.*,
+      '${type}' AS payment_type,
+      lc.id AS lease_contract_id,
+      lc.contract_effective_date,
+      lc.status AS contract_status,
+      lc.monthly_rights_amount,
+      lc.monthly_rental_amount,
+      l.id AS lessee_id,
+      l.name AS lessee_name,
+      l.contact_number AS lessee_contact,
+      l.email AS lessee_email,
+      p.id AS property_id,
+      p.property_name,
+      p.property_code
+    FROM ${table} ph
+    JOIN lease_contracts lc ON ph.lease_contract_id = lc.id
+    JOIN lessees l ON lc.lessee_id = l.id
+    JOIN properties p ON lc.property_id = p.id
+    WHERE ph.id = ?
+  `, [id]);
+
+  return rows.length > 0 ? rows[0] : null;
+}
+
+// Get a single payment record with contract context
+router.get('/payments/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    if (type !== 'rights' && type !== 'rental') {
+      return res.status(400).json({ error: 'Invalid payment type. Use rights or rental.' });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      const payment = await fetchPaymentWithContext(connection, type, id);
+      if (!payment) {
+        return res.status(404).json({ error: 'Payment record not found' });
+      }
+      res.json(payment);
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get payment record error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update a payment record
+router.patch('/payments/:type/:id', async (req, res) => {
+  try {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
+      const { type, id } = req.params;
+      if (type !== 'rights' && type !== 'rental') {
+        return res.status(400).json({ error: 'Invalid payment type. Use rights or rental.' });
+      }
+
+      const { payment_date, or_number, amount_paid, period_month, period_year } = req.body;
+      const table = getPaymentTableName(type);
+
+      const connection = await pool.getConnection();
+      try {
+        const existing = await fetchPaymentWithContext(connection, type, id);
+        if (!existing) {
+          return res.status(404).json({ error: 'Payment record not found' });
+        }
+
+        const nextPaymentDate = payment_date ?? existing.payment_date;
+        if (!nextPaymentDate) {
+          return res.status(400).json({ error: 'Payment date is required' });
+        }
+
+        const parsedAmount =
+          amount_paid !== undefined && amount_paid !== null && amount_paid !== ''
+            ? parseFloat(amount_paid)
+            : parseFloat(existing.amount_paid) || 0;
+
+        if (Number.isNaN(parsedAmount) || parsedAmount < 0) {
+          return res.status(400).json({ error: 'Amount paid must be a non-negative number' });
+        }
+
+        const paymentDateObj = new Date(nextPaymentDate);
+        const nextPeriodMonth =
+          period_month !== undefined && period_month !== null && period_month !== ''
+            ? parseInt(period_month, 10)
+            : paymentDateObj.getMonth() + 1;
+        const nextPeriodYear =
+          period_year !== undefined && period_year !== null && period_year !== ''
+            ? parseInt(period_year, 10)
+            : paymentDateObj.getFullYear();
+
+        if (!nextPeriodMonth || nextPeriodMonth < 1 || nextPeriodMonth > 12) {
+          return res.status(400).json({ error: 'Period month must be between 1 and 12' });
+        }
+        if (!nextPeriodYear || nextPeriodYear < 2000) {
+          return res.status(400).json({ error: 'Period year is invalid' });
+        }
+
+        await connection.beginTransaction();
+
+        const [duplicateRows] = await connection.query(
+          `SELECT id FROM ${table}
+           WHERE lease_contract_id = ? AND period_month = ? AND period_year = ? AND id <> ?`,
+          [existing.lease_contract_id, nextPeriodMonth, nextPeriodYear, id]
+        );
+        if (duplicateRows.length > 0) {
+          await connection.rollback();
+          return res.status(409).json({
+            error: `Another ${type} payment already exists for ${nextPeriodMonth}/${nextPeriodYear} on this contract`,
+          });
+        }
+
+        await connection.query(
+          `UPDATE ${table}
+           SET payment_date = ?, or_number = ?, amount_paid = ?, period_month = ?, period_year = ?
+           WHERE id = ?`,
+          [
+            nextPaymentDate,
+            or_number !== undefined ? or_number || null : existing.or_number,
+            parsedAmount,
+            nextPeriodMonth,
+            nextPeriodYear,
+            id,
+          ]
+        );
+
+        if (type === 'rights') {
+          await recalculateRightsPaymentBalances(connection, existing.lease_contract_id);
+        } else {
+          await recalculateRentalPaymentBalances(connection, existing.lease_contract_id);
+        }
+
+        await logAction(
+          req.user.user_id,
+          'UPDATE',
+          'payments',
+          id,
+          `Updated ${type} payment #${id} for contract ${existing.lease_contract_id}`
+        );
+
+        await connection.commit();
+
+        const updated = await fetchPaymentWithContext(connection, type, id);
+        res.json(updated);
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Update payment record error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 async function getBillingSurchargeSettings(connection) {
   const [rows] = await connection.query(`
     SELECT setting_key, setting_value

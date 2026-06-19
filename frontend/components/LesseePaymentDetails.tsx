@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import api from '@/services/api';
 
 interface PaymentRecord {
@@ -10,8 +11,10 @@ interface PaymentRecord {
   amount_paid: string;
   balance: string;
   or_number: string;
+  period_month?: number | null;
+  period_year?: number | null;
   payment_type: 'rights' | 'rental';
-  created_at: string;
+  created_at?: string;
 }
 
 interface AccountBalance {
@@ -162,6 +165,15 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
   };
 
   const selectedContract = leaseContracts.find((c) => c.id === selectedContractId);
+
+  const paymentDetailHref = (payment: PaymentRecord) =>
+    `/admin/rights-and-rentals/lease-contracts/${selectedContractId}/payments/${payment.payment_type}/${payment.id}`;
+
+  const formatPeriod = (month?: number | null, year?: number | null) => {
+    if (!month || !year) return '—';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[month - 1]} ${year}`;
+  };
 
   return (
     <div className="mt-8 bg-white rounded-lg shadow-md p-6">
@@ -388,9 +400,11 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                                 <thead>
                                   <tr className="bg-green-50 border border-green-200">
                                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
                                     <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
                                     <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Balance</th>
                                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -399,6 +413,9 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                                       <td className="px-4 py-2 text-sm text-gray-700">
                                         {new Date(payment.payment_date).toLocaleDateString()}
                                       </td>
+                                      <td className="px-4 py-2 text-sm text-gray-600">
+                                        {formatPeriod(payment.period_month, payment.period_year)}
+                                      </td>
                                       <td className="px-4 py-2 text-right text-sm font-medium text-gray-700">
                                         ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
@@ -406,6 +423,14 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                                         ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                      <td className="px-4 py-2 text-right text-sm">
+                                        <Link
+                                          href={paymentDetailHref(payment)}
+                                          className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                        >
+                                          View
+                                        </Link>
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -441,9 +466,11 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                                 <thead>
                                   <tr className="bg-blue-50 border border-blue-200">
                                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
                                     <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
                                     <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Total Collected</th>
                                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -452,6 +479,9 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                                       <td className="px-4 py-2 text-sm text-gray-700">
                                         {new Date(payment.payment_date).toLocaleDateString()}
                                       </td>
+                                      <td className="px-4 py-2 text-sm text-gray-600">
+                                        {formatPeriod(payment.period_month, payment.period_year)}
+                                      </td>
                                       <td className="px-4 py-2 text-right text-sm font-medium text-gray-700">
                                         ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
@@ -459,6 +489,14 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                                         ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                       <td className="px-4 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                      <td className="px-4 py-2 text-right text-sm">
+                                        <Link
+                                          href={paymentDetailHref(payment)}
+                                          className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                        >
+                                          View
+                                        </Link>
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
