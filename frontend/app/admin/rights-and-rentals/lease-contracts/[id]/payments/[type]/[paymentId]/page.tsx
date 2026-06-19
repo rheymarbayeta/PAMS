@@ -7,7 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { showAlert } from '@/utils/modal';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -53,6 +53,7 @@ export default function PaymentDetailPage() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     payment_date: '',
     or_number: '',
@@ -174,6 +175,31 @@ export default function PaymentDetailPage() {
     setEditing(false);
   };
 
+  const handleDelete = () => {
+    if (!payment) return;
+
+    const amountLabel = formatCurrency(payment.amount_paid);
+    const dateLabel = formatDate(payment.payment_date);
+    const orLabel = payment.or_number ? ` (OR ${payment.or_number})` : '';
+
+    showConfirm(
+      `Are you sure you want to delete this ${typeLabel.toLowerCase()} payment of ${amountLabel} dated ${dateLabel}${orLabel}? This action cannot be undone and contract balances will be recalculated.`,
+      'Confirm Delete',
+      async () => {
+        setDeleting(true);
+        try {
+          await api.delete(`/api/rights-and-rentals/payments/${paymentType}/${paymentId}`);
+          router.push(`/admin/rights-and-rentals/lease-contracts/${contractId}`);
+        } catch (err: any) {
+          showAlert(err.response?.data?.error || 'Error deleting payment record', 'Error');
+          setDeleting(false);
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
+  };
+
   if (loading) {
     return (
       <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Assessor', 'Rights and Rentals Manager']}>
@@ -257,19 +283,33 @@ export default function PaymentDetailPage() {
             </div>
             <div className="flex gap-2">
               {canEdit && !editing && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Edit
-                </button>
+                <>
+                  <button
+                    onClick={() => setEditing(true)}
+                    disabled={deleting}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    {deleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </>
               )}
               <button
                 onClick={() => router.push(`/admin/rights-and-rentals/lease-contracts/${contractId}`)}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                disabled={deleting}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
               >
                 Back
               </button>

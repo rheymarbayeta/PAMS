@@ -1576,6 +1576,60 @@ router.patch('/payments/:type/:id', async (req, res) => {
   }
 });
 
+// Delete a payment record
+router.delete('/payments/:type/:id', async (req, res) => {
+  try {
+    authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
+      const { type, id } = req.params;
+      if (type !== 'rights' && type !== 'rental') {
+        return res.status(400).json({ error: 'Invalid payment type. Use rights or rental.' });
+      }
+
+      const table = getPaymentTableName(type);
+      const connection = await pool.getConnection();
+      try {
+        const existing = await fetchPaymentWithContext(connection, type, id);
+        if (!existing) {
+          return res.status(404).json({ error: 'Payment record not found' });
+        }
+
+        await connection.beginTransaction();
+
+        await connection.query(`DELETE FROM ${table} WHERE id = ?`, [id]);
+
+        if (type === 'rights') {
+          await recalculateRightsPaymentBalances(connection, existing.lease_contract_id);
+        } else {
+          await recalculateRentalPaymentBalances(connection, existing.lease_contract_id);
+        }
+
+        await logAction(
+          req.user.user_id,
+          'DELETE',
+          'payments',
+          id,
+          `Deleted ${type} payment #${id} (₱${parseFloat(existing.amount_paid) || 0}) for contract ${existing.lease_contract_id}`
+        );
+
+        await connection.commit();
+
+        res.json({
+          message: 'Payment record deleted successfully',
+          lease_contract_id: existing.lease_contract_id,
+        });
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Delete payment record error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 async function getBillingSurchargeSettings(connection) {
   const [rows] = await connection.query(`
     SELECT setting_key, setting_value
