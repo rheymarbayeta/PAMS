@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waterworks Billing Statement</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; }
+  .controls {
+    padding: 10px 16px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;
+    display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 100;
+  }
+  .btn { padding: 7px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; color: #fff; background: #28a745; }
+  .btn:disabled { background: #6c757d; cursor: not-allowed; }
+  #loadStatus { font-size: 13px; color: #555; }
+  #bill-wrap { display: flex; justify-content: center; padding: 20px 12px 40px; }
+  #bill-wrap.hidden { display: none; }
+  .billing-doc {
+    width: 8.5in; min-height: 11in; background: #fff; border: 1px solid #d1d5db;
+    padding: 0.5in; font-size: 11pt; color: #1f2937; line-height: 1.5;
+  }
+  .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #1e40af; padding-bottom: 12px; }
+  .header h1 { font-size: 16pt; color: #1e40af; }
+  .header p { font-size: 10pt; color: #4b5563; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .meta-box { border: 1px solid #e5e7eb; padding: 10px; border-radius: 4px; }
+  .meta-box h3 { font-size: 9pt; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; }
+  table.charges { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  table.charges th, table.charges td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
+  table.charges th { background: #f3f4f6; font-size: 9pt; text-transform: uppercase; }
+  table.charges td.num { text-align: right; }
+  .total-row { font-weight: bold; background: #eff6ff; }
+  @media print {
+    .controls { display: none; }
+    body { background: #fff; }
+    #bill-wrap { padding: 0; }
+    .billing-doc { border: none; width: 100%; min-height: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="controls">
+  <span id="loadStatus">Loading...</span>
+  <div style="flex:1"></div>
+  <button class="btn" id="btnPrint" disabled onclick="window.print()">Print</button>
+</div>
+<div id="bill-wrap" class="hidden"></div>
+
+<script>
+(function () {
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var params = new URLSearchParams(window.location.search);
+  var accountId = params.get('account_id');
+  var month = parseInt(params.get('month')) || (new Date().getMonth() + 1);
+  var year = parseInt(params.get('year')) || new Date().getFullYear();
+  var token = params.get('token') || localStorage.getItem('token');
+  var api = window.location.origin.includes('6070') ? 'http://' + window.location.hostname + ':5040' : (window.location.origin.replace(':3000', ':5000'));
+
+  function fmt(n) {
+    return Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s || ''));
+    return d.innerHTML;
+  }
+
+  if (!accountId || !token) {
+    document.getElementById('loadStatus').textContent = 'Missing account_id or token';
+    return;
+  }
+
+  fetch(api + '/api/waterworks/accounts/' + accountId + '/billing?month=' + month + '&year=' + year, {
+    headers: { Authorization: 'Bearer ' + token }
+  })
+    .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Failed'); return d; }); })
+    .then(function (res) {
+      var data = res.data;
+      var acc = data.account;
+      var bill = data.bill;
+      var period = MONTHS[month - 1] + ' ' + year;
+
+      var html = '<div class="billing-doc">' +
+        '<div class="header">' +
+          '<h1>WATERWORKS BILLING STATEMENT</h1>' +
+          '<p>Municipality of Dalaguete · Waterworks Division</p>' +
+          '<p>Billing Period: ' + esc(period) + '</p>' +
+        '</div>' +
+        '<div class="meta-grid">' +
+          '<div class="meta-box"><h3>Consumer</h3>' +
+            '<p><strong>' + esc(acc.consumer_name) + '</strong></p>' +
+            '<p>Account #: ' + esc(acc.account_number) + '</p>' +
+            '<p>Meter #: ' + esc(acc.meter_number || 'N/A') + '</p>' +
+            '<p>' + esc(acc.address || '') + '</p>' +
+          '</div>' +
+          '<div class="meta-box"><h3>Water Supply</h3>' +
+            '<p><strong>' + esc(acc.supply_name) + '</strong></p>' +
+            '<p>Code: ' + esc(acc.supply_code) + '</p>' +
+            '<p>Rate: ₱' + fmt(acc.rate_per_cubic_meter) + ' / m³</p>' +
+          '</div>' +
+        '</div>';
+
+      if (bill) {
+        html += '<table class="charges">' +
+          '<thead><tr><th>Description</th><th class="num">Reading / Qty</th><th class="num">Amount (₱)</th></tr></thead>' +
+          '<tbody>' +
+            '<tr><td>Previous Reading</td><td class="num">' + bill.previous_reading + ' m³</td><td class="num">—</td></tr>' +
+            '<tr><td>Current Reading</td><td class="num">' + bill.current_reading + ' m³</td><td class="num">—</td></tr>' +
+            '<tr><td>Consumption (' + bill.consumption + ' m³ × ₱' + bill.rate_applied + ')</td><td class="num">' + bill.consumption + ' m³</td><td class="num">' + fmt(bill.amount_due) + '</td></tr>' +
+            '<tr><td>Previous Balance</td><td class="num">—</td><td class="num">' + fmt(bill.previous_balance) + '</td></tr>' +
+            (bill.surcharge_amount > 0 ? '<tr><td>Late Payment Surcharge</td><td class="num">—</td><td class="num">' + fmt(bill.surcharge_amount) + '</td></tr>' : '') +
+            '<tr class="total-row"><td colspan="2">TOTAL AMOUNT DUE</td><td class="num">₱' + fmt(bill.total_due) + '</td></tr>' +
+          '</tbody></table>' +
+          '<p style="margin-top:12px;font-size:10pt;color:#6b7280;">Status: <strong>' + esc(bill.status) + '</strong></p>';
+      } else {
+        html += '<p style="padding:20px;text-align:center;color:#6b7280;">No bill generated for this period.</p>';
+      }
+
+      html += '<p style="margin-top:32px;font-size:9pt;color:#9ca3af;text-align:center;">This is a computer-generated statement.</p></div>';
+
+      document.getElementById('bill-wrap').innerHTML = html;
+      document.getElementById('bill-wrap').classList.remove('hidden');
+      document.getElementById('loadStatus').textContent = bill ? 'Statement loaded' : 'No bill for period';
+      document.getElementById('btnPrint').disabled = false;
+    })
+    .catch(function (err) {
+      document.getElementById('loadStatus').textContent = 'Error: ' + err.message;
+    });
+})();
+</script>
+</body>
+</html>

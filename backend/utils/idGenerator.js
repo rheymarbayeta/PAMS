@@ -33,7 +33,13 @@ const ID_PREFIXES = {
   CITATION: 'cite',
   CITATION_PAYMENT: 'citepay',
   ENFORCER: 'enf',
-  QUANTITY_FEE: 'qtyfee'
+  QUANTITY_FEE: 'qtyfee',
+  WW_SUPPLY: 'wwsup',
+  WW_ACCOUNT: 'wwacc',
+  WW_READING: 'wwread',
+  WW_BILL: 'wwbill',
+  WW_PAYMENT: 'wwpay',
+  WW_ASSIGNMENT: 'wwasgn'
 };
 
 /**

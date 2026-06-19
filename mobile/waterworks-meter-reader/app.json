@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "PAMS Waterworks Meter Reader",
+    "slug": "waterworks-meter-reader",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "pams-waterworks",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1e40af"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pams.waterworks.reader"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1e40af"
+      },
+      "package": "com.pams.waterworks.reader"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}

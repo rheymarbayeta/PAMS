@@ -67,6 +67,9 @@ const navIcons: Record<string, JSX.Element> = {
   '/price-monitoring': (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
   ),
+  '/admin/waterworks': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3c4.97 0 9 4.03 9 9 0 3.31-1.79 6.2-4.45 7.76L12 22l-4.55-2.24A8.96 8.96 0 013 12c0-4.97 4.03-9 9-9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2" /></svg>
+  ),
 };
 
 export default function Layout({ children }: LayoutProps) {
@@ -119,15 +122,18 @@ export default function Layout({ children }: LayoutProps) {
     return () => { document.body.style.overflow = 'unset'; };
   }, [sidebarOpen]);
 
+  const isWaterworksOnly = canAccess(['Waterworks Manager']) && !canAccess(['SuperAdmin', 'Admin']);
+
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', show: true },
-    { href: '/applications', label: 'Applications', show: !canAccess(['Rights and Rentals Manager']) },
-    { href: '/admin/entities', label: 'Entities', show: !canAccess(['Rights and Rentals Manager']) },
-    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) && !canAccess(['Rights and Rentals Manager']) },
-    { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin', 'Rights and Rentals Manager']) },
-    { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && !canAccess(['Rights and Rentals Manager']) },
-    { href: '/solar', label: 'Solar Designer', show: canAccess(['SuperAdmin']) },
-    { href: '/price-monitoring', label: 'Price Monitoring', show: canAccess(['SuperAdmin', 'Admin', 'Assessor']) && !canAccess(['Rights and Rentals Manager']) },
+    { href: '/applications', label: 'Applications', show: !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
+    { href: '/admin/entities', label: 'Entities', show: !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
+    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
+    { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin', 'Rights and Rentals Manager']) && !isWaterworksOnly },
+    { href: '/admin/waterworks', label: 'Waterworks', show: canAccess(['SuperAdmin', 'Admin', 'Waterworks Manager']) },
+    { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
+    { href: '/solar', label: 'Solar Designer', show: canAccess(['SuperAdmin']) && !isWaterworksOnly },
+    { href: '/price-monitoring', label: 'Price Monitoring', show: canAccess(['SuperAdmin', 'Admin', 'Assessor']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
   ];
 
   const adminLinks: { href: string; label: string; activePaths?: string[] }[] = [
@@ -157,6 +163,17 @@ export default function Layout({ children }: LayoutProps) {
         { href: '/admin/rights-and-rentals/properties', label: 'Properties' },
         { href: '/admin/rights-and-rentals/lease-contracts', label: 'Lease Contracts' },
         { href: '/admin/rights-and-rentals/reports', label: 'Reports' },
+      ],
+    },
+    {
+      paths: ['/admin/waterworks'],
+      tabs: [
+        { href: '/admin/waterworks', label: 'Supplies' },
+        { href: '/admin/waterworks/accounts', label: 'Accounts' },
+        { href: '/admin/waterworks/readings', label: 'Readings' },
+        { href: '/admin/waterworks/billing', label: 'Billing' },
+        { href: '/admin/waterworks/payments', label: 'Payments' },
+        { href: '/admin/waterworks/reports', label: 'Reports' },
       ],
     },
     {
@@ -229,7 +246,7 @@ export default function Layout({ children }: LayoutProps) {
           </Link>
         ))}
 
-        {canAccess(['SuperAdmin', 'Admin']) && !canAccess(['Rights and Rentals Manager']) && (
+        {canAccess(['SuperAdmin', 'Admin']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) && (
           <>
             <div className="pt-4">
               <p className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider ${!mobile ? 'hidden lg:block' : ''}`} style={{ color: 'var(--sidebar-section)' }}>Admin</p>
