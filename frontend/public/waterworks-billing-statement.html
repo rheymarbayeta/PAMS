@@ -98,7 +98,7 @@
           '<div class="meta-box"><h3>Water Supply</h3>' +
             '<p><strong>' + esc(acc.supply_name) + '</strong></p>' +
             '<p>Code: ' + esc(acc.supply_code) + '</p>' +
-            '<p>Progressive tiered rates apply</p>' +
+            '<p>' + esc((acc.billing_model || 'progressive').replace(/_/g, ' ')) + ' rates apply</p>' +
           '</div>' +
         '</div>';
 
@@ -109,12 +109,14 @@
       }
       if (breakdown && breakdown.length) {
         breakdown.forEach(function (line) {
-          var qty = line.charge_type === 'minimum' || line.cubic_meters === 0
-            ? '—'
+          var qty = line.charge_type === 'minimum' || line.charge_type === 'flat_bracket' || line.charge_type === 'deduction' || line.cubic_meters === 0
+            ? (line.charge_type === 'flat_bracket' ? line.cubic_meters + ' m³' : '—')
             : line.cubic_meters + ' m³';
-          var rateCol = line.charge_type === 'minimum'
+          var rateCol = line.charge_type === 'minimum' || line.charge_type === 'flat_bracket'
             ? 'Flat'
-            : '₱' + fmt(line.rate) + '/m³';
+            : line.charge_type === 'deduction'
+              ? 'Deduction'
+              : '₱' + fmt(line.rate) + '/m³';
           tierRows += '<tr><td>' + esc(line.description) + '</td><td class="num">' + qty + '</td><td class="num">' + rateCol + '</td><td class="num">' + fmt(line.amount) + '</td></tr>';
         });
       }

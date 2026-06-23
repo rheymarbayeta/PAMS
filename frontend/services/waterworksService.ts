@@ -8,9 +8,13 @@ export interface WaterSupply {
   description?: string;
   rate_per_cubic_meter: number;
   minimum_charge: number;
+  billing_model?: BillingModel;
   status: 'active' | 'inactive' | 'maintenance';
   account_count?: number;
+  rate_tiers?: RateTier[];
 }
+
+export type BillingModel = 'progressive' | 'bracket_flat' | 'per_unit_deduction';
 
 export interface ConsumerAccount {
   account_id: string;
@@ -111,17 +115,22 @@ const waterworksService = {
     return response.data;
   },
 
+  getNextSupplyCode: async () => {
+    const response = await api.get<{ data: { supply_code: string } }>('/api/waterworks/water-supplies/next-code');
+    return response.data.data.supply_code;
+  },
+
   getSupply: async (id: string) => {
     const response = await api.get<{ data: WaterSupply }>(`/api/waterworks/water-supplies/${id}`);
     return response.data.data;
   },
 
-  createSupply: async (data: Partial<WaterSupply>) => {
+  createSupply: async (data: WaterSupplyInput) => {
     const response = await api.post('/api/waterworks/water-supplies', data);
     return response.data;
   },
 
-  updateSupply: async (id: string, data: Partial<WaterSupply>) => {
+  updateSupply: async (id: string, data: WaterSupplyInput) => {
     const response = await api.put(`/api/waterworks/water-supplies/${id}`, data);
     return response.data;
   },
@@ -234,9 +243,22 @@ export interface RateTier {
   tier_order: number;
   from_m3: number;
   to_m3: number | null;
-  charge_type: 'minimum' | 'per_cubic';
+  charge_type: 'minimum' | 'per_cubic' | 'flat_bracket' | 'deduction';
   rate_amount: number;
   description?: string;
+}
+
+export type RateTierInput = Omit<RateTier, 'tier_id'> & { tier_id?: string };
+
+export interface WaterSupplyInput {
+  supply_code?: string;
+  supply_name?: string;
+  location?: string;
+  description?: string;
+  status?: WaterSupply['status'];
+  billing_model?: BillingModel;
+  base_unit_rate?: number;
+  rate_tiers?: RateTierInput[];
 }
 
 export default waterworksService;

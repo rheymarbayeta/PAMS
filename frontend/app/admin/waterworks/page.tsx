@@ -5,24 +5,16 @@ import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
-import waterworksService, { WaterSupply, RateTier } from '@/services/waterworksService';
+import waterworksService, { WaterSupply, RateTier, BillingModel } from '@/services/waterworksService';
 import api from '@/services/api';
 import { showAlert, showConfirm } from '@/utils/modal';
 import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
+const SUPPLY_CODE_MAX_LENGTH = 20;
 
-function generateSupplyCode(name: string): string {
-  const code = name
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s-]/gi, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 50);
-
-  return code || 'SUPPLY';
+function sanitizeSupplyCodeInput(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, SUPPLY_CODE_MAX_LENGTH);
 }
 
 interface UserOption {
@@ -31,7 +23,13 @@ interface UserOption {
   username: string;
 }
 
-const DEFAULT_RATE_TIERS: RateTier[] = [
+const BILLING_MODEL_LABELS: Record<BillingModel, string> = {
+  progressive: 'Progressive (minimum + per m³ blocks)',
+  bracket_flat: 'Bracket flat (one charge by consumption range)',
+  per_unit_deduction: 'Per m³ with deduction',
+};
+
+const PROGRESSIVE_TIERS: RateTier[] = [
   { tier_id: '1', tier_order: 1, from_m3: 0, to_m3: 10, charge_type: 'minimum', rate_amount: 100.6, description: 'Minimum charge (up to 10 m³)' },
   { tier_id: '2', tier_order: 2, from_m3: 11, to_m3: 20, charge_type: 'per_cubic', rate_amount: 11.25, description: '11 – 20 m³' },
   { tier_id: '3', tier_order: 3, from_m3: 21, to_m3: 30, charge_type: 'per_cubic', rate_amount: 12.4, description: '21 – 30 m³' },
@@ -39,9 +37,71 @@ const DEFAULT_RATE_TIERS: RateTier[] = [
   { tier_id: '5', tier_order: 5, from_m3: 41, to_m3: null, charge_type: 'per_cubic', rate_amount: 16.75, description: '41 m³ and above' },
 ];
 
-function formatTierRate(tier: RateTier): string {
+const BRACKET_FLAT_TIERS: RateTier[] = [
+  { tier_id: '1', tier_order: 1, from_m3: 1, to_m3: 5, charge_type: 'flat_bracket', rate_amount: 35, description: 'Flat rate (1 – 5 m³)' },
+  { tier_id: '2', tier_order: 2, from_m3: 5, to_m3: 10, charge_type: 'flat_bracket', rate_amount: 42, description: 'Flat rate (5 – 10 m³)' },
+  { tier_id: '3', tier_order: 3, from_m3: 10, to_m3: 15, charge_type: 'flat_bracket', rate_amount: 46, description: 'Flat rate (10 – 15 m³)' },
+  { tier_id: '4', tier_order: 4, from_m3: 15, to_m3: 20, charge_type: 'flat_bracket', rate_amount: 51, description: 'Flat rate (15 – 20 m³)' },
+  { tier_id: '5', tier_order: 5, from_m3: 20, to_m3: null, charge_type: 'flat_bracket', rate_amount: 56, description: 'Flat rate (20 m³ and above)' },
+];
+
+const DEDUCTION_TIERS: RateTier[] = [
+  { tier_id: '1', tier_order: 1, from_m3: 6, to_m3: 10, charge_type: 'deduction', rate_amount: 30, description: 'Deduction (6 – 10 m³)' },
+  { tier_id: '2', tier_order: 2, from_m3: 11, to_m3: null, charge_type: 'deduction', rate_amount: 60, description: 'Deduction (11 m³ and above)' },
+];
+
+const DEFAULT_RATE_TIERS = PROGRESSIVE_TIERS;
+
+function tiersForBillingModel(model: BillingModel): RateTier[] {
+  if (model === 'bracket_flat') return cloneTiers(BRACKET_FLAT_TIERS, 'bracket_flat');
+  if (model === 'per_unit_deduction') return cloneTiers(DEDUCTION_TIERS, 'per_unit_deduction');
+  return cloneTiers(PROGRESSIVE_TIERS, 'progressive');
+}
+
+function defaultBaseUnitRate(model: BillingModel): number {
+  return model === 'per_unit_deduction' ? 60 : 0;
+}
+
+function buildTierDescription(tier: RateTier, billingModel: BillingModel = 'progressive'): string {
+  if (tier.charge_type === 'minimum') {
+    return tier.to_m3 != null ? `Minimum charge (up to ${tier.to_m3} m³)` : 'Minimum charge';
+  }
+  if (tier.charge_type === 'deduction') {
+    const range = tier.to_m3 != null ? `${tier.from_m3} – ${tier.to_m3} m³` : `${tier.from_m3} m³ and above`;
+    return `Deduction (${range})`;
+  }
+  if (tier.charge_type === 'flat_bracket' || billingModel === 'bracket_flat') {
+    const range = tier.to_m3 != null ? `${tier.from_m3} – ${tier.to_m3} m³` : `${tier.from_m3} m³ and above`;
+    return `Flat rate (${range})`;
+  }
+  if (tier.to_m3 == null) {
+    return `${tier.from_m3} m³ and above`;
+  }
+  return `${tier.from_m3} – ${tier.to_m3} m³`;
+}
+
+function cloneTiers(tiers: RateTier[], billingModel: BillingModel = 'progressive'): RateTier[] {
+  return tiers.map((tier, index) => ({
+    ...tier,
+    tier_order: index + 1,
+    from_m3: Number(tier.from_m3),
+    to_m3: tier.to_m3 == null ? null : Number(tier.to_m3),
+    rate_amount: Number(tier.rate_amount),
+    description: tier.description || buildTierDescription(tier, billingModel),
+  }));
+}
+
+function formatTierRate(tier: RateTier, billingModel: BillingModel = 'progressive'): string {
   if (tier.charge_type === 'minimum') {
     return `${formatPeso(tier.rate_amount)} (up to ${tier.to_m3} m³)`;
+  }
+  if (tier.charge_type === 'flat_bracket') {
+    const range = tier.to_m3 ? `${tier.from_m3}–${tier.to_m3} m³` : `${tier.from_m3}+ m³`;
+    return `${range} → ${formatPeso(tier.rate_amount)} flat`;
+  }
+  if (tier.charge_type === 'deduction') {
+    const range = tier.to_m3 ? `${tier.from_m3}–${tier.to_m3} m³` : `${tier.from_m3}+ m³`;
+    return `${range} → −${formatPeso(tier.rate_amount)}`;
   }
   const range = tier.to_m3 ? `${tier.from_m3}–${tier.to_m3} m³` : `${tier.from_m3}+ m³`;
   return `${range} @ ${formatPeso(tier.rate_amount)}/m³`;
@@ -49,7 +109,10 @@ function formatTierRate(tier: RateTier): string {
 
 export default function WaterworksSuppliesPage() {
   const [supplies, setSupplies] = useState<WaterSupply[]>([]);
-  const [rateTiers, setRateTiers] = useState<RateTier[]>(DEFAULT_RATE_TIERS);
+  const [defaultTiers, setDefaultTiers] = useState<RateTier[]>(DEFAULT_RATE_TIERS);
+  const [formTiers, setFormTiers] = useState<RateTier[]>(cloneTiers(DEFAULT_RATE_TIERS, 'progressive'));
+  const [billingModel, setBillingModel] = useState<BillingModel>('progressive');
+  const [baseUnitRate, setBaseUnitRate] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -60,7 +123,7 @@ export default function WaterworksSuppliesPage() {
   const [readers, setReaders] = useState<any[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [codeManuallyEdited, setCodeManuallyEdited] = useState(false);
+  const [loadingNextCode, setLoadingNextCode] = useState(false);
 
   const [form, setForm] = useState({
     supply_code: '',
@@ -88,32 +151,38 @@ export default function WaterworksSuppliesPage() {
   }, [search, page]);
 
   useEffect(() => {
-    waterworksService.getRateTiers().then(setRateTiers).catch(() => {});
+    waterworksService.getRateTiers().then((tiers) => {
+      if (tiers.length) {
+        setDefaultTiers(tiers);
+      }
+    }).catch(() => {});
   }, []);
 
-  const openCreate = () => {
+  const openCreate = async () => {
     setEditing(null);
-    setCodeManuallyEdited(false);
     setForm({ supply_code: '', supply_name: '', location: '', description: '', status: 'active' });
+    setBillingModel('progressive');
+    setBaseUnitRate(0);
+    setFormTiers(cloneTiers(defaultTiers.length ? defaultTiers : DEFAULT_RATE_TIERS, 'progressive'));
     setShowModal(true);
-  };
-
-  const handleSupplyNameChange = (supply_name: string) => {
-    setForm((prev) => ({
-      ...prev,
-      supply_name,
-      supply_code: !editing && !codeManuallyEdited ? generateSupplyCode(supply_name) : prev.supply_code,
-    }));
+    try {
+      setLoadingNextCode(true);
+      const nextCode = await waterworksService.getNextSupplyCode();
+      setForm((prev) => ({ ...prev, supply_code: nextCode }));
+    } catch (e) {
+      console.error(e);
+      showAlert('Could not generate supply code. Save again to retry.', 'Warning');
+    } finally {
+      setLoadingNextCode(false);
+    }
   };
 
   const handleSupplyCodeChange = (supply_code: string) => {
-    if (!editing) setCodeManuallyEdited(true);
-    setForm((prev) => ({ ...prev, supply_code }));
+    setForm((prev) => ({ ...prev, supply_code: sanitizeSupplyCodeInput(supply_code) }));
   };
 
-  const openEdit = (s: WaterSupply) => {
+  const openEdit = async (s: WaterSupply) => {
     setEditing(s);
-    setCodeManuallyEdited(true);
     setForm({
       supply_code: s.supply_code,
       supply_name: s.supply_name,
@@ -121,19 +190,125 @@ export default function WaterworksSuppliesPage() {
       description: s.description || '',
       status: s.status,
     });
+    try {
+      const full = await waterworksService.getSupply(s.supply_id);
+      const model = (full.billing_model || 'progressive') as BillingModel;
+      setBillingModel(model);
+      setBaseUnitRate(Number(full.rate_per_cubic_meter) || defaultBaseUnitRate(model));
+      const tiers = full.rate_tiers?.length
+        ? full.rate_tiers
+        : await waterworksService.getRateTiers(s.supply_id);
+      setFormTiers(cloneTiers(tiers.length ? tiers : tiersForBillingModel(model), model));
+    } catch {
+      setBillingModel((s.billing_model || 'progressive') as BillingModel);
+      setBaseUnitRate(Number(s.rate_per_cubic_meter) || 0);
+      setFormTiers(cloneTiers(defaultTiers, (s.billing_model || 'progressive') as BillingModel));
+    }
     setShowModal(true);
   };
 
+  const handleBillingModelChange = (model: BillingModel) => {
+    setBillingModel(model);
+    setBaseUnitRate(defaultBaseUnitRate(model));
+    setFormTiers(tiersForBillingModel(model));
+  };
+
+  const addTier = () => {
+    setFormTiers((prev) => {
+      const nextOrder = prev.length + 1;
+      const last = prev[prev.length - 1];
+      const from = last?.to_m3 != null ? last.to_m3 + (billingModel === 'bracket_flat' ? 0.1 : 1) : (last?.from_m3 ?? 0) + 10;
+      let charge_type: RateTier['charge_type'] = 'per_cubic';
+      if (billingModel === 'bracket_flat') charge_type = 'flat_bracket';
+      if (billingModel === 'per_unit_deduction') charge_type = 'deduction';
+      const tier: RateTier = {
+        tier_id: `new-${nextOrder}`,
+        tier_order: nextOrder,
+        from_m3: from,
+        to_m3: null,
+        charge_type,
+        rate_amount: 0,
+        description: '',
+      };
+      tier.description = buildTierDescription(tier, billingModel);
+      return [...prev, tier];
+    });
+  };
+
+  const removeTier = (index: number) => {
+    if (formTiers.length <= 1) return;
+    if (billingModel === 'progressive' && index === 0) return;
+    setFormTiers((prev) => cloneTiers(prev.filter((_, i) => i !== index), billingModel));
+  };
+
+  const updateTierField = (
+    index: number,
+    field: 'from_m3' | 'to_m3' | 'rate_amount',
+    value: string
+  ) => {
+    setFormTiers((prev) => prev.map((tier, i) => {
+      if (i !== index) return tier;
+      const updated = { ...tier };
+      if (field === 'rate_amount') {
+        updated.rate_amount = parseFloat(value) || 0;
+      } else if (field === 'to_m3') {
+        updated.to_m3 = value === '' ? null : parseFloat(value) || 0;
+      } else {
+        updated.from_m3 = parseFloat(value) || 0;
+      }
+      updated.description = buildTierDescription(updated, billingModel);
+      return updated;
+    }));
+  };
+
+  const validateFormTiers = (): string | null => {
+    if (billingModel === 'per_unit_deduction' && baseUnitRate <= 0) {
+      return 'Base rate per m³ is required for per-unit deduction billing';
+    }
+    for (const tier of formTiers) {
+      if (tier.from_m3 < 0 || (tier.to_m3 != null && tier.to_m3 < 0)) {
+        return 'Cubic ranges cannot be negative';
+      }
+      if (tier.to_m3 != null && tier.from_m3 > tier.to_m3) {
+        return `Invalid range on "${tier.description}": From must be less than or equal to To`;
+      }
+      if (tier.rate_amount < 0) {
+        return 'Rates cannot be negative';
+      }
+    }
+    return null;
+  };
+
   const handleSave = async () => {
-    if (!form.supply_code || !form.supply_name) {
-      showAlert('Supply code and name are required', 'Validation');
+    if (!form.supply_name) {
+      showAlert('Supply name is required', 'Validation');
+      return;
+    }
+    if (!editing && !form.supply_code) {
+      showAlert('Supply code is being generated. Please wait or try again.', 'Validation');
+      return;
+    }
+    const tierError = validateFormTiers();
+    if (tierError) {
+      showAlert(tierError, 'Validation');
       return;
     }
     try {
       const payload = {
         ...form,
-        minimum_charge: 100.6,
-        rate_per_cubic_meter: 0,
+        billing_model: billingModel,
+        base_unit_rate: billingModel === 'per_unit_deduction' ? baseUnitRate : undefined,
+        rate_tiers: formTiers.map(({ tier_order, from_m3, to_m3, charge_type, rate_amount }, index) => ({
+          tier_order: index + 1,
+          from_m3,
+          to_m3,
+          charge_type,
+          rate_amount,
+          description: buildTierDescription(
+            { tier_order, from_m3, to_m3, charge_type, rate_amount, tier_id: '', description: '' },
+            billingModel
+          ),
+        })),
       };
       if (editing) {
         await waterworksService.updateSupply(editing.supply_id, payload);
@@ -199,7 +374,7 @@ export default function WaterworksSuppliesPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Water Supplies</h1>
-              <p className="text-gray-600 text-sm">Manage physical water supply systems and rates</p>
+              <p className="text-gray-600 text-sm">Manage water supply systems and their cubic rates</p>
             </div>
             <button onClick={openCreate} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
               Add Supply
@@ -207,10 +382,10 @@ export default function WaterworksSuppliesPage() {
           </div>
 
           <div className="mb-6 bg-blue-50 border border-blue-100 rounded-xl p-4">
-            <h2 className="text-sm font-semibold text-blue-900 mb-2">Standard Water Rates (progressive)</h2>
+            <h2 className="text-sm font-semibold text-blue-900 mb-2">Default rate template (for new supplies)</h2>
             <ul className="text-sm text-blue-800 space-y-1">
-              {rateTiers.map((tier) => (
-                <li key={tier.tier_id}>• {tier.description ? `${tier.description}: ` : ''}{formatTierRate(tier)}</li>
+              {defaultTiers.map((tier) => (
+                <li key={tier.tier_id}>• {tier.description ? `${tier.description}: ` : ''}{formatTierRate(tier, 'progressive')}</li>
               ))}
             </ul>
           </div>
@@ -248,7 +423,9 @@ export default function WaterworksSuppliesPage() {
                       <td className="px-4 py-3 text-sm font-mono">{s.supply_code}</td>
                       <td className="px-4 py-3 text-sm font-medium">{s.supply_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{s.location || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">Tiered (min {formatPeso(100.6)})</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {BILLING_MODEL_LABELS[(s.billing_model || 'progressive') as BillingModel].split('(')[0].trim()}
+                      </td>
                       <td className="px-4 py-3 text-sm text-center">{s.account_count ?? 0}</td>
                       <td className="px-4 py-3 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-xs ${s.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
@@ -279,27 +456,29 @@ export default function WaterworksSuppliesPage() {
         </div>
 
         {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl max-w-xl w-full p-6 my-8">
               <h2 className="text-lg font-bold mb-4">{editing ? 'Edit Supply' : 'New Water Supply'}</h2>
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Supply Name *</label>
                   <input
                     value={form.supply_name}
-                    onChange={(e) => handleSupplyNameChange(e.target.value)}
+                    onChange={(e) => setForm({ ...form, supply_name: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supply Code *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supply Code Number *</label>
                   <input
-                    value={form.supply_code}
+                    value={loadingNextCode && !editing ? 'Generating...' : form.supply_code}
                     onChange={(e) => handleSupplyCodeChange(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                    readOnly={!editing}
+                    maxLength={SUPPLY_CODE_MAX_LENGTH}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm font-mono ${!editing ? 'bg-gray-50 text-gray-700' : ''}`}
                   />
-                  {!editing && !codeManuallyEdited && form.supply_name && (
-                    <p className="mt-1 text-xs text-gray-500">Auto-generated from supply name</p>
+                  {!editing && (
+                    <p className="mt-1 text-xs text-gray-500">Auto-generated (8 characters, letters and numbers, e.g. WS000001)</p>
                   )}
                 </div>
                 <div>
@@ -310,11 +489,138 @@ export default function WaterworksSuppliesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                   <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} />
                 </div>
-                <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
-                  <p className="font-medium text-gray-800">Billing uses municipal tiered rates:</p>
-                  {rateTiers.map((tier) => (
-                    <p key={tier.tier_id}>{formatTierRate(tier)}</p>
-                  ))}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Billing Model</label>
+                  <select
+                    value={billingModel}
+                    onChange={(e) => handleBillingModelChange(e.target.value as BillingModel)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    {(Object.keys(BILLING_MODEL_LABELS) as BillingModel[]).map((model) => (
+                      <option key={model} value={model}>{BILLING_MODEL_LABELS[model]}</option>
+                    ))}
+                  </select>
+                </div>
+                {billingModel === 'per_unit_deduction' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Base Rate (₱/m³)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={baseUnitRate || ''}
+                      onChange={(e) => setBaseUnitRate(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Cubic Rates</label>
+                    <button
+                      type="button"
+                      onClick={addTier}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      + Add tier
+                    </button>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 divide-y max-h-72 overflow-y-auto">
+                    {formTiers.map((tier, index) => (
+                      <div key={`${tier.tier_order}-${index}`} className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium text-gray-800">
+                            {tier.charge_type === 'minimum'
+                              ? 'Minimum block'
+                              : billingModel === 'bracket_flat'
+                                ? `Bracket ${index + 1}`
+                                : billingModel === 'per_unit_deduction'
+                                  ? `Deduction ${index + 1}`
+                                  : `Tier ${tier.tier_order}`}
+                            <span className="ml-2 text-xs font-normal text-gray-500">{formatTierRate(tier, billingModel)}</span>
+                          </p>
+                          {!(billingModel === 'progressive' && index === 0) && formTiers.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeTier(index)}
+                              className="text-xs text-red-600 hover:underline shrink-0"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {tier.charge_type === 'minimum' ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Up to (m³)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={tier.to_m3 ?? ''}
+                                onChange={(e) => updateTierField(index, 'to_m3', e.target.value)}
+                                className="w-full px-2 py-1.5 border rounded-lg text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Minimum (₱)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={tier.rate_amount}
+                                onChange={(e) => updateTierField(index, 'rate_amount', e.target.value)}
+                                className="w-full px-2 py-1.5 border rounded-lg text-sm"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">From (m³)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={tier.from_m3}
+                                onChange={(e) => updateTierField(index, 'from_m3', e.target.value)}
+                                className="w-full px-2 py-1.5 border rounded-lg text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">To (m³)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={tier.to_m3 ?? ''}
+                                placeholder={index === formTiers.length - 1 ? '∞' : ''}
+                                onChange={(e) => updateTierField(index, 'to_m3', e.target.value)}
+                                className="w-full px-2 py-1.5 border rounded-lg text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">
+                                {billingModel === 'per_unit_deduction'
+                                  ? 'Deduction (₱)'
+                                  : billingModel === 'bracket_flat'
+                                    ? 'Flat charge (₱)'
+                                    : 'Rate (₱/m³)'}
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={tier.rate_amount}
+                                onChange={(e) => updateTierField(index, 'rate_amount', e.target.value)}
+                                className="w-full px-2 py-1.5 border rounded-lg text-sm"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>

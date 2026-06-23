@@ -4,8 +4,10 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const {
+  BILLING_MODELS,
   calculateBillAmounts,
   getRateTiersForSupply,
+  getSupplyBillingConfig,
 } = require('../utils/waterworksBilling');
 
 const router = express.Router();
@@ -87,6 +89,213 @@ function parsePagination(query) {
   const page = Math.max(1, parseInt(query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 20));
   return { page, limit, offset: (page - 1) * limit };
+}
+
+const SUPPLY_CODE_PREFIX = 'WS';
+const SUPPLY_CODE_LENGTH = 8;
+const SUPPLY_CODE_MAX_LENGTH = 20;
+
+function normalizeSupplyCode(code) {
+  return String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function validateSupplyCode(code, { required = true } = {}) {
+  const normalized = normalizeSupplyCode(code);
+  if (!normalized) {
+    return required ? { error: 'supply_code is required' } : { code: null };
+  }
+  if (normalized.length > SUPPLY_CODE_MAX_LENGTH) {
+    return { error: `supply_code must be at most ${SUPPLY_CODE_MAX_LENGTH} characters` };
+  }
+  if (!/^[A-Z0-9]+$/.test(normalized)) {
+    return { error: 'supply_code must contain letters and numbers only' };
+  }
+  return { code: normalized };
+}
+
+async function generateUniqueSupplyCode(connection) {
+  const suffixLength = SUPPLY_CODE_LENGTH - SUPPLY_CODE_PREFIX.length;
+  const pattern = `${SUPPLY_CODE_PREFIX}[0-9]{${suffixLength}}`;
+
+  const [rows] = await connection.query(
+    `SELECT supply_code FROM ww_water_supplies
+     WHERE supply_code REGEXP ?
+     ORDER BY supply_code DESC LIMIT 1`,
+    [`^${pattern}$`]
+  );
+
+  let nextNum = 1;
+  if (rows.length) {
+    const suffix = rows[0].supply_code.slice(SUPPLY_CODE_PREFIX.length);
+    const parsed = parseInt(suffix, 10);
+    if (Number.isFinite(parsed)) nextNum = parsed + 1;
+  }
+
+  const maxNum = Math.pow(10, suffixLength) - 1;
+  for (let num = nextNum; num <= maxNum; num += 1) {
+    const code = `${SUPPLY_CODE_PREFIX}${String(num).padStart(suffixLength, '0')}`;
+    const [existing] = await connection.query(
+      'SELECT 1 FROM ww_water_supplies WHERE supply_code = ? LIMIT 1',
+      [code]
+    );
+    if (!existing.length) return code;
+  }
+
+  throw new Error('Unable to generate a unique supply code');
+}
+
+function normalizeBillingModel(value) {
+  const model = String(value || 'progressive').trim();
+  return BILLING_MODELS.includes(model) ? model : 'progressive';
+}
+
+function buildTierDescription(tier, billingModel = 'progressive') {
+  if (tier.charge_type === 'minimum') {
+    return tier.to_m3 != null ? `Minimum charge (up to ${tier.to_m3} m³)` : 'Minimum charge';
+  }
+  if (tier.charge_type === 'deduction') {
+    const range = tier.to_m3 != null ? `${tier.from_m3} – ${tier.to_m3} m³` : `${tier.from_m3} m³ and above`;
+    return `Deduction (${range})`;
+  }
+  if (tier.charge_type === 'flat_bracket' || billingModel === 'bracket_flat') {
+    const range = tier.to_m3 != null ? `${tier.from_m3} – ${tier.to_m3} m³` : `${tier.from_m3} m³ and above`;
+    return `Flat rate (${range})`;
+  }
+  if (tier.to_m3 == null) {
+    return `${tier.from_m3} m³ and above`;
+  }
+  return `${tier.from_m3} – ${tier.to_m3} m³`;
+}
+
+const VALID_CHARGE_TYPES = ['minimum', 'per_cubic', 'flat_bracket', 'deduction'];
+
+function normalizeRateTiersInput(tiers, billingModel = 'progressive', baseUnitRate = 0) {
+  const model = normalizeBillingModel(billingModel);
+
+  if (!Array.isArray(tiers) || !tiers.length) {
+    return { error: 'At least one rate tier is required' };
+  }
+
+  const normalized = tiers
+    .map((tier, index) => {
+      let chargeType = VALID_CHARGE_TYPES.includes(tier.charge_type) ? tier.charge_type : 'per_cubic';
+      if (model === 'bracket_flat') chargeType = 'flat_bracket';
+      if (model === 'per_unit_deduction') chargeType = 'deduction';
+      if (model === 'progressive' && index === 0 && chargeType !== 'minimum') {
+        chargeType = tier.charge_type === 'minimum' ? 'minimum' : chargeType;
+      }
+
+      return {
+        tier_order: parseInt(tier.tier_order, 10) || index + 1,
+        from_m3: parseFloat(tier.from_m3) || 0,
+        to_m3: tier.to_m3 === null || tier.to_m3 === undefined || tier.to_m3 === ''
+          ? null
+          : parseFloat(tier.to_m3),
+        charge_type: chargeType,
+        rate_amount: parseFloat(tier.rate_amount),
+        description: tier.description ? String(tier.description).trim() : null,
+      };
+    })
+    .sort((a, b) => a.tier_order - b.tier_order)
+    .map((tier) => ({
+      ...tier,
+      description: tier.description || buildTierDescription(tier, model),
+    }));
+
+  if (normalized.some((tier) => !Number.isFinite(tier.rate_amount) || tier.rate_amount < 0)) {
+    return { error: 'Each rate tier must have a valid non-negative rate amount' };
+  }
+
+  for (const tier of normalized) {
+    if (tier.from_m3 < 0 || (tier.to_m3 != null && tier.to_m3 < 0)) {
+      return { error: 'Cubic ranges cannot be negative' };
+    }
+    if (tier.to_m3 != null && tier.from_m3 > tier.to_m3) {
+      return { error: `Invalid cubic range on tier ${tier.tier_order}: From must be less than or equal to To` };
+    }
+  }
+
+  if (model === 'progressive') {
+    const minTier = normalized.find((tier) => tier.charge_type === 'minimum');
+    if (!minTier) {
+      return { error: 'Progressive billing requires a minimum block tier' };
+    }
+  }
+
+  if (model === 'bracket_flat') {
+    if (normalized.some((tier) => tier.charge_type !== 'flat_bracket')) {
+      return { error: 'Bracket-flat billing requires flat bracket tiers only' };
+    }
+  }
+
+  if (model === 'per_unit_deduction') {
+    const baseRate = parseFloat(baseUnitRate);
+    if (!Number.isFinite(baseRate) || baseRate <= 0) {
+      return { error: 'Per-unit deduction billing requires a base rate per m³' };
+    }
+    if (normalized.some((tier) => tier.charge_type !== 'deduction')) {
+      return { error: 'Per-unit deduction billing requires deduction tiers only' };
+    }
+  }
+
+  return { tiers: normalized, billingModel: model };
+}
+
+async function saveSupplyRateTiers(connection, supplyId, tiers, billingModel = 'progressive', baseUnitRate = 0) {
+  const model = normalizeBillingModel(billingModel);
+  await connection.query('DELETE FROM ww_rate_tiers WHERE supply_id = ?', [supplyId]);
+
+  for (const tier of tiers) {
+    const tierId = generateId(ID_PREFIXES.WW_TIER);
+    await connection.query(
+      `INSERT INTO ww_rate_tiers
+        (tier_id, supply_id, tier_order, from_m3, to_m3, charge_type, rate_amount, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tierId,
+        supplyId,
+        tier.tier_order,
+        tier.from_m3,
+        tier.to_m3,
+        tier.charge_type,
+        tier.rate_amount,
+        tier.description,
+      ]
+    );
+  }
+
+  let minimumCharge = 0;
+  let ratePerCubic = 0;
+
+  if (model === 'progressive') {
+    const minTier = tiers.find((tier) => tier.charge_type === 'minimum') || tiers[0];
+    minimumCharge = minTier.rate_amount;
+  } else if (model === 'bracket_flat') {
+    minimumCharge = Math.min(...tiers.map((tier) => tier.rate_amount));
+  } else if (model === 'per_unit_deduction') {
+    ratePerCubic = parseFloat(baseUnitRate) || 0;
+  }
+
+  await connection.query(
+    'UPDATE ww_water_supplies SET billing_model = ?, minimum_charge = ?, rate_per_cubic_meter = ? WHERE supply_id = ?',
+    [model, minimumCharge, ratePerCubic, supplyId]
+  );
+}
+
+async function copyDefaultTiersToSupply(connection, supplyId) {
+  const [defaults] = await connection.query(
+    `SELECT tier_order, from_m3, to_m3, charge_type, rate_amount, description
+     FROM ww_rate_tiers WHERE supply_id IS NULL ORDER BY tier_order ASC`
+  );
+  const tiers = defaults.map((tier) => ({
+    tier_order: tier.tier_order,
+    from_m3: parseFloat(tier.from_m3),
+    to_m3: tier.to_m3 != null ? parseFloat(tier.to_m3) : null,
+    charge_type: tier.charge_type,
+    rate_amount: parseFloat(tier.rate_amount),
+    description: tier.description,
+  }));
+  await saveSupplyRateTiers(connection, supplyId, tiers, 'progressive');
 }
 
 async function userCanAccessSupply(userId, supplyId, userRoles) {
@@ -225,6 +434,21 @@ router.get('/water-supplies', async (req, res) => {
   }
 });
 
+router.get('/water-supplies/next-code', authorize(...WW_MANAGER_ROLES), async (req, res) => {
+  try {
+    const connection = await pool.getConnection();
+    try {
+      const supply_code = await generateUniqueSupplyCode(connection);
+      res.json({ data: { supply_code } });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get next supply code error:', error);
+    res.status(500).json({ error: 'Failed to generate supply code' });
+  }
+});
+
 router.get('/water-supplies/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute(
@@ -234,7 +458,14 @@ router.get('/water-supplies/:id', async (req, res) => {
       [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Water supply not found' });
-    res.json({ data: rows[0] });
+
+    const connection = await pool.getConnection();
+    try {
+      const tiers = await getRateTiersForSupply(connection, req.params.id);
+      res.json({ data: { ...rows[0], rate_tiers: tiers } });
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     console.error('Get water supply error:', error);
     res.status(500).json({ error: 'Failed to fetch water supply' });
@@ -248,34 +479,74 @@ router.post('/water-supplies', authorize(...WW_MANAGER_ROLES), async (req, res) 
       supply_name,
       location,
       description,
-      rate_per_cubic_meter,
-      minimum_charge,
       status,
+      billing_model,
+      base_unit_rate,
+      rate_tiers,
     } = req.body;
 
-    if (!supply_code || !supply_name) {
-      return res.status(400).json({ error: 'supply_code and supply_name are required' });
+    if (!supply_name) {
+      return res.status(400).json({ error: 'supply_name is required' });
     }
 
+    const billingModel = normalizeBillingModel(billing_model);
+    const tierResult = normalizeRateTiersInput(rate_tiers, billingModel, base_unit_rate);
+    if (tierResult.error) return res.status(400).json({ error: tierResult.error });
+
     const supplyId = generateId(ID_PREFIXES.WW_SUPPLY);
-    await pool.execute(
-      `INSERT INTO ww_water_supplies
-        (supply_id, supply_code, supply_name, location, description, rate_per_cubic_meter, minimum_charge, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+    let finalCode = '';
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      if (supply_code && String(supply_code).trim()) {
+        const codeResult = validateSupplyCode(supply_code);
+        if (codeResult.error) {
+          await connection.rollback();
+          return res.status(400).json({ error: codeResult.error });
+        }
+        finalCode = codeResult.code;
+      } else {
+        finalCode = await generateUniqueSupplyCode(connection);
+      }
+
+      await connection.query(
+        `INSERT INTO ww_water_supplies
+          (supply_id, supply_code, supply_name, location, description, rate_per_cubic_meter, minimum_charge, billing_model, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          supplyId,
+          finalCode,
+          supply_name.trim(),
+          location || null,
+          description || null,
+          billingModel === 'per_unit_deduction' ? parseFloat(base_unit_rate) || 0 : 0,
+          billingModel === 'progressive'
+            ? tierResult.tiers.find((t) => t.charge_type === 'minimum')?.rate_amount || 0
+            : billingModel === 'bracket_flat'
+              ? Math.min(...tierResult.tiers.map((t) => t.rate_amount))
+              : 0,
+          billingModel,
+          status || 'active',
+        ]
+      );
+      await saveSupplyRateTiers(
+        connection,
         supplyId,
-        supply_code.trim(),
-        supply_name.trim(),
-        location || null,
-        description || null,
-        parseFloat(rate_per_cubic_meter) || 0,
-        parseFloat(minimum_charge) || 100.60,
-        status || 'active',
-      ]
-    );
+        tierResult.tiers,
+        billingModel,
+        base_unit_rate
+      );
+      await connection.commit();
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
 
     await logAction(req.user.user_id, 'CREATE_WW_SUPPLY', `Created water supply: ${supply_name}`, supplyId);
-    res.status(201).json({ data: { supply_id: supplyId }, message: 'Water supply created' });
+    res.status(201).json({ data: { supply_id: supplyId, supply_code: finalCode }, message: 'Water supply created' });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'Supply code already exists' });
@@ -292,9 +563,10 @@ router.put('/water-supplies/:id', authorize(...WW_MANAGER_ROLES), async (req, re
       supply_name,
       location,
       description,
-      rate_per_cubic_meter,
-      minimum_charge,
       status,
+      billing_model,
+      base_unit_rate,
+      rate_tiers,
     } = req.body;
 
     const [existing] = await pool.execute(
@@ -303,31 +575,74 @@ router.put('/water-supplies/:id', authorize(...WW_MANAGER_ROLES), async (req, re
     );
     if (!existing.length) return res.status(404).json({ error: 'Water supply not found' });
 
-    await pool.execute(
-      `UPDATE ww_water_supplies SET
-        supply_code = COALESCE(?, supply_code),
-        supply_name = COALESCE(?, supply_name),
-        location = COALESCE(?, location),
-        description = COALESCE(?, description),
-        rate_per_cubic_meter = COALESCE(?, rate_per_cubic_meter),
-        minimum_charge = COALESCE(?, minimum_charge),
-        status = COALESCE(?, status)
-       WHERE supply_id = ?`,
-      [
-        supply_code || null,
-        supply_name || null,
-        location !== undefined ? location : null,
-        description !== undefined ? description : null,
-        rate_per_cubic_meter !== undefined ? parseFloat(rate_per_cubic_meter) : null,
-        minimum_charge !== undefined ? parseFloat(minimum_charge) : null,
-        status || null,
-        req.params.id,
-      ]
-    );
+    let normalizedCode = null;
+    if (supply_code !== undefined) {
+      const codeResult = validateSupplyCode(supply_code);
+      if (codeResult.error) return res.status(400).json({ error: codeResult.error });
+      normalizedCode = codeResult.code;
+    }
+
+    let normalizedTiers = null;
+    let billingModel = null;
+    if (rate_tiers !== undefined) {
+      billingModel = normalizeBillingModel(billing_model);
+      const tierResult = normalizeRateTiersInput(rate_tiers, billingModel, base_unit_rate);
+      if (tierResult.error) return res.status(400).json({ error: tierResult.error });
+      normalizedTiers = tierResult.tiers;
+    } else if (billing_model !== undefined || base_unit_rate !== undefined) {
+      billingModel = normalizeBillingModel(billing_model);
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `UPDATE ww_water_supplies SET
+          supply_code = COALESCE(?, supply_code),
+          supply_name = COALESCE(?, supply_name),
+          location = COALESCE(?, location),
+          description = COALESCE(?, description),
+          status = COALESCE(?, status)
+         WHERE supply_id = ?`,
+        [
+          normalizedCode,
+          supply_name || null,
+          location !== undefined ? location : null,
+          description !== undefined ? description : null,
+          status || null,
+          req.params.id,
+        ]
+      );
+
+      if (normalizedTiers) {
+        await saveSupplyRateTiers(
+          connection,
+          req.params.id,
+          normalizedTiers,
+          billingModel,
+          base_unit_rate
+        );
+      } else if (billingModel && base_unit_rate !== undefined) {
+        await connection.query(
+          'UPDATE ww_water_supplies SET billing_model = ?, rate_per_cubic_meter = ? WHERE supply_id = ?',
+          [billingModel, parseFloat(base_unit_rate) || 0, req.params.id]
+        );
+      }
+
+      await connection.commit();
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
 
     await logAction(req.user.user_id, 'UPDATE_WW_SUPPLY', `Updated water supply: ${req.params.id}`, req.params.id);
     res.json({ message: 'Water supply updated' });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'Supply code already exists' });
+    }
     console.error('Update water supply error:', error);
     res.status(500).json({ error: 'Failed to update water supply' });
   }
@@ -1019,7 +1334,7 @@ router.post('/bills/generate', authorize(...WW_MANAGER_ROLES), async (req, res) 
       }
 
       const [readings] = await connection.query(
-        `SELECT r.*, a.account_id, a.supply_id, s.rate_per_cubic_meter, s.minimum_charge
+        `SELECT r.*, a.account_id, a.supply_id, s.rate_per_cubic_meter, s.minimum_charge, s.billing_model
          FROM ww_meter_readings r
          JOIN ww_consumer_accounts a ON a.account_id = r.account_id
          JOIN ww_water_supplies s ON s.supply_id = a.supply_id
@@ -1047,6 +1362,7 @@ router.post('/bills/generate', authorize(...WW_MANAGER_ROLES), async (req, res) 
           previousBalance,
           surchargeSettings,
           tiers,
+          billingModel: reading.billing_model || 'progressive',
         });
 
         const billId = generateId(ID_PREFIXES.WW_BILL);
@@ -1159,7 +1475,7 @@ router.get('/accounts/:id/billing', async (req, res) => {
 
     const [accounts] = await pool.execute(
       `SELECT a.*, s.supply_name, s.supply_code, s.location AS supply_location,
-              s.rate_per_cubic_meter, s.minimum_charge
+              s.rate_per_cubic_meter, s.minimum_charge, s.billing_model
        FROM ww_consumer_accounts a
        JOIN ww_water_supplies s ON s.supply_id = a.supply_id
        WHERE a.account_id = ?`,
@@ -1178,7 +1494,8 @@ router.get('/accounts/:id/billing', async (req, res) => {
     const connection = await pool.getConnection();
     try {
       const outstandingBalance = await getAccountOutstandingBalance(connection, accountId);
-      const tiers = await getRateTiersForSupply(connection, accounts[0].supply_id);
+      const billingConfig = await getSupplyBillingConfig(connection, accounts[0].supply_id);
+      const tiers = billingConfig.tiers;
 
       let bill = bills[0] || null;
       if (bill && bill.tier_breakdown && typeof bill.tier_breakdown === 'string') {
@@ -1196,6 +1513,7 @@ router.get('/accounts/:id/billing', async (req, res) => {
           billing_year: billingYear,
           bill,
           rate_tiers: tiers,
+          billing_model: billingConfig.billingModel,
           outstanding_balance: outstandingBalance,
         },
       });
