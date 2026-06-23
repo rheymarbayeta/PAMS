@@ -7,11 +7,22 @@ import { useAuth } from '@/contexts/AuthContext';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: string[];
+  allowedUsernames?: string[];
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  allowedRoles,
+  allowedUsernames,
+}) => {
   const { user, isAuthenticated, loading, hasRole } = useAuth();
   const router = useRouter();
+
+  const isUsernameAllowed =
+    !allowedUsernames ||
+    (user && allowedUsernames.some((name) => name.toLowerCase() === user.username.toLowerCase()));
+
+  const isRoleAllowed = !allowedRoles || (user && hasRole(allowedRoles));
 
   useEffect(() => {
     if (!loading) {
@@ -20,12 +31,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
         return;
       }
 
-      // Check if user has any of the allowed roles
-      if (allowedRoles && user && !hasRole(allowedRoles)) {
+      if (user && (!isRoleAllowed || !isUsernameAllowed)) {
         router.push('/dashboard');
       }
     }
-  }, [isAuthenticated, loading, user, allowedRoles, router, hasRole]);
+  }, [isAuthenticated, loading, user, isRoleAllowed, isUsernameAllowed, router]);
 
   if (loading) {
     return (
@@ -39,8 +49,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     return null;
   }
 
-  // Check if user has any of the allowed roles
-  if (allowedRoles && user && !hasRole(allowedRoles)) {
+  if (user && (!isRoleAllowed || !isUsernameAllowed)) {
     return null;
   }
 

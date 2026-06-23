@@ -632,6 +632,30 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
   }
 });
 
+router.delete('/accounts/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+  try {
+    const [existing] = await pool.execute(
+      'SELECT account_id, account_number, consumer_name FROM ww_consumer_accounts WHERE account_id = ?',
+      [req.params.id]
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Account not found' });
+
+    await pool.execute('DELETE FROM ww_consumer_accounts WHERE account_id = ?', [req.params.id]);
+
+    const account = existing[0];
+    await logAction(
+      req.user.user_id,
+      'DELETE_WW_ACCOUNT',
+      `Deleted account ${account.account_number} (${account.consumer_name})`,
+      req.params.id
+    );
+    res.json({ message: 'Account deleted' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 // ==================== SUPPLY READERS ====================
 
 router.get('/supply-readers', authorize(...WW_MANAGER_ROLES), async (req, res) => {

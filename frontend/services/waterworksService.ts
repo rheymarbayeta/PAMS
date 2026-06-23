@@ -156,6 +156,11 @@ const waterworksService = {
     return response.data;
   },
 
+  deleteAccount: async (id: string) => {
+    const response = await api.delete(`/api/waterworks/accounts/${id}`);
+    return response.data;
+  },
+
   getReadings: async (params?: Record<string, string | number>) => {
     const response = await api.get<PaginatedResponse<MeterReading>>('/api/waterworks/readings', { params });
     return response.data;

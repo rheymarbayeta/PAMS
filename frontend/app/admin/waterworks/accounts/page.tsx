@@ -8,9 +8,11 @@ import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
 import waterworksService, { ConsumerAccount, WaterSupply } from '@/services/waterworksService';
 import api from '@/services/api';
-import { showAlert } from '@/utils/modal';
+import { useAuth } from '@/contexts/AuthContext';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
+const WW_DELETE_ROLES = ['SuperAdmin', 'Admin'];
 
 interface Entity {
   entity_id: string;
@@ -48,6 +50,8 @@ function splitSearchToNames(search: string) {
 }
 
 function AccountsContent() {
+  const { hasRole } = useAuth();
+  const canDeleteAccount = hasRole(WW_DELETE_ROLES);
   const searchParams = useSearchParams();
   const initialSupply = searchParams.get('supply_id') || '';
 
@@ -284,6 +288,23 @@ function AccountsContent() {
     }
   };
 
+  const handleDelete = (a: ConsumerAccount) => {
+    showConfirm(
+      `Delete account ${a.account_number} (${a.consumer_name})? This will also remove related readings, bills, and payments.`,
+      'Confirm Delete',
+      async () => {
+        try {
+          await waterworksService.deleteAccount(a.account_id);
+          fetchData();
+        } catch (e: any) {
+          showAlert(e.response?.data?.error || 'Failed to delete account', 'Error');
+        }
+      },
+      undefined,
+      { isDangerous: true }
+    );
+  };
+
   return (
     <div className="px-2 py-4 sm:px-4 sm:py-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -357,6 +378,9 @@ function AccountsContent() {
                   <td className="px-4 py-3 text-right text-sm space-x-2">
                     <Link href={`/admin/waterworks/accounts/${a.account_id}`} className="text-blue-600 hover:underline">View</Link>
                     <button onClick={() => openEdit(a)} className="text-gray-600 hover:underline">Edit</button>
+                    {canDeleteAccount && (
+                      <button onClick={() => handleDelete(a)} className="text-red-600 hover:underline">Delete</button>
+                    )}
                   </td>
                 </tr>
               ))}

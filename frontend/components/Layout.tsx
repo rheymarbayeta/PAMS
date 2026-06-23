@@ -123,6 +123,7 @@ export default function Layout({ children }: LayoutProps) {
   }, [sidebarOpen]);
 
   const isWaterworksOnly = canAccess(['Waterworks Manager']) && !canAccess(['SuperAdmin', 'Admin']);
+  const isSolarDesignerUser = user?.username?.toLowerCase() === 'rheymar';
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', show: true },
@@ -132,7 +133,6 @@ export default function Layout({ children }: LayoutProps) {
     { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin', 'Rights and Rentals Manager']) && !isWaterworksOnly },
     { href: '/admin/waterworks', label: 'Waterworks', show: canAccess(['SuperAdmin', 'Admin', 'Waterworks Manager']) },
     { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
-    { href: '/solar', label: 'Solar Designer', show: canAccess(['SuperAdmin']) && !isWaterworksOnly },
     { href: '/price-monitoring', label: 'Price Monitoring', show: canAccess(['SuperAdmin', 'Admin', 'Assessor']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
   ];
 
@@ -340,7 +340,9 @@ export default function Layout({ children }: LayoutProps) {
 
           <div className="hidden md:block mr-auto">
             <h2 className="text-sm font-medium text-slate-600">
-              {navLinks.find(l => pathname === l.href || pathname.startsWith(l.href + '/'))?.label || adminLinks.find(l => isLinkActive(l.href, l.activePaths))?.label || ''}
+              {pathname.startsWith('/solar')
+                ? 'Solar Designer'
+                : navLinks.find(l => pathname === l.href || pathname.startsWith(l.href + '/'))?.label || adminLinks.find(l => isLinkActive(l.href, l.activePaths))?.label || ''}
             </h2>
           </div>
 
@@ -367,6 +369,16 @@ export default function Layout({ children }: LayoutProps) {
                     <p className="text-sm font-medium text-slate-900 truncate">{user?.full_name}</p>
                     <p className="text-xs text-slate-500 truncate">{displayRoles}</p>
                   </div>
+                  {isSolarDesignerUser && (
+                    <Link
+                      href="/solar"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <span className="flex-shrink-0 text-slate-500">{navIcons['/solar']}</span>
+                      Solar Designer
+                    </Link>
+                  )}
                   <button
                     onClick={() => { setShowUserMenu(false); logout(); }}
                     className="block w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
