@@ -69,18 +69,30 @@ export default function WaterworksReadingsPage() {
           <p className="text-gray-600 text-sm mb-6">Review and verify submitted meter readings</p>
 
           <div className="flex flex-wrap gap-3 mb-4">
-            <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
-              <option value="">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="verified">Verified</option>
-              <option value="rejected">Rejected</option>
-            </select>
-            <select value={filters.supply_id} onChange={(e) => { setFilters({ ...filters, supply_id: e.target.value }); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
-              <option value="">All supplies</option>
-              {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
-            </select>
-            <input type="number" min={1} max={12} value={filters.period_month} onChange={(e) => setFilters({ ...filters, period_month: e.target.value })} className="w-20 px-3 py-2 border rounded-lg text-sm" placeholder="Mo" />
-            <input type="number" value={filters.period_year} onChange={(e) => setFilters({ ...filters, period_year: e.target.value })} className="w-24 px-3 py-2 border rounded-lg text-sm" placeholder="Year" />
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+              <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
+                <option value="">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="verified">Verified</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Water Supply</label>
+              <select value={filters.supply_id} onChange={(e) => { setFilters({ ...filters, supply_id: e.target.value }); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
+                <option value="">All supplies</option>
+                {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Period Month</label>
+              <input type="number" min={1} max={12} value={filters.period_month} onChange={(e) => setFilters({ ...filters, period_month: e.target.value })} className="w-20 px-3 py-2 border rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Period Year</label>
+              <input type="number" value={filters.period_year} onChange={(e) => setFilters({ ...filters, period_year: e.target.value })} className="w-24 px-3 py-2 border rounded-lg text-sm" />
+            </div>
           </div>
 
           {loading ? (

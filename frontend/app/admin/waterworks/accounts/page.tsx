@@ -1,15 +1,51 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
 import waterworksService, { ConsumerAccount, WaterSupply } from '@/services/waterworksService';
+import api from '@/services/api';
 import { showAlert } from '@/utils/modal';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
+
+interface Entity {
+  entity_id: string;
+  entity_name: string;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  address?: string | null;
+}
+
+const EMPTY_NEW_ENTITY_FORM = {
+  entity_name: '',
+  first_name: '',
+  middle_name: '',
+  last_name: '',
+  email: '',
+  phone: '',
+  address: '',
+};
+
+function buildConsumerName(first: string, middle: string, last: string): string {
+  return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(' ');
+}
+
+function splitSearchToNames(search: string) {
+  const parts = search.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { first_name: '', middle_name: '', last_name: '' };
+  if (parts.length === 1) return { first_name: '', middle_name: '', last_name: parts[0] };
+  if (parts.length === 2) return { first_name: parts[0], middle_name: '', last_name: parts[1] };
+  return {
+    first_name: parts[0],
+    middle_name: parts.slice(1, -1).join(' '),
+    last_name: parts[parts.length - 1],
+  };
+}
 
 function AccountsContent() {
   const searchParams = useSearchParams();
@@ -25,9 +61,37 @@ function AccountsContent() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ConsumerAccount | null>(null);
 
+  const [entitySearch, setEntitySearch] = useState('');
+  const [filteredEntities, setFilteredEntities] = useState<Entity[]>([]);
+  const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
+  const [showEntityDropdown, setShowEntityDropdown] = useState(false);
+  const [showNewEntityModal, setShowNewEntityModal] = useState(false);
+  const [creatingEntity, setCreatingEntity] = useState(false);
+  const [newEntityForm, setNewEntityForm] = useState({ ...EMPTY_NEW_ENTITY_FORM });
+
+  const updateNewEntityNameField = (field: 'first_name' | 'middle_name' | 'last_name', value: string) => {
+    setNewEntityForm((prev) => {
+      const next = { ...prev, [field]: value };
+      next.entity_name = buildConsumerName(next.first_name, next.middle_name, next.last_name);
+      return next;
+    });
+  };
+
+  const openNewEntityModal = (searchPrefill = '') => {
+    const names = splitSearchToNames(searchPrefill);
+    const entity_name = buildConsumerName(names.first_name, names.middle_name, names.last_name);
+    setNewEntityForm({
+      ...EMPTY_NEW_ENTITY_FORM,
+      ...names,
+      entity_name,
+    });
+    setShowNewEntityModal(true);
+  };
+
   const [form, setForm] = useState({
     account_number: '',
     supply_id: '',
+    entity_id: '',
     consumer_name: '',
     address: '',
     contact_number: '',
@@ -37,6 +101,22 @@ function AccountsContent() {
     status: 'active' as ConsumerAccount['status'],
     previous_reading: '0',
   });
+
+  const fetchEntities = useCallback(async (searchTerm: string = '') => {
+    try {
+      const response = await api.get(`/api/entities${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`);
+      setFilteredEntities(response.data);
+    } catch (error) {
+      console.error('Error fetching entities:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (showModal) fetchEntities(entitySearch);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [entitySearch, fetchEntities, showModal]);
 
   const fetchData = async () => {
     try {
@@ -62,11 +142,79 @@ function AccountsContent() {
     fetchData();
   }, [search, supplyFilter, page]);
 
+  const resetEntityState = () => {
+    setEntitySearch('');
+    setSelectedEntity(null);
+    setShowEntityDropdown(false);
+    setShowNewEntityModal(false);
+    setNewEntityForm({ ...EMPTY_NEW_ENTITY_FORM });
+  };
+
+  const handleEntitySelect = (entity: Entity) => {
+    setSelectedEntity(entity);
+    setForm({
+      ...form,
+      entity_id: entity.entity_id,
+      consumer_name: entity.entity_name,
+      address: entity.address || '',
+      contact_number: entity.phone || '',
+      email: entity.email || '',
+    });
+    setEntitySearch(entity.entity_name);
+    setShowEntityDropdown(false);
+  };
+
+  const handleEntitySearchChange = (value: string) => {
+    setEntitySearch(value);
+    setShowEntityDropdown(true);
+    if (!value) {
+      setSelectedEntity(null);
+      setForm({ ...form, entity_id: '', consumer_name: '' });
+    }
+  };
+
+  const handleCreateNewEntity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const entity_name = buildConsumerName(
+      newEntityForm.first_name,
+      newEntityForm.middle_name,
+      newEntityForm.last_name
+    );
+    if (!entity_name) {
+      showAlert('Please enter at least a first or last name');
+      return;
+    }
+    setCreatingEntity(true);
+    try {
+      const response = await api.post('/api/entities', {
+        entity_name,
+        firstname: newEntityForm.first_name.trim() || null,
+        middlename: newEntityForm.middle_name.trim() || null,
+        lastname: newEntityForm.last_name.trim() || null,
+        contact_person: entity_name,
+        email: newEntityForm.email.trim() || null,
+        phone: newEntityForm.phone.trim() || null,
+        address: newEntityForm.address.trim() || null,
+      });
+
+      handleEntitySelect(response.data);
+      setShowNewEntityModal(false);
+      setNewEntityForm({ ...EMPTY_NEW_ENTITY_FORM });
+      showAlert('Consumer added successfully!');
+    } catch (error: any) {
+      showAlert(error.response?.data?.error || 'Error creating consumer');
+    } finally {
+      setCreatingEntity(false);
+    }
+  };
+
   const openCreate = () => {
     setEditing(null);
+    resetEntityState();
     setForm({
       account_number: '',
       supply_id: supplyFilter || (supplies[0]?.supply_id || ''),
+      entity_id: '',
       consumer_name: '',
       address: '',
       contact_number: '',
@@ -81,9 +229,11 @@ function AccountsContent() {
 
   const openEdit = (a: ConsumerAccount) => {
     setEditing(a);
+    resetEntityState();
     setForm({
       account_number: a.account_number,
       supply_id: a.supply_id,
+      entity_id: a.entity_id || '',
       consumer_name: a.consumer_name,
       address: a.address || '',
       contact_number: a.contact_number || '',
@@ -93,16 +243,35 @@ function AccountsContent() {
       status: a.status,
       previous_reading: String(a.previous_reading ?? 0),
     });
+    if (a.entity_id) {
+      setSelectedEntity({
+        entity_id: a.entity_id,
+        entity_name: a.linked_entity_name || a.consumer_name,
+        contact_person: null,
+        email: a.email || null,
+        phone: a.contact_number || null,
+        address: a.address || null,
+      });
+      setEntitySearch(a.linked_entity_name || a.consumer_name);
+    }
     setShowModal(true);
   };
 
   const handleSave = async () => {
-    if (!form.account_number || !form.supply_id || !form.consumer_name) {
-      showAlert('Account number, supply, and consumer name are required', 'Validation');
+    if (!form.account_number || !form.supply_id) {
+      showAlert('Account number and supply are required', 'Validation');
+      return;
+    }
+    if (!form.entity_id && !editing) {
+      showAlert('Select a consumer from entities or add a new one', 'Validation');
       return;
     }
     try {
-      const payload = { ...form, previous_reading: parseFloat(form.previous_reading) || 0 };
+      const payload = {
+        ...form,
+        entity_id: form.entity_id || undefined,
+        previous_reading: parseFloat(form.previous_reading) || 0,
+      };
       if (editing) {
         await waterworksService.updateAccount(editing.account_id, payload);
       } else {
@@ -128,23 +297,29 @@ function AccountsContent() {
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
-        <input
-          type="text"
-          placeholder="Search accounts..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-full sm:w-64"
-        />
-        <select
-          value={supplyFilter}
-          onChange={(e) => { setSupplyFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-        >
-          <option value="">All Supplies</option>
-          {supplies.map((s) => (
-            <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>
-          ))}
-        </select>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Search</label>
+          <input
+            type="text"
+            placeholder="Account, consumer, meter..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-full sm:w-64"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Water Supply</label>
+          <select
+            value={supplyFilter}
+            onChange={(e) => { setSupplyFilter(e.target.value); setPage(1); }}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="">All Supplies</option>
+            {supplies.map((s) => (
+              <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {loading ? (
@@ -167,7 +342,12 @@ function AccountsContent() {
               {accounts.map((a) => (
                 <tr key={a.account_id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-mono">{a.account_number}</td>
-                  <td className="px-4 py-3 text-sm">{a.consumer_name}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {a.consumer_name}
+                    {a.entity_id && (
+                      <span className="ml-1 text-xs text-gray-400" title="Linked to entity">· entity</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{a.supply_name}</td>
                   <td className="px-4 py-3 text-sm">{a.meter_number || '—'}</td>
                   <td className="px-4 py-3 text-sm text-right">{a.last_reading ?? a.previous_reading ?? 0}</td>
@@ -195,32 +375,192 @@ function AccountsContent() {
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 my-8">
             <h2 className="text-lg font-bold mb-4">{editing ? 'Edit Account' : 'New Consumer Account'}</h2>
             <div className="space-y-3">
-              <input placeholder="Account Number *" value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-              <select value={form.supply_id} onChange={(e) => setForm({ ...form, supply_id: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm">
-                <option value="">Select supply *</option>
-                {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
-              </select>
-              <input placeholder="Consumer Name *" value={form.consumer_name} onChange={(e) => setForm({ ...form, consumer_name: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-              <input placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-              <div className="grid grid-cols-2 gap-3">
-                <input placeholder="Contact" value={form.contact_number} onChange={(e) => setForm({ ...form, contact_number: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" />
-                <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Consumer *</label>
+                  <button
+                    type="button"
+                    onClick={() => openNewEntityModal()}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    + Add new consumer
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search entities by name..."
+                    value={entitySearch}
+                    onChange={(e) => handleEntitySearchChange(e.target.value)}
+                    onFocus={() => setShowEntityDropdown(true)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                  {entitySearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEntitySearch('');
+                        setSelectedEntity(null);
+                        setForm({ ...form, entity_id: '', consumer_name: '' });
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      ×
+                    </button>
+                  )}
+                  {showEntityDropdown && filteredEntities.length > 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-auto">
+                      {filteredEntities.map((entity) => (
+                        <div
+                          key={entity.entity_id}
+                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 text-sm"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleEntitySelect(entity);
+                          }}
+                        >
+                          <div className="font-medium">{entity.entity_name}</div>
+                          {entity.contact_person && (
+                            <div className="text-xs text-gray-500">{entity.contact_person}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {showEntityDropdown && entitySearch && filteredEntities.length === 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border rounded-lg shadow-lg p-3">
+                      <p className="text-sm text-gray-500 mb-2">No consumer found matching &quot;{entitySearch}&quot;</p>
+                      <button
+                        type="button"
+                        onClick={() => openNewEntityModal(entitySearch)}
+                        className="w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 text-sm font-medium"
+                      >
+                        + Add New Consumer
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {selectedEntity && (
+                  <p className="mt-1 text-xs text-green-700">
+                    Selected: {selectedEntity.entity_name}
+                  </p>
+                )}
+                {!selectedEntity && editing && form.consumer_name && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Legacy account (no entity link): {form.consumer_name}
+                  </p>
+                )}
               </div>
-              <input placeholder="Meter Number" value={form.meter_number} onChange={(e) => setForm({ ...form, meter_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-              <div className="grid grid-cols-2 gap-3">
-                <input type="date" value={form.connection_date} onChange={(e) => setForm({ ...form, connection_date: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" />
-                <input type="number" step="0.01" placeholder="Initial reading" value={form.previous_reading} onChange={(e) => setForm({ ...form, previous_reading: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" />
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
+                <input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
               </div>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ConsumerAccount['status'] })} className="w-full px-3 py-2 border rounded-lg text-sm">
-                <option value="active">Active</option>
-                <option value="disconnected">Disconnected</option>
-                <option value="suspended">Suspended</option>
-              </select>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Water Supply *</label>
+                <select value={form.supply_id} onChange={(e) => setForm({ ...form, supply_id: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="">Select supply</option>
+                  {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Service Address</label>
+                <input
+                  placeholder="Optional override from entity address"
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
+                  <input value={form.contact_number} onChange={(e) => setForm({ ...form, contact_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Meter Number</label>
+                <input value={form.meter_number} onChange={(e) => setForm({ ...form, meter_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Connection Date</label>
+                  <input type="date" value={form.connection_date} onChange={(e) => setForm({ ...form, connection_date: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Initial Reading (m³)</label>
+                  <input type="number" step="0.01" value={form.previous_reading} onChange={(e) => setForm({ ...form, previous_reading: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ConsumerAccount['status'] })} className="w-full px-3 py-2 border rounded-lg text-sm">
+                  <option value="active">Active</option>
+                  <option value="disconnected">Disconnected</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 border rounded-lg text-sm">Cancel</button>
               <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Save</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showNewEntityModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold mb-1">Add New Consumer</h2>
+            <p className="text-sm text-gray-500 mb-4">Creates a new entity record for this water account</p>
+            <form onSubmit={handleCreateNewEntity} className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <input value={newEntityForm.first_name} onChange={(e) => updateNewEntityNameField('first_name', e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
+                  <input value={newEntityForm.middle_name} onChange={(e) => updateNewEntityNameField('middle_name', e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input value={newEntityForm.last_name} onChange={(e) => updateNewEntityNameField('last_name', e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Consumer Name</label>
+                <input
+                  readOnly
+                  value={newEntityForm.entity_name}
+                  placeholder="Auto-generated from name fields"
+                  className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-700"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input type="email" value={newEntityForm.email} onChange={(e) => setNewEntityForm({ ...newEntityForm, email: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input value={newEntityForm.phone} onChange={(e) => setNewEntityForm({ ...newEntityForm, phone: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <input value={newEntityForm.address} onChange={(e) => setNewEntityForm({ ...newEntityForm, address: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowNewEntityModal(false)} className="px-4 py-2 text-gray-600 border rounded-lg text-sm">Cancel</button>
+                <button type="submit" disabled={creatingEntity} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">
+                  {creatingEntity ? 'Saving...' : 'Add Consumer'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

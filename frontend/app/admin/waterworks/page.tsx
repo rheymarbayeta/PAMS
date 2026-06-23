@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
-import waterworksService, { WaterSupply } from '@/services/waterworksService';
+import waterworksService, { WaterSupply, RateTier } from '@/services/waterworksService';
 import api from '@/services/api';
 import { showAlert, showConfirm } from '@/utils/modal';
+import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 
@@ -30,8 +31,25 @@ interface UserOption {
   username: string;
 }
 
+const DEFAULT_RATE_TIERS: RateTier[] = [
+  { tier_id: '1', tier_order: 1, from_m3: 0, to_m3: 10, charge_type: 'minimum', rate_amount: 100.6, description: 'Minimum charge (up to 10 m³)' },
+  { tier_id: '2', tier_order: 2, from_m3: 11, to_m3: 20, charge_type: 'per_cubic', rate_amount: 11.25, description: '11 – 20 m³' },
+  { tier_id: '3', tier_order: 3, from_m3: 21, to_m3: 30, charge_type: 'per_cubic', rate_amount: 12.4, description: '21 – 30 m³' },
+  { tier_id: '4', tier_order: 4, from_m3: 31, to_m3: 40, charge_type: 'per_cubic', rate_amount: 14.65, description: '31 – 40 m³' },
+  { tier_id: '5', tier_order: 5, from_m3: 41, to_m3: null, charge_type: 'per_cubic', rate_amount: 16.75, description: '41 m³ and above' },
+];
+
+function formatTierRate(tier: RateTier): string {
+  if (tier.charge_type === 'minimum') {
+    return `${formatPeso(tier.rate_amount)} (up to ${tier.to_m3} m³)`;
+  }
+  const range = tier.to_m3 ? `${tier.from_m3}–${tier.to_m3} m³` : `${tier.from_m3}+ m³`;
+  return `${range} @ ${formatPeso(tier.rate_amount)}/m³`;
+}
+
 export default function WaterworksSuppliesPage() {
   const [supplies, setSupplies] = useState<WaterSupply[]>([]);
+  const [rateTiers, setRateTiers] = useState<RateTier[]>(DEFAULT_RATE_TIERS);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -49,8 +67,6 @@ export default function WaterworksSuppliesPage() {
     supply_name: '',
     location: '',
     description: '',
-    rate_per_cubic_meter: '0',
-    minimum_charge: '0',
     status: 'active' as WaterSupply['status'],
   });
 
@@ -71,10 +87,14 @@ export default function WaterworksSuppliesPage() {
     fetchSupplies();
   }, [search, page]);
 
+  useEffect(() => {
+    waterworksService.getRateTiers().then(setRateTiers).catch(() => {});
+  }, []);
+
   const openCreate = () => {
     setEditing(null);
     setCodeManuallyEdited(false);
-    setForm({ supply_code: '', supply_name: '', location: '', description: '', rate_per_cubic_meter: '0', minimum_charge: '0', status: 'active' });
+    setForm({ supply_code: '', supply_name: '', location: '', description: '', status: 'active' });
     setShowModal(true);
   };
 
@@ -99,8 +119,6 @@ export default function WaterworksSuppliesPage() {
       supply_name: s.supply_name,
       location: s.location || '',
       description: s.description || '',
-      rate_per_cubic_meter: String(s.rate_per_cubic_meter),
-      minimum_charge: String(s.minimum_charge),
       status: s.status,
     });
     setShowModal(true);
@@ -114,8 +132,8 @@ export default function WaterworksSuppliesPage() {
     try {
       const payload = {
         ...form,
-        rate_per_cubic_meter: parseFloat(form.rate_per_cubic_meter) || 0,
-        minimum_charge: parseFloat(form.minimum_charge) || 0,
+        minimum_charge: 100.6,
+        rate_per_cubic_meter: 0,
       };
       if (editing) {
         await waterworksService.updateSupply(editing.supply_id, payload);
@@ -188,7 +206,17 @@ export default function WaterworksSuppliesPage() {
             </button>
           </div>
 
+          <div className="mb-6 bg-blue-50 border border-blue-100 rounded-xl p-4">
+            <h2 className="text-sm font-semibold text-blue-900 mb-2">Standard Water Rates (progressive)</h2>
+            <ul className="text-sm text-blue-800 space-y-1">
+              {rateTiers.map((tier) => (
+                <li key={tier.tier_id}>• {tier.description ? `${tier.description}: ` : ''}{formatTierRate(tier)}</li>
+              ))}
+            </ul>
+          </div>
+
           <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Search</label>
             <input
               type="text"
               placeholder="Search supplies..."
@@ -208,8 +236,7 @@ export default function WaterworksSuppliesPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Rate/m³</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Min Charge</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Billing</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Accounts</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -221,8 +248,7 @@ export default function WaterworksSuppliesPage() {
                       <td className="px-4 py-3 text-sm font-mono">{s.supply_code}</td>
                       <td className="px-4 py-3 text-sm font-medium">{s.supply_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{s.location || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-right">₱{Number(s.rate_per_cubic_meter).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm text-right">₱{Number(s.minimum_charge).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">Tiered (min {formatPeso(100.6)})</td>
                       <td className="px-4 py-3 text-sm text-center">{s.account_count ?? 0}</td>
                       <td className="px-4 py-3 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-xs ${s.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
@@ -238,7 +264,7 @@ export default function WaterworksSuppliesPage() {
                     </tr>
                   ))}
                   {!supplies.length && (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No water supplies found</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No water supplies found</td></tr>
                   )}
                 </tbody>
               </table>
@@ -257,15 +283,17 @@ export default function WaterworksSuppliesPage() {
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
               <h2 className="text-lg font-bold mb-4">{editing ? 'Edit Supply' : 'New Water Supply'}</h2>
               <div className="space-y-3">
-                <input
-                  placeholder="Supply Name *"
-                  value={form.supply_name}
-                  onChange={(e) => handleSupplyNameChange(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supply Name *</label>
                   <input
-                    placeholder="Supply Code *"
+                    value={form.supply_name}
+                    onChange={(e) => handleSupplyNameChange(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supply Code *</label>
+                  <input
                     value={form.supply_code}
                     onChange={(e) => handleSupplyCodeChange(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
@@ -274,17 +302,28 @@ export default function WaterworksSuppliesPage() {
                     <p className="mt-1 text-xs text-gray-500">Auto-generated from supply name</p>
                   )}
                 </div>
-                <input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-                <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} />
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="number" step="0.01" placeholder="Rate per m³" value={form.rate_per_cubic_meter} onChange={(e) => setForm({ ...form, rate_per_cubic_meter: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" />
-                  <input type="number" step="0.01" placeholder="Minimum charge" value={form.minimum_charge} onChange={(e) => setForm({ ...form, minimum_charge: e.target.value })} className="px-3 py-2 border rounded-lg text-sm" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WaterSupply['status'] })} className="w-full px-3 py-2 border rounded-lg text-sm">
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="maintenance">Maintenance</option>
-                </select>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} />
+                </div>
+                <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
+                  <p className="font-medium text-gray-800">Billing uses municipal tiered rates:</p>
+                  {rateTiers.map((tier) => (
+                    <p key={tier.tier_id}>{formatTierRate(tier)}</p>
+                  ))}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WaterSupply['status'] })} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end gap-2 mt-6">
                 <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 border rounded-lg text-sm">Cancel</button>
@@ -299,13 +338,18 @@ export default function WaterworksSuppliesPage() {
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
               <h2 className="text-lg font-bold mb-4">Meter Reader Assignments</h2>
               <div className="flex gap-2 mb-4">
-                <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="flex-1 px-3 py-2 border rounded-lg text-sm">
-                  <option value="">Select user...</option>
-                  {users.map((u) => (
-                    <option key={u.user_id} value={u.user_id}>{u.full_name} ({u.username})</option>
-                  ))}
-                </select>
-                <button onClick={assignReader} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Add</button>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Meter Reader</label>
+                  <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="">Select user...</option>
+                    {users.map((u) => (
+                      <option key={u.user_id} value={u.user_id}>{u.full_name} ({u.username})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button onClick={assignReader} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Add</button>
+                </div>
               </div>
               <ul className="space-y-2 max-h-60 overflow-y-auto">
                 {readers.map((r) => (

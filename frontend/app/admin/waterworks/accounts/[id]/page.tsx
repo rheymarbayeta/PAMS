@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import waterworksService from '@/services/waterworksService';
 import { showAlert } from '@/utils/modal';
+import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 
@@ -101,7 +102,7 @@ export default function AccountDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div className="bg-white rounded-xl border p-4 shadow-sm">
               <p className="text-sm text-gray-500">Outstanding Balance</p>
-              <p className="text-2xl font-bold text-red-600">₱{Number(outstanding_balance).toFixed(2)}</p>
+              <p className="text-2xl font-bold text-red-600">{formatPeso(outstanding_balance)}</p>
             </div>
             <div className="bg-white rounded-xl border p-4 shadow-sm">
               <p className="text-sm text-gray-500">Last Reading</p>
@@ -119,6 +120,14 @@ export default function AccountDetailPage() {
             <section className="bg-white rounded-xl border overflow-hidden">
               <h2 className="px-4 py-3 font-semibold bg-gray-50 border-b">Account Details</h2>
               <dl className="p-4 grid grid-cols-2 gap-3 text-sm">
+                <div><dt className="text-gray-500">Consumer</dt><dd>{account.consumer_name}</dd></div>
+                {account.entity_id && (
+                  <div><dt className="text-gray-500">Entity</dt><dd>
+                    <Link href={`/admin/entities/${account.entity_id}`} className="text-blue-600 hover:underline">
+                      {account.linked_entity_name || account.consumer_name}
+                    </Link>
+                  </dd></div>
+                )}
                 <div><dt className="text-gray-500">Meter</dt><dd>{account.meter_number || '—'}</dd></div>
                 <div><dt className="text-gray-500">Address</dt><dd>{account.address || '—'}</dd></div>
                 <div><dt className="text-gray-500">Contact</dt><dd>{account.contact_number || '—'}</dd></div>
@@ -141,7 +150,7 @@ export default function AccountDetailPage() {
                     <tr key={b.bill_id} className="border-b">
                       <td className="px-4 py-2">{b.billing_month}/{b.billing_year}</td>
                       <td className="px-4 py-2 text-right">{b.consumption} m³</td>
-                      <td className="px-4 py-2 text-right">₱{Number(b.total_due).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">{formatPeso(b.total_due)}</td>
                       <td className="px-4 py-2 text-center capitalize">{b.status}</td>
                       <td className="px-4 py-2 text-right">
                         <button onClick={() => openPrint(b.billing_month, b.billing_year)} className="text-blue-600 hover:underline">Print</button>
@@ -191,7 +200,7 @@ export default function AccountDetailPage() {
                   {(payments || []).map((p: any) => (
                     <tr key={p.payment_id} className="border-b">
                       <td className="px-4 py-2">{p.payment_date}</td>
-                      <td className="px-4 py-2 text-right">₱{Number(p.amount_paid).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">{formatPeso(p.amount_paid)}</td>
                       <td className="px-4 py-2">{p.or_number || '—'}</td>
                       <td className="px-4 py-2 capitalize">{p.payment_method}</td>
                     </tr>
@@ -208,20 +217,35 @@ export default function AccountDetailPage() {
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
               <h2 className="text-lg font-bold mb-4">Record Payment</h2>
               <div className="space-y-3">
-                <input type="number" step="0.01" placeholder="Amount *" value={paymentForm.amount_paid} onChange={(e) => setPaymentForm({ ...paymentForm, amount_paid: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-                <select value={paymentForm.bill_id} onChange={(e) => setPaymentForm({ ...paymentForm, bill_id: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm">
-                  <option value="">Apply to bill (optional)</option>
-                  {(bills || []).filter((b: any) => b.status !== 'paid').map((b: any) => (
-                    <option key={b.bill_id} value={b.bill_id}>{b.billing_month}/{b.billing_year} — ₱{Number(b.total_due).toFixed(2)}</option>
-                  ))}
-                </select>
-                <input placeholder="OR Number" value={paymentForm.or_number} onChange={(e) => setPaymentForm({ ...paymentForm, or_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-                <input type="date" value={paymentForm.payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
-                <select value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm">
-                  <option value="cash">Cash</option>
-                  <option value="check">Check</option>
-                  <option value="online">Online</option>
-                </select>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+                  <input type="number" step="0.01" value={paymentForm.amount_paid} onChange={(e) => setPaymentForm({ ...paymentForm, amount_paid: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Apply to Bill</label>
+                  <select value={paymentForm.bill_id} onChange={(e) => setPaymentForm({ ...paymentForm, bill_id: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="">Optional — general payment</option>
+                    {(bills || []).filter((b: any) => b.status !== 'paid').map((b: any) => (
+                      <option key={b.bill_id} value={b.bill_id}>{b.billing_month}/{b.billing_year} — {formatPeso(b.total_due)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">OR Number</label>
+                  <input value={paymentForm.or_number} onChange={(e) => setPaymentForm({ ...paymentForm, or_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
+                  <input type="date" value={paymentForm.payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                  <select value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="cash">Cash</option>
+                    <option value="check">Check</option>
+                    <option value="online">Online</option>
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end gap-2 mt-6">
                 <button onClick={() => setShowPayment(false)} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>

@@ -16,6 +16,9 @@ export interface ConsumerAccount {
   account_id: string;
   account_number: string;
   supply_id: string;
+  entity_id?: string | null;
+  linked_entity_name?: string | null;
+  entity_name?: string | null;
   consumer_name: string;
   address?: string;
   contact_number?: string;
@@ -212,6 +215,23 @@ const waterworksService = {
     const response = await api.delete(`/api/waterworks/supply-readers/${assignmentId}`);
     return response.data;
   },
+
+  getRateTiers: async (supplyId?: string) => {
+    const response = await api.get<{ data: RateTier[] }>('/api/waterworks/rate-tiers', {
+      params: supplyId ? { supply_id: supplyId } : undefined,
+    });
+    return response.data.data;
+  },
 };
+
+export interface RateTier {
+  tier_id: string;
+  tier_order: number;
+  from_m3: number;
+  to_m3: number | null;
+  charge_type: 'minimum' | 'per_cubic';
+  rate_amount: number;
+  description?: string;
+}
 
 export default waterworksService;

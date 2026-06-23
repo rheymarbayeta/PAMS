@@ -39,7 +39,8 @@ const ID_PREFIXES = {
   WW_READING: 'wwread',
   WW_BILL: 'wwbill',
   WW_PAYMENT: 'wwpay',
-  WW_ASSIGNMENT: 'wwasgn'
+  WW_ASSIGNMENT: 'wwasgn',
+  WW_TIER: 'wwtier'
 };
 
 /**

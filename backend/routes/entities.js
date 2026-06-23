@@ -106,7 +106,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create entity (all roles except Viewer)
-router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator'), async (req, res) => {
+router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator', 'Waterworks Manager'), async (req, res) => {
   try {
     const {
       entity_name,

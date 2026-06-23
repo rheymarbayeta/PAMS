@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import waterworksService, { WaterSupply } from '@/services/waterworksService';
+import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 
@@ -51,12 +52,21 @@ export default function WaterworksReportsPage() {
           <p className="text-gray-600 text-sm mb-6">Collection summary by water supply</p>
 
           <div className="flex flex-wrap gap-3 mb-6">
-            <select value={filters.supply_id} onChange={(e) => setFilters({ ...filters, supply_id: e.target.value })} className="px-3 py-2 border rounded-lg text-sm">
-              <option value="">All supplies</option>
-              {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
-            </select>
-            <input type="number" min={1} max={12} value={filters.billing_month} onChange={(e) => setFilters({ ...filters, billing_month: e.target.value })} className="w-20 px-3 py-2 border rounded-lg text-sm" />
-            <input type="number" value={filters.billing_year} onChange={(e) => setFilters({ ...filters, billing_year: e.target.value })} className="w-24 px-3 py-2 border rounded-lg text-sm" />
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Water Supply</label>
+              <select value={filters.supply_id} onChange={(e) => setFilters({ ...filters, supply_id: e.target.value })} className="px-3 py-2 border rounded-lg text-sm">
+                <option value="">All supplies</option>
+                {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Billing Month</label>
+              <input type="number" min={1} max={12} value={filters.billing_month} onChange={(e) => setFilters({ ...filters, billing_month: e.target.value })} className="w-20 px-3 py-2 border rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Billing Year</label>
+              <input type="number" value={filters.billing_year} onChange={(e) => setFilters({ ...filters, billing_year: e.target.value })} className="w-24 px-3 py-2 border rounded-lg text-sm" />
+            </div>
           </div>
 
           {loading ? (
@@ -80,9 +90,9 @@ export default function WaterworksReportsPage() {
                       <tr key={row.supply_id}>
                         <td className="px-4 py-3 font-medium">{row.supply_name}</td>
                         <td className="px-4 py-3 text-right">{row.bill_count}</td>
-                        <td className="px-4 py-3 text-right">₱{Number(row.total_billed || 0).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right text-green-700">₱{Number(row.total_collected || 0).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right text-red-600">₱{Number(row.total_outstanding || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">{formatPeso(row.total_billed || 0)}</td>
+                        <td className="px-4 py-3 text-right text-green-700">{formatPeso(row.total_collected || 0)}</td>
+                        <td className="px-4 py-3 text-right text-red-600">{formatPeso(row.total_outstanding || 0)}</td>
                       </tr>
                     ))}
                     {!report?.by_supply?.length && (
@@ -112,7 +122,7 @@ export default function WaterworksReportsPage() {
                         </td>
                         <td className="px-4 py-3">{row.supply_name}</td>
                         <td className="px-4 py-3">{row.billing_month}/{row.billing_year}</td>
-                        <td className="px-4 py-3 text-right text-red-600">₱{Number(row.balance_due || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-red-600">{formatPeso(row.balance_due || 0)}</td>
                       </tr>
                     ))}
                     {!report?.unpaid_accounts?.length && (

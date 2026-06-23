@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
 import waterworksService, { WaterPayment, WaterSupply } from '@/services/waterworksService';
+import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 
@@ -49,12 +50,15 @@ export default function WaterworksPaymentsPage() {
           <h1 className="text-2xl font-bold mb-2">Payment Records</h1>
           <p className="text-gray-600 text-sm mb-6">Waterworks payment ledger</p>
 
-          <div className="flex flex-wrap gap-3 mb-4 items-center">
-            <select value={supplyFilter} onChange={(e) => { setSupplyFilter(e.target.value); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
-              <option value="">All supplies</option>
-              {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
-            </select>
-            <span className="text-sm text-gray-600 ml-auto">Page total: ₱{totalCollected.toFixed(2)}</span>
+          <div className="flex flex-wrap gap-3 mb-4 items-end">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Water Supply</label>
+              <select value={supplyFilter} onChange={(e) => { setSupplyFilter(e.target.value); setPage(1); }} className="px-3 py-2 border rounded-lg text-sm">
+                <option value="">All supplies</option>
+                {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
+              </select>
+            </div>
+            <span className="text-sm text-gray-600 ml-auto pb-2">Page total: {formatPeso(totalCollected)}</span>
           </div>
 
           {loading ? (
@@ -81,7 +85,7 @@ export default function WaterworksPaymentsPage() {
                         <div className="text-xs text-gray-500">{p.consumer_name}</div>
                       </td>
                       <td className="px-4 py-3">{p.supply_name}</td>
-                      <td className="px-4 py-3 text-right font-medium">₱{Number(p.amount_paid).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatPeso(p.amount_paid)}</td>
                       <td className="px-4 py-3">{p.or_number || '—'}</td>
                       <td className="px-4 py-3">{p.recorded_by_name || '—'}</td>
                     </tr>

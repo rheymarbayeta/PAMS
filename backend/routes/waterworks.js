@@ -3,6 +3,10 @@ const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
+const {
+  calculateBillAmounts,
+  getRateTiersForSupply,
+} = require('../utils/waterworksBilling');
 
 const router = express.Router();
 
@@ -25,6 +29,53 @@ function parseDate(dateValue) {
   }
   return dateValue;
 }
+
+async function getEntityById(entityId) {
+  const [rows] = await pool.execute(
+    'SELECT entity_id, entity_name, contact_person, email, phone, address FROM entities WHERE entity_id = ?',
+    [entityId]
+  );
+  return rows[0] || null;
+}
+
+function consumerFieldsFromEntity(entity, overrides = {}) {
+  return {
+    consumer_name: entity.entity_name,
+    address: overrides.address !== undefined ? overrides.address : (entity.address || null),
+    contact_number: overrides.contact_number !== undefined ? overrides.contact_number : (entity.phone || null),
+    email: overrides.email !== undefined ? overrides.email : (entity.email || null),
+  };
+}
+
+async function resolveAccountConsumerFields(body) {
+  const { entity_id, consumer_name, address, contact_number, email } = body;
+
+  if (entity_id) {
+    const entity = await getEntityById(entity_id);
+    if (!entity) return { error: 'Invalid entity_id' };
+    return {
+      entity_id,
+      ...consumerFieldsFromEntity(entity, { address, contact_number, email }),
+    };
+  }
+
+  if (!consumer_name || !consumer_name.trim()) {
+    return { error: 'Select a consumer from entities or provide consumer name' };
+  }
+
+  return {
+    entity_id: null,
+    consumer_name: consumer_name.trim(),
+    address: address || null,
+    contact_number: contact_number || null,
+    email: email || null,
+  };
+}
+
+const ACCOUNT_SELECT = `SELECT a.*, s.supply_name, s.supply_code, e.entity_name AS linked_entity_name`;
+const ACCOUNT_FROM = `FROM ww_consumer_accounts a
+       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
+       LEFT JOIN entities e ON e.entity_id = a.entity_id`;
 
 function hasAnyRole(user, roles) {
   const userRoles = user.roles || [];
@@ -105,16 +156,28 @@ async function updateBillStatus(connection, billId) {
   await connection.query('UPDATE ww_bills SET status = ? WHERE bill_id = ?', [status, billId]);
 }
 
-function calculateBillAmounts({ consumption, rate, minimumCharge, previousBalance, surchargeSettings }) {
-  const consumptionAmount = parseFloat((consumption * rate).toFixed(2));
-  const amountDue = Math.max(minimumCharge, consumptionAmount);
-  const surchargeAmount = surchargeSettings.enabled
-    ? parseFloat((previousBalance * surchargeSettings.rate).toFixed(2))
-    : 0;
-  const totalDue = parseFloat((amountDue + previousBalance + surchargeAmount).toFixed(2));
+// ==================== RATE TIERS ====================
 
-  return { amountDue, surchargeAmount, totalDue };
-}
+router.get('/rate-tiers', async (req, res) => {
+  try {
+    const { supply_id } = req.query;
+    const connection = await pool.getConnection();
+    try {
+      const tiers = supply_id
+        ? await getRateTiersForSupply(connection, supply_id)
+        : (await connection.query(
+            `SELECT tier_id, supply_id, tier_order, from_m3, to_m3, charge_type, rate_amount, description
+             FROM ww_rate_tiers WHERE supply_id IS NULL ORDER BY tier_order ASC`
+          ))[0];
+      res.json({ data: tiers });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get rate tiers error:', error);
+    res.status(500).json({ error: 'Failed to fetch rate tiers' });
+  }
+});
 
 // ==================== WATER SUPPLIES ====================
 
@@ -206,7 +269,7 @@ router.post('/water-supplies', authorize(...WW_MANAGER_ROLES), async (req, res) 
         location || null,
         description || null,
         parseFloat(rate_per_cubic_meter) || 0,
-        parseFloat(minimum_charge) || 0,
+        parseFloat(minimum_charge) || 100.60,
         status || 'active',
       ]
     );
@@ -317,21 +380,22 @@ router.get('/accounts', async (req, res) => {
       params.push(status);
     }
     if (search) {
-      where += ' AND (a.account_number LIKE ? OR a.consumer_name LIKE ? OR a.meter_number LIKE ? OR a.address LIKE ?)';
+      where += ' AND (a.account_number LIKE ? OR a.consumer_name LIKE ? OR a.meter_number LIKE ? OR a.address LIKE ? OR e.entity_name LIKE ?)';
       const pattern = `%${search}%`;
-      params.push(pattern, pattern, pattern, pattern);
+      params.push(pattern, pattern, pattern, pattern, pattern);
     }
 
     const [countRows] = await pool.execute(
-      `SELECT COUNT(*) AS total FROM ww_consumer_accounts a ${where}`,
+      `SELECT COUNT(*) AS total FROM ww_consumer_accounts a
+       LEFT JOIN entities e ON e.entity_id = a.entity_id
+       ${where}`,
       params
     );
     const total = countRows[0]?.total || 0;
 
     const [rows] = await pool.execute(
-      `SELECT a.*, s.supply_name, s.supply_code
-       FROM ww_consumer_accounts a
-       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
+      `${ACCOUNT_SELECT}
+       ${ACCOUNT_FROM}
        ${where}
        ORDER BY a.account_number ASC
        LIMIT ${offset}, ${limit}`,
@@ -351,9 +415,8 @@ router.get('/accounts', async (req, res) => {
 router.get('/accounts/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT a.*, s.supply_name, s.supply_code, s.rate_per_cubic_meter, s.minimum_charge
-       FROM ww_consumer_accounts a
-       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
+      `${ACCOUNT_SELECT}, s.rate_per_cubic_meter, s.minimum_charge
+       ${ACCOUNT_FROM}
        WHERE a.account_id = ?`,
       [req.params.id]
     );
@@ -369,9 +432,8 @@ router.get('/accounts/:id/summary', async (req, res) => {
   try {
     const accountId = req.params.id;
     const [accounts] = await pool.execute(
-      `SELECT a.*, s.supply_name, s.supply_code, s.rate_per_cubic_meter, s.minimum_charge
-       FROM ww_consumer_accounts a
-       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
+      `${ACCOUNT_SELECT}, s.rate_per_cubic_meter, s.minimum_charge
+       ${ACCOUNT_FROM}
        WHERE a.account_id = ?`,
       [accountId]
     );
@@ -434,18 +496,20 @@ router.post('/accounts', authorize(...WW_MANAGER_ROLES), async (req, res) => {
     const {
       account_number,
       supply_id,
-      consumer_name,
-      address,
-      contact_number,
-      email,
+      entity_id,
       meter_number,
       connection_date,
       status,
       previous_reading,
     } = req.body;
 
-    if (!account_number || !supply_id || !consumer_name) {
-      return res.status(400).json({ error: 'account_number, supply_id, and consumer_name are required' });
+    if (!account_number || !supply_id) {
+      return res.status(400).json({ error: 'account_number and supply_id are required' });
+    }
+
+    const resolved = await resolveAccountConsumerFields(req.body);
+    if (resolved.error) {
+      return res.status(400).json({ error: resolved.error });
     }
 
     const [supply] = await pool.execute(
@@ -457,17 +521,18 @@ router.post('/accounts', authorize(...WW_MANAGER_ROLES), async (req, res) => {
     const accountId = generateId(ID_PREFIXES.WW_ACCOUNT);
     await pool.execute(
       `INSERT INTO ww_consumer_accounts
-        (account_id, account_number, supply_id, consumer_name, address, contact_number, email,
+        (account_id, account_number, supply_id, entity_id, consumer_name, address, contact_number, email,
          meter_number, connection_date, status, previous_reading, last_reading)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         accountId,
         account_number.trim(),
         supply_id,
-        consumer_name.trim(),
-        address || null,
-        contact_number || null,
-        email || null,
+        resolved.entity_id,
+        resolved.consumer_name,
+        resolved.address,
+        resolved.contact_number,
+        resolved.email,
         meter_number || null,
         parseDate(connection_date),
         status || 'active',
@@ -482,6 +547,9 @@ router.post('/accounts', authorize(...WW_MANAGER_ROLES), async (req, res) => {
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'Account number already exists' });
     }
+    if (error.code === 'ER_BAD_FIELD_ERROR') {
+      return res.status(500).json({ error: 'Database migration required: run add_waterworks_account_entity.sql' });
+    }
     console.error('Create account error:', error);
     res.status(500).json({ error: 'Failed to create account' });
   }
@@ -492,6 +560,7 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
     const {
       account_number,
       supply_id,
+      entity_id,
       consumer_name,
       address,
       contact_number,
@@ -504,15 +573,30 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
     } = req.body;
 
     const [existing] = await pool.execute(
-      'SELECT account_id FROM ww_consumer_accounts WHERE account_id = ?',
+      'SELECT account_id, entity_id FROM ww_consumer_accounts WHERE account_id = ?',
       [req.params.id]
     );
     if (!existing.length) return res.status(404).json({ error: 'Account not found' });
+
+    let resolvedConsumer = null;
+    if (entity_id !== undefined && entity_id) {
+      resolvedConsumer = await resolveAccountConsumerFields({
+        entity_id,
+        consumer_name,
+        address,
+        contact_number,
+        email,
+      });
+      if (resolvedConsumer.error) {
+        return res.status(400).json({ error: resolvedConsumer.error });
+      }
+    }
 
     await pool.execute(
       `UPDATE ww_consumer_accounts SET
         account_number = COALESCE(?, account_number),
         supply_id = COALESCE(?, supply_id),
+        entity_id = COALESCE(?, entity_id),
         consumer_name = COALESCE(?, consumer_name),
         address = COALESCE(?, address),
         contact_number = COALESCE(?, contact_number),
@@ -526,10 +610,11 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
       [
         account_number || null,
         supply_id || null,
-        consumer_name || null,
-        address !== undefined ? address : null,
-        contact_number !== undefined ? contact_number : null,
-        email !== undefined ? email : null,
+        resolvedConsumer ? resolvedConsumer.entity_id : null,
+        resolvedConsumer ? resolvedConsumer.consumer_name : (consumer_name || null),
+        resolvedConsumer ? resolvedConsumer.address : (address !== undefined ? address : null),
+        resolvedConsumer ? resolvedConsumer.contact_number : (contact_number !== undefined ? contact_number : null),
+        resolvedConsumer ? resolvedConsumer.email : (email !== undefined ? email : null),
         meter_number !== undefined ? meter_number : null,
         parseDate(connection_date),
         status || null,
@@ -927,15 +1012,17 @@ router.post('/bills/generate', authorize(...WW_MANAGER_ROLES), async (req, res) 
       for (const reading of readings) {
         const previousBalance = await getAccountOutstandingBalance(connection, reading.account_id);
         const rate = parseFloat(reading.rate_per_cubic_meter) || 0;
-        const minimumCharge = parseFloat(reading.minimum_charge) || 0;
+        const minimumCharge = parseFloat(reading.minimum_charge) || 100.60;
         const consumption = parseFloat(reading.consumption) || 0;
+        const tiers = await getRateTiersForSupply(connection, reading.supply_id);
 
-        const { amountDue, surchargeAmount, totalDue } = calculateBillAmounts({
+        const { amountDue, surchargeAmount, totalDue, tierBreakdown, effectiveRate } = calculateBillAmounts({
           consumption,
           rate,
           minimumCharge,
           previousBalance,
           surchargeSettings,
+          tiers,
         });
 
         const billId = generateId(ID_PREFIXES.WW_BILL);
@@ -943,8 +1030,8 @@ router.post('/bills/generate', authorize(...WW_MANAGER_ROLES), async (req, res) 
           `INSERT INTO ww_bills
             (bill_id, account_id, reading_id, billing_month, billing_year,
              previous_reading, current_reading, consumption, rate_applied,
-             amount_due, previous_balance, surcharge_amount, total_due, status, generated_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?)`,
+             amount_due, tier_breakdown, previous_balance, surcharge_amount, total_due, status, generated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?)`,
           [
             billId,
             reading.account_id,
@@ -954,8 +1041,9 @@ router.post('/bills/generate', authorize(...WW_MANAGER_ROLES), async (req, res) 
             reading.previous_reading,
             reading.current_reading,
             consumption,
-            rate,
+            effectiveRate,
             amountDue,
+            tierBreakdown.length ? JSON.stringify(tierBreakdown) : null,
             previousBalance,
             surchargeAmount,
             totalDue,
@@ -1066,12 +1154,24 @@ router.get('/accounts/:id/billing', async (req, res) => {
     const connection = await pool.getConnection();
     try {
       const outstandingBalance = await getAccountOutstandingBalance(connection, accountId);
+      const tiers = await getRateTiersForSupply(connection, accounts[0].supply_id);
+
+      let bill = bills[0] || null;
+      if (bill && bill.tier_breakdown && typeof bill.tier_breakdown === 'string') {
+        try {
+          bill = { ...bill, tier_breakdown: JSON.parse(bill.tier_breakdown) };
+        } catch {
+          /* keep as-is */
+        }
+      }
+
       res.json({
         data: {
           account: accounts[0],
           billing_month: billingMonth,
           billing_year: billingYear,
-          bill: bills[0] || null,
+          bill,
+          rate_tiers: tiers,
           outstanding_balance: outstandingBalance,
         },
       });

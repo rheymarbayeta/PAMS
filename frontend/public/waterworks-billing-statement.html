@@ -98,20 +98,42 @@
           '<div class="meta-box"><h3>Water Supply</h3>' +
             '<p><strong>' + esc(acc.supply_name) + '</strong></p>' +
             '<p>Code: ' + esc(acc.supply_code) + '</p>' +
-            '<p>Rate: ₱' + fmt(acc.rate_per_cubic_meter) + ' / m³</p>' +
+            '<p>Progressive tiered rates apply</p>' +
           '</div>' +
         '</div>';
 
+      var tierRows = '';
+      var breakdown = bill && bill.tier_breakdown;
+      if (breakdown && typeof breakdown === 'string') {
+        try { breakdown = JSON.parse(breakdown); } catch (e) { breakdown = null; }
+      }
+      if (breakdown && breakdown.length) {
+        breakdown.forEach(function (line) {
+          var qty = line.charge_type === 'minimum' || line.cubic_meters === 0
+            ? '—'
+            : line.cubic_meters + ' m³';
+          var rateCol = line.charge_type === 'minimum'
+            ? 'Flat'
+            : '₱' + fmt(line.rate) + '/m³';
+          tierRows += '<tr><td>' + esc(line.description) + '</td><td class="num">' + qty + '</td><td class="num">' + rateCol + '</td><td class="num">' + fmt(line.amount) + '</td></tr>';
+        });
+      }
+
       if (bill) {
         html += '<table class="charges">' +
-          '<thead><tr><th>Description</th><th class="num">Reading / Qty</th><th class="num">Amount (₱)</th></tr></thead>' +
+          '<thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount (₱)</th></tr></thead>' +
           '<tbody>' +
-            '<tr><td>Previous Reading</td><td class="num">' + bill.previous_reading + ' m³</td><td class="num">—</td></tr>' +
-            '<tr><td>Current Reading</td><td class="num">' + bill.current_reading + ' m³</td><td class="num">—</td></tr>' +
-            '<tr><td>Consumption (' + bill.consumption + ' m³ × ₱' + bill.rate_applied + ')</td><td class="num">' + bill.consumption + ' m³</td><td class="num">' + fmt(bill.amount_due) + '</td></tr>' +
-            '<tr><td>Previous Balance</td><td class="num">—</td><td class="num">' + fmt(bill.previous_balance) + '</td></tr>' +
-            (bill.surcharge_amount > 0 ? '<tr><td>Late Payment Surcharge</td><td class="num">—</td><td class="num">' + fmt(bill.surcharge_amount) + '</td></tr>' : '') +
-            '<tr class="total-row"><td colspan="2">TOTAL AMOUNT DUE</td><td class="num">₱' + fmt(bill.total_due) + '</td></tr>' +
+            '<tr><td>Previous Reading</td><td class="num">' + bill.previous_reading + ' m³</td><td class="num">—</td><td class="num">—</td></tr>' +
+            '<tr><td>Current Reading</td><td class="num">' + bill.current_reading + ' m³</td><td class="num">—</td><td class="num">—</td></tr>' +
+            '<tr><td><strong>Consumption</strong></td><td class="num"><strong>' + bill.consumption + ' m³</strong></td><td class="num">—</td><td class="num">—</td></tr>';
+        if (tierRows) {
+          html += tierRows;
+        } else {
+          html += '<tr><td>Water charge</td><td class="num">' + bill.consumption + ' m³</td><td class="num">₱' + fmt(bill.rate_applied) + '</td><td class="num">' + fmt(bill.amount_due) + '</td></tr>';
+        }
+        html += '<tr><td>Previous Balance</td><td class="num">—</td><td class="num">—</td><td class="num">' + fmt(bill.previous_balance) + '</td></tr>' +
+            (bill.surcharge_amount > 0 ? '<tr><td>Late Payment Surcharge</td><td class="num">—</td><td class="num">—</td><td class="num">' + fmt(bill.surcharge_amount) + '</td></tr>' : '') +
+            '<tr class="total-row"><td colspan="3">TOTAL AMOUNT DUE</td><td class="num">₱' + fmt(bill.total_due) + '</td></tr>' +
           '</tbody></table>' +
           '<p style="margin-top:12px;font-size:10pt;color:#6b7280;">Status: <strong>' + esc(bill.status) + '</strong></p>';
       } else {

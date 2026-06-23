@@ -7,6 +7,7 @@ import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
 import waterworksService, { WaterBill, WaterSupply } from '@/services/waterworksService';
 import { showAlert } from '@/utils/modal';
+import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 
@@ -95,18 +96,30 @@ export default function WaterworksBillingPage() {
           </div>
 
           <div className="flex flex-wrap gap-3 mb-4">
-            <select value={filters.supply_id} onChange={(e) => setFilters({ ...filters, supply_id: e.target.value })} className="px-3 py-2 border rounded-lg text-sm">
-              <option value="">All supplies</option>
-              {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
-            </select>
-            <input type="number" min={1} max={12} value={filters.billing_month} onChange={(e) => setFilters({ ...filters, billing_month: e.target.value })} className="w-20 px-3 py-2 border rounded-lg text-sm" />
-            <input type="number" value={filters.billing_year} onChange={(e) => setFilters({ ...filters, billing_year: e.target.value })} className="w-24 px-3 py-2 border rounded-lg text-sm" />
-            <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="px-3 py-2 border rounded-lg text-sm">
-              <option value="">All statuses</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="partial">Partial</option>
-              <option value="paid">Paid</option>
-            </select>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Water Supply</label>
+              <select value={filters.supply_id} onChange={(e) => setFilters({ ...filters, supply_id: e.target.value })} className="px-3 py-2 border rounded-lg text-sm">
+                <option value="">All supplies</option>
+                {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Billing Month</label>
+              <input type="number" min={1} max={12} value={filters.billing_month} onChange={(e) => setFilters({ ...filters, billing_month: e.target.value })} className="w-20 px-3 py-2 border rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Billing Year</label>
+              <input type="number" value={filters.billing_year} onChange={(e) => setFilters({ ...filters, billing_year: e.target.value })} className="w-24 px-3 py-2 border rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+              <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="px-3 py-2 border rounded-lg text-sm">
+                <option value="">All statuses</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
           </div>
 
           {loading ? (
@@ -136,8 +149,8 @@ export default function WaterworksBillingPage() {
                       <td className="px-4 py-3">{b.supply_name}</td>
                       <td className="px-4 py-3">{b.billing_month}/{b.billing_year}</td>
                       <td className="px-4 py-3 text-right">{b.consumption} m³</td>
-                      <td className="px-4 py-3 text-right">₱{Number(b.total_due).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right">₱{Number(b.total_paid || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{formatPeso(b.total_due)}</td>
+                      <td className="px-4 py-3 text-right">{formatPeso(b.total_paid || 0)}</td>
                       <td className="px-4 py-3 text-center capitalize">{b.status}</td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={() => openPrint(b.account_id)} className="text-blue-600 hover:underline">Print</button>
