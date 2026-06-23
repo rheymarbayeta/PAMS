@@ -6,6 +6,9 @@ export interface WaterSupply {
   supply_name: string;
   location?: string;
   description?: string;
+  reading_day_from?: number | null;
+  reading_day_to?: number | null;
+  billing_day?: number | null;
   rate_per_cubic_meter: number;
   minimum_charge: number;
   billing_model?: BillingModel;
@@ -293,6 +296,9 @@ export interface WaterSupplyInput {
   supply_name?: string;
   location?: string;
   description?: string;
+  reading_day_from?: number | null;
+  reading_day_to?: number | null;
+  billing_day?: number | null;
   status?: WaterSupply['status'];
   billing_model?: BillingModel;
   base_unit_rate?: number;

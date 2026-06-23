@@ -4,6 +4,9 @@ export interface WaterSupply {
   supply_name: string;
   location?: string;
   status: string;
+  reading_day_from?: number | null;
+  reading_day_to?: number | null;
+  billing_day?: number | null;
   account_count?: number;
 }
 

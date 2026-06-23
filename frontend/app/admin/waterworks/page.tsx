@@ -12,6 +12,33 @@ import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 const SUPPLY_CODE_MAX_LENGTH = 20;
+const SCHEDULE_DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+
+function formatOrdinal(day: number): string {
+  const mod10 = day % 10;
+  const mod100 = day % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${day}st`;
+  if (mod10 === 2 && mod100 !== 12) return `${day}nd`;
+  if (mod10 === 3 && mod100 !== 13) return `${day}rd`;
+  return `${day}th`;
+}
+
+function formatReadingSchedule(supply: Pick<WaterSupply, 'reading_day_from' | 'reading_day_to'>): string {
+  const from = supply.reading_day_from;
+  const to = supply.reading_day_to;
+  if (!from && !to) return '—';
+  if (from && to) {
+    return from === to
+      ? `${formatOrdinal(from)} of the month`
+      : `${formatOrdinal(from)} – ${formatOrdinal(to)} of the month`;
+  }
+  if (from) return `From ${formatOrdinal(from)} of the month`;
+  return `Until ${formatOrdinal(to!)} of the month`;
+}
+
+function formatBillingSchedule(supply: Pick<WaterSupply, 'billing_day'>): string {
+  return supply.billing_day ? `${formatOrdinal(supply.billing_day)} of the month` : '—';
+}
 
 function sanitizeSupplyCodeInput(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, SUPPLY_CODE_MAX_LENGTH);
@@ -130,6 +157,9 @@ export default function WaterworksSuppliesPage() {
     supply_name: '',
     location: '',
     description: '',
+    reading_day_from: '',
+    reading_day_to: '',
+    billing_day: '',
     status: 'active' as WaterSupply['status'],
   });
 
@@ -160,7 +190,7 @@ export default function WaterworksSuppliesPage() {
 
   const openCreate = async () => {
     setEditing(null);
-    setForm({ supply_code: '', supply_name: '', location: '', description: '', status: 'active' });
+    setForm({ supply_code: '', supply_name: '', location: '', description: '', reading_day_from: '', reading_day_to: '', billing_day: '', status: 'active' });
     setBillingModel('progressive');
     setBaseUnitRate(0);
     setFormTiers(cloneTiers(defaultTiers.length ? defaultTiers : DEFAULT_RATE_TIERS, 'progressive'));
@@ -188,10 +218,19 @@ export default function WaterworksSuppliesPage() {
       supply_name: s.supply_name,
       location: s.location || '',
       description: s.description || '',
+      reading_day_from: s.reading_day_from ? String(s.reading_day_from) : '',
+      reading_day_to: s.reading_day_to ? String(s.reading_day_to) : '',
+      billing_day: s.billing_day ? String(s.billing_day) : '',
       status: s.status,
     });
     try {
       const full = await waterworksService.getSupply(s.supply_id);
+      setForm((prev) => ({
+        ...prev,
+        reading_day_from: full.reading_day_from ? String(full.reading_day_from) : '',
+        reading_day_to: full.reading_day_to ? String(full.reading_day_to) : '',
+        billing_day: full.billing_day ? String(full.billing_day) : '',
+      }));
       const model = (full.billing_model || 'progressive') as BillingModel;
       setBillingModel(model);
       setBaseUnitRate(Number(full.rate_per_cubic_meter) || defaultBaseUnitRate(model));
@@ -279,6 +318,22 @@ export default function WaterworksSuppliesPage() {
     return null;
   };
 
+  const validateSchedule = (): string | null => {
+    const from = form.reading_day_from ? parseInt(form.reading_day_from, 10) : null;
+    const to = form.reading_day_to ? parseInt(form.reading_day_to, 10) : null;
+    const billing = form.billing_day ? parseInt(form.billing_day, 10) : null;
+
+    for (const [label, day] of [['Reading from', from], ['Reading to', to], ['Billing', billing]] as const) {
+      if (day != null && (day < 1 || day > 31)) {
+        return `${label} day must be between 1 and 31`;
+      }
+    }
+    if (from != null && to != null && from > to) {
+      return 'Reading schedule: From day must be on or before To day';
+    }
+    return null;
+  };
+
   const handleSave = async () => {
     if (!form.supply_name) {
       showAlert('Supply name is required', 'Validation');
@@ -286,6 +341,11 @@ export default function WaterworksSuppliesPage() {
     }
     if (!editing && !form.supply_code) {
       showAlert('Supply code is being generated. Please wait or try again.', 'Validation');
+      return;
+    }
+    const scheduleError = validateSchedule();
+    if (scheduleError) {
+      showAlert(scheduleError, 'Validation');
       return;
     }
     const tierError = validateFormTiers();
@@ -296,6 +356,9 @@ export default function WaterworksSuppliesPage() {
     try {
       const payload = {
         ...form,
+        reading_day_from: form.reading_day_from ? parseInt(form.reading_day_from, 10) : null,
+        reading_day_to: form.reading_day_to ? parseInt(form.reading_day_to, 10) : null,
+        billing_day: form.billing_day ? parseInt(form.billing_day, 10) : null,
         billing_model: billingModel,
         base_unit_rate: billingModel === 'per_unit_deduction' ? baseUnitRate : undefined,
         rate_tiers: formTiers.map(({ tier_order, from_m3, to_m3, charge_type, rate_amount }, index) => ({
@@ -411,6 +474,7 @@ export default function WaterworksSuppliesPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Billing</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Accounts</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -423,6 +487,10 @@ export default function WaterworksSuppliesPage() {
                       <td className="px-4 py-3 text-sm font-mono">{s.supply_code}</td>
                       <td className="px-4 py-3 text-sm font-medium">{s.supply_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{s.location || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <div>Read: {formatReadingSchedule(s)}</div>
+                        <div className="text-xs text-gray-500">Bill: {formatBillingSchedule(s)}</div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {BILLING_MODEL_LABELS[(s.billing_model || 'progressive') as BillingModel].split('(')[0].trim()}
                       </td>
@@ -441,7 +509,7 @@ export default function WaterworksSuppliesPage() {
                     </tr>
                   ))}
                   {!supplies.length && (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No water supplies found</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No water supplies found</td></tr>
                   )}
                 </tbody>
               </table>
@@ -456,9 +524,32 @@ export default function WaterworksSuppliesPage() {
         </div>
 
         {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-xl max-w-xl w-full p-6 my-8">
-              <h2 className="text-lg font-bold mb-4">{editing ? 'Edit Supply' : 'New Water Supply'}</h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+            <button
+              type="button"
+              aria-label="Close"
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowModal(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative flex w-full max-w-xl max-h-[min(90dvh,calc(100vh-2rem))] flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+            >
+              <div className="shrink-0 border-b border-gray-100 px-6 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold">{editing ? 'Edit Supply' : 'New Water Supply'}</h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="text-2xl leading-none text-gray-400 hover:text-gray-600"
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Supply Name *</label>
@@ -623,6 +714,52 @@ export default function WaterworksSuppliesPage() {
                   </div>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Reading Schedule</label>
+                  <p className="text-xs text-gray-500 mb-2">Day(s) of the month when meter reading is conducted</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">From day</label>
+                      <select
+                        value={form.reading_day_from}
+                        onChange={(e) => setForm({ ...form, reading_day_from: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                      >
+                        <option value="">Not set</option>
+                        {SCHEDULE_DAYS.map((day) => (
+                          <option key={`read-from-${day}`} value={day}>{formatOrdinal(day)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">To day</label>
+                      <select
+                        value={form.reading_day_to}
+                        onChange={(e) => setForm({ ...form, reading_day_to: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                      >
+                        <option value="">Not set</option>
+                        {SCHEDULE_DAYS.map((day) => (
+                          <option key={`read-to-${day}`} value={day}>{formatOrdinal(day)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Billing Schedule</label>
+                  <p className="text-xs text-gray-500 mb-2">Day of the month when bills are generated / due</p>
+                  <select
+                    value={form.billing_day}
+                    onChange={(e) => setForm({ ...form, billing_day: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    <option value="">Not set</option>
+                    {SCHEDULE_DAYS.map((day) => (
+                      <option key={`bill-${day}`} value={day}>{formatOrdinal(day)} of the month</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WaterSupply['status'] })} className="w-full px-3 py-2 border rounded-lg text-sm">
                     <option value="active">Active</option>
@@ -631,7 +768,8 @@ export default function WaterworksSuppliesPage() {
                   </select>
                 </div>
               </div>
-              <div className="flex justify-end gap-2 mt-6">
+              </div>
+              <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-4 flex justify-end gap-2">
                 <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 border rounded-lg text-sm">Cancel</button>
                 <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Save</button>
               </div>

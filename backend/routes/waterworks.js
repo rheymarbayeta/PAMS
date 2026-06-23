@@ -121,6 +121,36 @@ function parseUnpaidDues(value) {
   return parseFloat(amount.toFixed(2));
 }
 
+function parseScheduleDay(value, fieldName) {
+  if (value === undefined || value === null || value === '') {
+    return { day: null };
+  }
+  const day = parseInt(value, 10);
+  if (!Number.isInteger(day) || day < 1 || day > 31) {
+    return { error: `${fieldName} must be a day between 1 and 31` };
+  }
+  return { day };
+}
+
+function normalizeSupplySchedule(body) {
+  const fromResult = parseScheduleDay(body.reading_day_from, 'Reading day from');
+  if (fromResult.error) return fromResult;
+  const toResult = parseScheduleDay(body.reading_day_to, 'Reading day to');
+  if (toResult.error) return toResult;
+  const billingResult = parseScheduleDay(body.billing_day, 'Billing day');
+  if (billingResult.error) return billingResult;
+
+  if (fromResult.day && toResult.day && fromResult.day > toResult.day) {
+    return { error: 'Reading schedule: From day must be on or before To day' };
+  }
+
+  return {
+    reading_day_from: fromResult.day,
+    reading_day_to: toResult.day,
+    billing_day: billingResult.day,
+  };
+}
+
 async function generateNextAccountNumber(connection, supplyId, accountType) {
   const typeKey = normalizeAccountType(accountType);
   const typeCode = getAccountTypeCode(typeKey);
@@ -568,6 +598,9 @@ router.post('/water-supplies', authorize(...WW_MANAGER_ROLES), async (req, res) 
     const tierResult = normalizeRateTiersInput(rate_tiers, billingModel, base_unit_rate);
     if (tierResult.error) return res.status(400).json({ error: tierResult.error });
 
+    const schedule = normalizeSupplySchedule(req.body);
+    if (schedule.error) return res.status(400).json({ error: schedule.error });
+
     const supplyId = generateId(ID_PREFIXES.WW_SUPPLY);
     let finalCode = '';
     const connection = await pool.getConnection();
@@ -587,14 +620,19 @@ router.post('/water-supplies', authorize(...WW_MANAGER_ROLES), async (req, res) 
 
       await connection.query(
         `INSERT INTO ww_water_supplies
-          (supply_id, supply_code, supply_name, location, description, rate_per_cubic_meter, minimum_charge, billing_model, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (supply_id, supply_code, supply_name, location, description,
+           reading_day_from, reading_day_to, billing_day,
+           rate_per_cubic_meter, minimum_charge, billing_model, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           supplyId,
           finalCode,
           supply_name.trim(),
           location || null,
           description || null,
+          schedule.reading_day_from,
+          schedule.reading_day_to,
+          schedule.billing_day,
           billingModel === 'per_unit_deduction' ? parseFloat(base_unit_rate) || 0 : 0,
           billingModel === 'progressive'
             ? tierResult.tiers.find((t) => t.charge_type === 'minimum')?.rate_amount || 0
@@ -668,6 +706,9 @@ router.put('/water-supplies/:id', authorize(...WW_MANAGER_ROLES), async (req, re
       billingModel = normalizeBillingModel(billing_model);
     }
 
+    const schedule = normalizeSupplySchedule(req.body);
+    if (schedule.error) return res.status(400).json({ error: schedule.error });
+
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -677,6 +718,9 @@ router.put('/water-supplies/:id', authorize(...WW_MANAGER_ROLES), async (req, re
           supply_name = COALESCE(?, supply_name),
           location = COALESCE(?, location),
           description = COALESCE(?, description),
+          reading_day_from = ?,
+          reading_day_to = ?,
+          billing_day = ?,
           status = COALESCE(?, status)
          WHERE supply_id = ?`,
         [
@@ -684,6 +728,9 @@ router.put('/water-supplies/:id', authorize(...WW_MANAGER_ROLES), async (req, re
           supply_name || null,
           location !== undefined ? location : null,
           description !== undefined ? description : null,
+          schedule.reading_day_from,
+          schedule.reading_day_to,
+          schedule.billing_day,
           status || null,
           req.params.id,
         ]
