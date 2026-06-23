@@ -128,6 +128,10 @@ export default function AccountDetailPage() {
                     </Link>
                   </dd></div>
                 )}
+                <div><dt className="text-gray-500">Unpaid Dues</dt><dd>{formatPeso(account.unpaid_dues ?? 0)}</dd></div>
+                {account.unpaid_dues_notes && (
+                  <div className="col-span-2"><dt className="text-gray-500">Unpaid Dues Notes</dt><dd>{account.unpaid_dues_notes}</dd></div>
+                )}
                 <div><dt className="text-gray-500">Meter</dt><dd>{account.meter_number || '—'}</dd></div>
                 <div><dt className="text-gray-500">Address</dt><dd>{account.address || '—'}</dd></div>
                 <div><dt className="text-gray-500">Contact</dt><dd>{account.contact_number || '—'}</dd></div>

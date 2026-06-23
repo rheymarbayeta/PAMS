@@ -6,10 +6,16 @@ import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
-import waterworksService, { ConsumerAccount, WaterSupply } from '@/services/waterworksService';
+import waterworksService, {
+  ConsumerAccount,
+  WaterSupply,
+  AccountType,
+  ACCOUNT_TYPE_OPTIONS,
+} from '@/services/waterworksService';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
+import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 const WW_DELETE_ROLES = ['SuperAdmin', 'Admin'];
@@ -49,6 +55,10 @@ function splitSearchToNames(search: string) {
   };
 }
 
+function accountTypeCode(type?: AccountType): string {
+  return ACCOUNT_TYPE_OPTIONS.find((t) => t.value === type)?.code || 'R';
+}
+
 function AccountsContent() {
   const { hasRole } = useAuth();
   const canDeleteAccount = hasRole(WW_DELETE_ROLES);
@@ -72,6 +82,7 @@ function AccountsContent() {
   const [showNewEntityModal, setShowNewEntityModal] = useState(false);
   const [creatingEntity, setCreatingEntity] = useState(false);
   const [newEntityForm, setNewEntityForm] = useState({ ...EMPTY_NEW_ENTITY_FORM });
+  const [loadingNextNumber, setLoadingNextNumber] = useState(false);
 
   const updateNewEntityNameField = (field: 'first_name' | 'middle_name' | 'last_name', value: string) => {
     setNewEntityForm((prev) => {
@@ -94,6 +105,7 @@ function AccountsContent() {
 
   const [form, setForm] = useState({
     account_number: '',
+    account_type: 'residential' as AccountType,
     supply_id: '',
     entity_id: '',
     consumer_name: '',
@@ -104,7 +116,29 @@ function AccountsContent() {
     connection_date: '',
     status: 'active' as ConsumerAccount['status'],
     previous_reading: '0',
+    unpaid_dues: '0',
+    unpaid_dues_notes: '',
   });
+
+  const fetchNextAccountNumber = useCallback(async (supplyId: string, accountType: AccountType) => {
+    if (!supplyId) return;
+    try {
+      setLoadingNextNumber(true);
+      const result = await waterworksService.getNextAccountNumber(supplyId, accountType);
+      setForm((prev) => ({ ...prev, account_number: result.account_number }));
+    } catch (error) {
+      console.error('Error fetching next account number:', error);
+      showAlert('Could not generate account number. Check supply and try again.', 'Warning');
+    } finally {
+      setLoadingNextNumber(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!showModal || editing) return;
+    if (!form.supply_id) return;
+    fetchNextAccountNumber(form.supply_id, form.account_type);
+  }, [showModal, editing, form.supply_id, form.account_type, fetchNextAccountNumber]);
 
   const fetchEntities = useCallback(async (searchTerm: string = '') => {
     try {
@@ -217,6 +251,7 @@ function AccountsContent() {
     resetEntityState();
     setForm({
       account_number: '',
+      account_type: 'residential',
       supply_id: supplyFilter || (supplies[0]?.supply_id || ''),
       entity_id: '',
       consumer_name: '',
@@ -227,6 +262,8 @@ function AccountsContent() {
       connection_date: '',
       status: 'active',
       previous_reading: '0',
+      unpaid_dues: '0',
+      unpaid_dues_notes: '',
     });
     setShowModal(true);
   };
@@ -236,6 +273,7 @@ function AccountsContent() {
     resetEntityState();
     setForm({
       account_number: a.account_number,
+      account_type: a.account_type || 'residential',
       supply_id: a.supply_id,
       entity_id: a.entity_id || '',
       consumer_name: a.consumer_name,
@@ -246,6 +284,8 @@ function AccountsContent() {
       connection_date: a.connection_date || '',
       status: a.status,
       previous_reading: String(a.previous_reading ?? 0),
+      unpaid_dues: String(a.unpaid_dues ?? 0),
+      unpaid_dues_notes: a.unpaid_dues_notes || '',
     });
     if (a.entity_id) {
       setSelectedEntity({
@@ -262,8 +302,12 @@ function AccountsContent() {
   };
 
   const handleSave = async () => {
-    if (!form.account_number || !form.supply_id) {
-      showAlert('Account number and supply are required', 'Validation');
+    if (!form.supply_id) {
+      showAlert('Water supply is required', 'Validation');
+      return;
+    }
+    if (!editing && !form.account_number) {
+      showAlert('Account number is being generated. Please wait or try again.', 'Validation');
       return;
     }
     if (!form.entity_id && !editing) {
@@ -275,6 +319,8 @@ function AccountsContent() {
         ...form,
         entity_id: form.entity_id || undefined,
         previous_reading: parseFloat(form.previous_reading) || 0,
+        unpaid_dues: parseFloat(form.unpaid_dues) || 0,
+        unpaid_dues_notes: form.unpaid_dues_notes.trim() || null,
       };
       if (editing) {
         await waterworksService.updateAccount(editing.account_id, payload);
@@ -351,6 +397,7 @@ function AccountsContent() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account #</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Consumer</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supply</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Meter</th>
@@ -363,6 +410,11 @@ function AccountsContent() {
               {accounts.map((a) => (
                 <tr key={a.account_id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-mono">{a.account_number}</td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium">
+                      {accountTypeCode(a.account_type)}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-sm">
                     {a.consumer_name}
                     {a.entity_id && (
@@ -385,7 +437,7 @@ function AccountsContent() {
                 </tr>
               ))}
               {!accounts.length && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No accounts found</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No accounts found</td></tr>
               )}
             </tbody>
           </table>
@@ -477,15 +529,44 @@ function AccountsContent() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
-                <input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Water Supply *</label>
+                <select
+                  value={form.supply_id}
+                  onChange={(e) => setForm({ ...form, supply_id: e.target.value })}
+                  disabled={!!editing}
+                  className="w-full px-3 py-2 border rounded-lg text-sm disabled:bg-gray-50"
+                >
+                  <option value="">Select supply</option>
+                  {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name} ({s.supply_code})</option>)}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Water Supply *</label>
-                <select value={form.supply_id} onChange={(e) => setForm({ ...form, supply_id: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm">
-                  <option value="">Select supply</option>
-                  {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>)}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Account Type *</label>
+                <select
+                  value={form.account_type}
+                  onChange={(e) => setForm({ ...form, account_type: e.target.value as AccountType })}
+                  disabled={!!editing}
+                  className="w-full px-3 py-2 border rounded-lg text-sm disabled:bg-gray-50"
+                >
+                  {ACCOUNT_TYPE_OPTIONS.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label} ({type.code})
+                    </option>
+                  ))}
                 </select>
+                {!editing && form.supply_id && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Format: supply code − type − series (e.g. WS000001-{accountTypeCode(form.account_type)}-0001)
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
+                <input
+                  value={loadingNextNumber && !editing ? 'Generating...' : form.account_number}
+                  readOnly
+                  className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 font-mono"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Service Address</label>
@@ -519,6 +600,31 @@ function AccountsContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Initial Reading (m³)</label>
                   <input type="number" step="0.01" value={form.previous_reading} onChange={(e) => setForm({ ...form, previous_reading: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unpaid Dues (₱)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.unpaid_dues}
+                  onChange={(e) => setForm({ ...form, unpaid_dues: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Prior unpaid balance carried into the next bill as previous balance
+                  {parseFloat(form.unpaid_dues) > 0 ? ` (${formatPeso(parseFloat(form.unpaid_dues) || 0)})` : ''}.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unpaid Dues Notes</label>
+                <textarea
+                  value={form.unpaid_dues_notes}
+                  onChange={(e) => setForm({ ...form, unpaid_dues_notes: e.target.value })}
+                  placeholder="Optional (e.g. arrears from prior system, period covered)"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  rows={2}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>

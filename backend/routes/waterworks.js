@@ -95,6 +95,74 @@ const SUPPLY_CODE_PREFIX = 'WS';
 const SUPPLY_CODE_LENGTH = 8;
 const SUPPLY_CODE_MAX_LENGTH = 20;
 
+const ACCOUNT_TYPES = {
+  residential: { code: 'R', label: 'Residential' },
+  commercial: { code: 'C', label: 'Commercial' },
+  institutional: { code: 'I', label: 'Institutional' },
+  others: { code: 'O', label: 'Others' },
+};
+
+const ACCOUNT_TYPE_KEYS = Object.keys(ACCOUNT_TYPES);
+const ACCOUNT_SERIES_PAD = 4;
+
+function normalizeAccountType(value) {
+  const key = String(value || 'residential').trim().toLowerCase();
+  return ACCOUNT_TYPE_KEYS.includes(key) ? key : 'residential';
+}
+
+function getAccountTypeCode(accountType) {
+  return ACCOUNT_TYPES[normalizeAccountType(accountType)].code;
+}
+
+function parseUnpaidDues(value) {
+  if (value === undefined || value === null || value === '') return 0;
+  const amount = parseFloat(value);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  return parseFloat(amount.toFixed(2));
+}
+
+async function generateNextAccountNumber(connection, supplyId, accountType) {
+  const typeKey = normalizeAccountType(accountType);
+  const typeCode = getAccountTypeCode(typeKey);
+
+  const [supplies] = await connection.query(
+    'SELECT supply_code FROM ww_water_supplies WHERE supply_id = ?',
+    [supplyId]
+  );
+  if (!supplies.length) {
+    throw new Error('Invalid supply_id');
+  }
+
+  const supplyCode = supplies[0].supply_code;
+  const prefix = `${supplyCode}-${typeCode}-`;
+
+  const [rows] = await connection.query(
+    `SELECT account_number FROM ww_consumer_accounts
+     WHERE supply_id = ? AND account_type = ? AND account_number LIKE ?
+     ORDER BY account_number DESC LIMIT 1`,
+    [supplyId, typeKey, `${prefix}%`]
+  );
+
+  let nextNum = 1;
+  if (rows.length) {
+    const suffix = rows[0].account_number.slice(prefix.length);
+    const parsed = parseInt(suffix, 10);
+    if (Number.isFinite(parsed)) nextNum = parsed + 1;
+  }
+
+  const maxNum = Math.pow(10, ACCOUNT_SERIES_PAD) - 1;
+  for (let num = nextNum; num <= maxNum; num += 1) {
+    const accountNumber = `${prefix}${String(num).padStart(ACCOUNT_SERIES_PAD, '0')}`;
+    const [existing] = await connection.query(
+      'SELECT 1 FROM ww_consumer_accounts WHERE account_number = ? LIMIT 1',
+      [accountNumber]
+    );
+    if (!existing.length) return accountNumber;
+  }
+
+  throw new Error('Unable to generate a unique account number');
+}
+
 function normalizeSupplyCode(code) {
   return String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
@@ -329,6 +397,12 @@ async function getBillingSurchargeSettings(connection) {
 }
 
 async function getAccountOutstandingBalance(connection, accountId) {
+  const [accounts] = await connection.query(
+    'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
+    [accountId]
+  );
+  const openingDues = parseFloat(accounts[0]?.unpaid_dues) || 0;
+
   const [rows] = await connection.query(`
     SELECT b.bill_id, b.total_due, COALESCE(SUM(p.amount_paid), 0) AS total_paid
     FROM ww_bills b
@@ -337,11 +411,12 @@ async function getAccountOutstandingBalance(connection, accountId) {
     GROUP BY b.bill_id, b.total_due
   `, [accountId]);
 
-  let balance = 0;
+  let billBalance = 0;
   for (const row of rows) {
-    balance += parseFloat(row.total_due) - parseFloat(row.total_paid);
+    billBalance += parseFloat(row.total_due) - parseFloat(row.total_paid);
   }
-  return Math.max(0, parseFloat(balance.toFixed(2)));
+
+  return Math.max(0, parseFloat((billBalance + openingDues).toFixed(2)));
 }
 
 async function updateBillStatus(connection, billId) {
@@ -674,6 +749,39 @@ router.delete('/water-supplies/:id', authorize(...WW_MANAGER_ROLES), async (req,
 
 // ==================== CONSUMER ACCOUNTS ====================
 
+router.get('/accounts/next-number', authorize(...WW_MANAGER_ROLES), async (req, res) => {
+  try {
+    const { supply_id, account_type } = req.query;
+    if (!supply_id) {
+      return res.status(400).json({ error: 'supply_id is required' });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      const account_number = await generateNextAccountNumber(
+        connection,
+        supply_id,
+        account_type || 'residential'
+      );
+      res.json({
+        data: {
+          account_number,
+          account_type: normalizeAccountType(account_type),
+          type_code: getAccountTypeCode(account_type),
+        },
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get next account number error:', error);
+    if (error.message === 'Invalid supply_id') {
+      return res.status(400).json({ error: 'Invalid supply_id' });
+    }
+    res.status(500).json({ error: 'Failed to generate account number' });
+  }
+});
+
 router.get('/accounts', async (req, res) => {
   try {
     if (!hasAnyRole(req.user, [...WW_MANAGER_ROLES, 'Meter Reader'])) {
@@ -810,60 +918,88 @@ router.post('/accounts', authorize(...WW_MANAGER_ROLES), async (req, res) => {
   try {
     const {
       account_number,
+      account_type,
       supply_id,
       entity_id,
       meter_number,
       connection_date,
       status,
       previous_reading,
+      unpaid_dues,
+      unpaid_dues_notes,
     } = req.body;
 
-    if (!account_number || !supply_id) {
-      return res.status(400).json({ error: 'account_number and supply_id are required' });
+    if (!supply_id) {
+      return res.status(400).json({ error: 'supply_id is required' });
     }
+
+    const openingDues = parseUnpaidDues(unpaid_dues);
+    if (openingDues === null) {
+      return res.status(400).json({ error: 'unpaid_dues must be a valid non-negative amount' });
+    }
+
+    const normalizedType = normalizeAccountType(account_type);
 
     const resolved = await resolveAccountConsumerFields(req.body);
     if (resolved.error) {
       return res.status(400).json({ error: resolved.error });
     }
 
-    const [supply] = await pool.execute(
-      'SELECT supply_id FROM ww_water_supplies WHERE supply_id = ?',
-      [supply_id]
-    );
-    if (!supply.length) return res.status(400).json({ error: 'Invalid supply_id' });
+    const connection = await pool.getConnection();
+    try {
+      const [supply] = await connection.query(
+        'SELECT supply_id FROM ww_water_supplies WHERE supply_id = ?',
+        [supply_id]
+      );
+      if (!supply.length) return res.status(400).json({ error: 'Invalid supply_id' });
 
-    const accountId = generateId(ID_PREFIXES.WW_ACCOUNT);
-    await pool.execute(
-      `INSERT INTO ww_consumer_accounts
-        (account_id, account_number, supply_id, entity_id, consumer_name, address, contact_number, email,
-         meter_number, connection_date, status, previous_reading, last_reading)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        accountId,
-        account_number.trim(),
-        supply_id,
-        resolved.entity_id,
-        resolved.consumer_name,
-        resolved.address,
-        resolved.contact_number,
-        resolved.email,
-        meter_number || null,
-        parseDate(connection_date),
-        status || 'active',
-        parseFloat(previous_reading) || 0,
-        parseFloat(previous_reading) || 0,
-      ]
-    );
+      let finalAccountNumber = account_number ? String(account_number).trim() : '';
+      if (!finalAccountNumber) {
+        finalAccountNumber = await generateNextAccountNumber(connection, supply_id, normalizedType);
+      }
 
-    await logAction(req.user.user_id, 'CREATE_WW_ACCOUNT', `Created account: ${account_number}`, accountId);
-    res.status(201).json({ data: { account_id: accountId }, message: 'Account created' });
+      const accountId = generateId(ID_PREFIXES.WW_ACCOUNT);
+      await connection.query(
+        `INSERT INTO ww_consumer_accounts
+          (account_id, account_number, account_type, supply_id, entity_id, consumer_name, address, contact_number, email,
+           meter_number, connection_date, status, previous_reading, last_reading, unpaid_dues, unpaid_dues_notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          accountId,
+          finalAccountNumber,
+          normalizedType,
+          supply_id,
+          resolved.entity_id,
+          resolved.consumer_name,
+          resolved.address,
+          resolved.contact_number,
+          resolved.email,
+          meter_number || null,
+          parseDate(connection_date),
+          status || 'active',
+          parseFloat(previous_reading) || 0,
+          parseFloat(previous_reading) || 0,
+          openingDues,
+          unpaid_dues_notes ? String(unpaid_dues_notes).trim() : null,
+        ]
+      );
+
+      await logAction(req.user.user_id, 'CREATE_WW_ACCOUNT', `Created account: ${finalAccountNumber}`, accountId);
+      res.status(201).json({
+        data: { account_id: accountId, account_number: finalAccountNumber },
+        message: 'Account created',
+      });
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'Account number already exists' });
     }
     if (error.code === 'ER_BAD_FIELD_ERROR') {
-      return res.status(500).json({ error: 'Database migration required: run add_waterworks_account_entity.sql' });
+      return res.status(500).json({
+        error: 'Database migration required: run add_waterworks_account_entity.sql, add_waterworks_account_type.sql, and add_waterworks_account_unpaid_dues.sql',
+      });
     }
     console.error('Create account error:', error);
     res.status(500).json({ error: 'Failed to create account' });
@@ -874,6 +1010,7 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
   try {
     const {
       account_number,
+      account_type,
       supply_id,
       entity_id,
       consumer_name,
@@ -885,6 +1022,8 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
       status,
       previous_reading,
       last_reading,
+      unpaid_dues,
+      unpaid_dues_notes,
     } = req.body;
 
     const [existing] = await pool.execute(
@@ -892,6 +1031,14 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
       [req.params.id]
     );
     if (!existing.length) return res.status(404).json({ error: 'Account not found' });
+
+    let openingDues = null;
+    if (unpaid_dues !== undefined) {
+      openingDues = parseUnpaidDues(unpaid_dues);
+      if (openingDues === null) {
+        return res.status(400).json({ error: 'unpaid_dues must be a valid non-negative amount' });
+      }
+    }
 
     let resolvedConsumer = null;
     if (entity_id !== undefined && entity_id) {
@@ -910,6 +1057,7 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
     await pool.execute(
       `UPDATE ww_consumer_accounts SET
         account_number = COALESCE(?, account_number),
+        account_type = COALESCE(?, account_type),
         supply_id = COALESCE(?, supply_id),
         entity_id = COALESCE(?, entity_id),
         consumer_name = COALESCE(?, consumer_name),
@@ -920,10 +1068,13 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
         connection_date = COALESCE(?, connection_date),
         status = COALESCE(?, status),
         previous_reading = COALESCE(?, previous_reading),
-        last_reading = COALESCE(?, last_reading)
+        last_reading = COALESCE(?, last_reading),
+        unpaid_dues = COALESCE(?, unpaid_dues),
+        unpaid_dues_notes = COALESCE(?, unpaid_dues_notes)
        WHERE account_id = ?`,
       [
         account_number || null,
+        account_type ? normalizeAccountType(account_type) : null,
         supply_id || null,
         resolvedConsumer ? resolvedConsumer.entity_id : null,
         resolvedConsumer ? resolvedConsumer.consumer_name : (consumer_name || null),
@@ -935,6 +1086,8 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
         status || null,
         previous_reading !== undefined ? parseFloat(previous_reading) : null,
         last_reading !== undefined ? parseFloat(last_reading) : null,
+        openingDues,
+        unpaid_dues_notes !== undefined ? (unpaid_dues_notes ? String(unpaid_dues_notes).trim() : null) : null,
         req.params.id,
       ]
     );
@@ -1392,6 +1545,17 @@ router.post('/bills/generate', authorize(...WW_MANAGER_ROLES), async (req, res) 
         );
 
         generated.push({ bill_id: billId, account_id: reading.account_id, total_due: totalDue });
+
+        const [acctRows] = await connection.query(
+          'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
+          [reading.account_id]
+        );
+        if (parseFloat(acctRows[0]?.unpaid_dues) > 0) {
+          await connection.query(
+            'UPDATE ww_consumer_accounts SET unpaid_dues = 0 WHERE account_id = ?',
+            [reading.account_id]
+          );
+        }
       }
 
       await connection.commit();
@@ -1626,6 +1790,18 @@ router.post('/accounts/:id/payments', authorize(...WW_MANAGER_ROLES), async (req
 
       if (bill_id) {
         await updateBillStatus(connection, bill_id);
+      } else {
+        const [acctRows] = await connection.query(
+          'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
+          [accountId]
+        );
+        const openingDues = parseFloat(acctRows[0]?.unpaid_dues) || 0;
+        if (openingDues > 0) {
+          await connection.query(
+            'UPDATE ww_consumer_accounts SET unpaid_dues = GREATEST(0, unpaid_dues - ?) WHERE account_id = ?',
+            [Math.min(amount, openingDues), accountId]
+          );
+        }
       }
 
       await connection.commit();

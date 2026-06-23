@@ -16,9 +16,37 @@ export interface WaterSupply {
 
 export type BillingModel = 'progressive' | 'bracket_flat' | 'per_unit_deduction';
 
+export type AccountType = 'residential' | 'commercial' | 'institutional' | 'others';
+
+export const ACCOUNT_TYPE_OPTIONS: { value: AccountType; label: string; code: string }[] = [
+  { value: 'residential', label: 'Residential', code: 'R' },
+  { value: 'commercial', label: 'Commercial', code: 'C' },
+  { value: 'institutional', label: 'Institutional', code: 'I' },
+  { value: 'others', label: 'Others', code: 'O' },
+];
+
+export interface ConsumerAccountInput {
+  account_number?: string;
+  account_type?: AccountType;
+  supply_id?: string;
+  entity_id?: string;
+  consumer_name?: string;
+  address?: string;
+  contact_number?: string;
+  email?: string;
+  meter_number?: string;
+  connection_date?: string;
+  status?: 'active' | 'disconnected' | 'suspended';
+  previous_reading?: number;
+  last_reading?: number;
+  unpaid_dues?: number;
+  unpaid_dues_notes?: string | null;
+}
+
 export interface ConsumerAccount {
   account_id: string;
   account_number: string;
+  account_type?: AccountType;
   supply_id: string;
   entity_id?: string | null;
   linked_entity_name?: string | null;
@@ -33,6 +61,8 @@ export interface ConsumerAccount {
   previous_reading: number;
   last_reading?: number;
   last_reading_date?: string;
+  unpaid_dues?: number;
+  unpaid_dues_notes?: string | null;
   supply_name?: string;
   supply_code?: string;
   rate_per_cubic_meter?: number;
@@ -155,12 +185,20 @@ const waterworksService = {
     return response.data.data;
   },
 
-  createAccount: async (data: Partial<ConsumerAccount>) => {
+  getNextAccountNumber: async (supplyId: string, accountType: AccountType = 'residential') => {
+    const response = await api.get<{ data: { account_number: string; account_type: AccountType; type_code: string } }>(
+      '/api/waterworks/accounts/next-number',
+      { params: { supply_id: supplyId, account_type: accountType } }
+    );
+    return response.data.data;
+  },
+
+  createAccount: async (data: ConsumerAccountInput) => {
     const response = await api.post('/api/waterworks/accounts', data);
     return response.data;
   },
 
-  updateAccount: async (id: string, data: Partial<ConsumerAccount>) => {
+  updateAccount: async (id: string, data: ConsumerAccountInput) => {
     const response = await api.put(`/api/waterworks/accounts/${id}`, data);
     return response.data;
   },
