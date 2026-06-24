@@ -279,6 +279,9 @@ function normalizeRateTiersInput(tiers, billingModel = 'progressive', baseUnitRa
       let chargeType = VALID_CHARGE_TYPES.includes(tier.charge_type) ? tier.charge_type : 'per_cubic';
       if (model === 'bracket_flat') chargeType = 'flat_bracket';
       if (model === 'per_unit_deduction') chargeType = 'deduction';
+      if (model === 'minimum_excess') {
+        chargeType = index === 0 ? 'minimum' : 'per_cubic';
+      }
       if (model === 'progressive' && index === 0 && chargeType !== 'minimum') {
         chargeType = tier.charge_type === 'minimum' ? 'minimum' : chargeType;
       }
@@ -336,6 +339,22 @@ function normalizeRateTiersInput(tiers, billingModel = 'progressive', baseUnitRa
     }
   }
 
+  if (model === 'minimum_excess') {
+    const minTier = normalized.find((tier) => tier.charge_type === 'minimum');
+    const excessTiers = normalized.filter((tier) => tier.charge_type === 'per_cubic');
+    if (!minTier) {
+      return { error: 'Minimum + excess billing requires a minimum charge tier' };
+    }
+    if (excessTiers.length !== 1) {
+      return { error: 'Minimum + excess billing requires exactly one excess per-m³ tier' };
+    }
+    const excessFrom = parseFloat(excessTiers[0].from_m3);
+    const minTo = minTier.to_m3 != null ? parseFloat(minTier.to_m3) : null;
+    if (minTo != null && excessFrom <= minTo) {
+      return { error: 'Excess rate must start after the minimum block (from m³ > minimum up to m³)' };
+    }
+  }
+
   return { tiers: normalized, billingModel: model };
 }
 
@@ -370,6 +389,9 @@ async function saveSupplyRateTiers(connection, supplyId, tiers, billingModel = '
     minimumCharge = minTier.rate_amount;
   } else if (model === 'bracket_flat') {
     minimumCharge = Math.min(...tiers.map((tier) => tier.rate_amount));
+  } else if (model === 'minimum_excess') {
+    const minTier = tiers.find((tier) => tier.charge_type === 'minimum') || tiers[0];
+    minimumCharge = minTier.rate_amount;
   } else if (model === 'per_unit_deduction') {
     ratePerCubic = parseFloat(baseUnitRate) || 0;
   }

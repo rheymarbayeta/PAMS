@@ -40,8 +40,62 @@ export default function PropertyUnitsSection({
     area_sqm: '',
     status: 'available'
   });
-  const [bulkInput, setBulkInput] = useState('');
+  const [bulkForm, setBulkForm] = useState({
+    unit_count: '',
+    floor_level: '',
+    unit_description: '',
+    area_sqm: '',
+    starting_number: '',
+  });
   const [submitting, setSubmitting] = useState(false);
+
+  const getNextStartingNumber = () => {
+    const numericStalls = units
+      .map((u) => parseInt(u.stall_number.replace(/\D/g, ''), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (numericStalls.length) {
+      return Math.max(...numericStalls) + 1;
+    }
+    return units.length + 1;
+  };
+
+  const openBulkAddModal = () => {
+    setBulkForm({
+      unit_count: '',
+      floor_level: '',
+      unit_description: '',
+      area_sqm: '',
+      starting_number: String(getNextStartingNumber()),
+    });
+    setShowBulkAdd(true);
+  };
+
+  const buildBulkStallNumbers = (count: number, startNum: number) => {
+    const existing = new Set(units.map((u) => u.stall_number.trim().toLowerCase()));
+    const stallNumbers: string[] = [];
+    let current = startNum;
+
+    while (stallNumbers.length < count) {
+      const stallNumber = String(current);
+      if (!existing.has(stallNumber.toLowerCase())) {
+        stallNumbers.push(stallNumber);
+        existing.add(stallNumber.toLowerCase());
+      }
+      current += 1;
+      if (current > startNum + count + 500) break;
+    }
+
+    return stallNumbers;
+  };
+
+  const getBulkPreview = () => {
+    const count = parseInt(bulkForm.unit_count, 10);
+    const startNum = parseInt(bulkForm.starting_number, 10);
+    if (!Number.isFinite(count) || count < 1 || !Number.isFinite(startNum) || startNum < 1) {
+      return [];
+    }
+    return buildBulkStallNumbers(Math.min(count, 5), startNum);
+  };
 
   // Fetch active leases for the property to determine unit occupancy
   useEffect(() => {
@@ -153,41 +207,44 @@ export default function PropertyUnitsSection({
   };
 
   const handleBulkAdd = async () => {
-    if (!bulkInput.trim()) {
-      alert('Please enter unit data');
+    const count = parseInt(bulkForm.unit_count, 10);
+    const startNum = parseInt(bulkForm.starting_number, 10);
+
+    if (!Number.isFinite(count) || count < 1) {
+      alert('Please enter a valid number of stalls/units (at least 1)');
+      return;
+    }
+    if (count > 200) {
+      alert('Maximum 200 units can be added at once');
+      return;
+    }
+    if (!Number.isFinite(startNum) || startNum < 1) {
+      alert('Please enter a valid starting stall number');
       return;
     }
 
+    const areaSqm = bulkForm.area_sqm.trim() ? parseFloat(bulkForm.area_sqm) : null;
+    if (bulkForm.area_sqm.trim() && (!Number.isFinite(areaSqm!) || areaSqm! < 0)) {
+      alert('Please enter a valid area in sqm');
+      return;
+    }
+
+    const stallNumbers = buildBulkStallNumbers(count, startNum);
+    if (stallNumbers.length < count) {
+      alert(`Could only generate ${stallNumbers.length} unique stall numbers. Adjust the starting number and try again.`);
+      return;
+    }
+
+    const unitsToCreate = stallNumbers.map((stall_number) => ({
+      stall_number,
+      floor_level: bulkForm.floor_level.trim() || null,
+      unit_description: bulkForm.unit_description.trim() || null,
+      area_sqm: areaSqm,
+      status: 'available' as const,
+    }));
+
     setSubmitting(true);
     try {
-      // Parse bulk input - each line is a stall number, optionally with floor level, description
-      // Format: stall_number | floor_level | unit_description | area_sqm
-      const lines = bulkInput.trim().split('\n');
-      const unitsToCreate: any[] = [];
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        const parts = line.split('|').map(p => p.trim());
-        const stallNumber = parts[0];
-        
-        if (!stallNumber) continue;
-        
-        unitsToCreate.push({
-          stall_number: stallNumber,
-          floor_level: parts[1] || null,
-          unit_description: parts[2] || null,
-          area_sqm: parts[3] ? parseFloat(parts[3]) : null,
-          status: 'available'
-        });
-      }
-
-      if (unitsToCreate.length === 0) {
-        alert('No valid units found in the input');
-        return;
-      }
-
-      // Create all units
       let successCount = 0;
       let failureCount = 0;
 
@@ -204,11 +261,17 @@ export default function PropertyUnitsSection({
       if (failureCount > 0) {
         alert(`Created ${successCount} units. Failed to create ${failureCount} units.`);
       } else {
-        alert(`Successfully created ${successCount} units`);
+        alert(`Successfully created ${successCount} unit${successCount === 1 ? '' : 's'}`);
       }
 
       setShowBulkAdd(false);
-      setBulkInput('');
+      setBulkForm({
+        unit_count: '',
+        floor_level: '',
+        unit_description: '',
+        area_sqm: '',
+        starting_number: '',
+      });
       onUnitsUpdated();
     } catch (error: any) {
       alert('Error processing bulk add: ' + (error.response?.data?.error || error.message));
@@ -253,7 +316,7 @@ export default function PropertyUnitsSection({
               Add Unit
             </button>
             <button
-              onClick={() => setShowBulkAdd(true)}
+              onClick={openBulkAddModal}
               className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -349,42 +412,125 @@ export default function PropertyUnitsSection({
 
       {/* Bulk Add Modal */}
       {showBulkAdd && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Bulk Add Units</h3>
-            <p className="text-sm text-gray-600 mb-4">Enter one unit per line. Format: Stall Number | Floor Level | Description | Area (sqm)</p>
-            
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-xs text-blue-700">
-                <strong>Example:</strong><br/>
-                Stall A | Ground | Office | 50<br/>
-                101 | 1st Floor | Retail | 75<br/>
-                102 | 1st Floor | Storage |
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowBulkAdd(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-lg max-h-[min(90dvh,calc(100vh-2rem))] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+          >
+            <div className="shrink-0 border-b border-gray-100 px-6 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold text-gray-900">Bulk Add Units</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkAdd(false)}
+                  className="text-2xl leading-none text-gray-400 hover:text-gray-600"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                Enter shared details once. Individual stall numbers are generated automatically.
               </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Unit Data *</label>
-              <textarea
-                value={bulkInput}
-                onChange={(e) => setBulkInput(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"
-                placeholder="Stall A | Ground | Office | 50&#10;101 | 1st Floor | Retail | 75"
-                rows={8}
-              />
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Number of Stalls/Units <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={bulkForm.unit_count}
+                    onChange={(e) => setBulkForm({ ...bulkForm, unit_count: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="e.g., 10"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Starting Stall #</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={bulkForm.starting_number}
+                    onChange={(e) => setBulkForm({ ...bulkForm, starting_number: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Auto"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Floor Level</label>
+                <input
+                  type="text"
+                  value={bulkForm.floor_level}
+                  onChange={(e) => setBulkForm({ ...bulkForm, floor_level: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="e.g., Ground, 1st Floor, 2nd Floor"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unit Description</label>
+                <input
+                  type="text"
+                  value={bulkForm.unit_description}
+                  onChange={(e) => setBulkForm({ ...bulkForm, unit_description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="e.g., Office, Retail, Storage"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Area (sqm)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={bulkForm.area_sqm}
+                  onChange={(e) => setBulkForm({ ...bulkForm, area_sqm: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Applied to all units (optional)"
+                />
+              </div>
+
+              {getBulkPreview().length > 0 && (
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <p className="text-xs font-semibold text-indigo-900 mb-1">Preview (stall numbers)</p>
+                  <p className="text-sm text-indigo-800 font-mono">
+                    {getBulkPreview().join(', ')}
+                    {parseInt(bulkForm.unit_count, 10) > 5
+                      ? ` … +${parseInt(bulkForm.unit_count, 10) - 5} more`
+                      : ''}
+                  </p>
+                  <p className="mt-2 text-xs text-indigo-700">
+                    Each unit gets the same floor, description, and area. Status defaults to Available.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="mt-6 flex gap-3">
+            <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-4 flex gap-3">
               <button
-                onClick={() => {
-                  setShowBulkAdd(false);
-                  setBulkInput('');
-                }}
+                type="button"
+                onClick={() => setShowBulkAdd(false)}
                 className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleBulkAdd}
                 disabled={submitting}
                 className="flex-1 px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 font-medium disabled:opacity-50"

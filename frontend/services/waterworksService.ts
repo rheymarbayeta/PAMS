@@ -17,7 +17,7 @@ export interface WaterSupply {
   rate_tiers?: RateTier[];
 }
 
-export type BillingModel = 'progressive' | 'bracket_flat' | 'per_unit_deduction';
+export type BillingModel = 'progressive' | 'bracket_flat' | 'per_unit_deduction' | 'minimum_excess';
 
 export type AccountType = 'residential' | 'commercial' | 'institutional' | 'others';
 

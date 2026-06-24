@@ -52,9 +52,22 @@ interface UserOption {
 
 const BILLING_MODEL_LABELS: Record<BillingModel, string> = {
   progressive: 'Progressive (minimum + per m³ blocks)',
+  minimum_excess: 'Minimum + excess per m³ (flat min, then add per m³)',
   bracket_flat: 'Bracket flat (one charge by consumption range)',
   per_unit_deduction: 'Per m³ with deduction',
 };
+
+const MINIMUM_EXCESS_DEFAULT = {
+  minimum_upto_m3: '2',
+  minimum_amount: '200',
+  excess_from_m3: '3',
+  excess_rate: '40',
+};
+
+const MINIMUM_EXCESS_TIERS: RateTier[] = [
+  { tier_id: '1', tier_order: 1, from_m3: 0, to_m3: 2, charge_type: 'minimum', rate_amount: 200, description: 'Minimum charge (up to 2 m³)' },
+  { tier_id: '2', tier_order: 2, from_m3: 3, to_m3: null, charge_type: 'per_cubic', rate_amount: 40, description: '3 m³ and above' },
+];
 
 const PROGRESSIVE_TIERS: RateTier[] = [
   { tier_id: '1', tier_order: 1, from_m3: 0, to_m3: 10, charge_type: 'minimum', rate_amount: 100.6, description: 'Minimum charge (up to 10 m³)' },
@@ -82,7 +95,56 @@ const DEFAULT_RATE_TIERS = PROGRESSIVE_TIERS;
 function tiersForBillingModel(model: BillingModel): RateTier[] {
   if (model === 'bracket_flat') return cloneTiers(BRACKET_FLAT_TIERS, 'bracket_flat');
   if (model === 'per_unit_deduction') return cloneTiers(DEDUCTION_TIERS, 'per_unit_deduction');
+  if (model === 'minimum_excess') return cloneTiers(MINIMUM_EXCESS_TIERS, 'minimum_excess');
   return cloneTiers(PROGRESSIVE_TIERS, 'progressive');
+}
+
+function minimumExcessFormFromTiers(tiers: RateTier[]) {
+  const minTier = tiers.find((t) => t.charge_type === 'minimum') || tiers[0];
+  const excessTier = tiers.find((t) => t.charge_type === 'per_cubic') || tiers[1];
+  return {
+    minimum_upto_m3: minTier?.to_m3 != null ? String(minTier.to_m3) : MINIMUM_EXCESS_DEFAULT.minimum_upto_m3,
+    minimum_amount: minTier ? String(minTier.rate_amount) : MINIMUM_EXCESS_DEFAULT.minimum_amount,
+    excess_from_m3: excessTier ? String(excessTier.from_m3) : MINIMUM_EXCESS_DEFAULT.excess_from_m3,
+    excess_rate: excessTier ? String(excessTier.rate_amount) : MINIMUM_EXCESS_DEFAULT.excess_rate,
+  };
+}
+
+function tiersFromMinimumExcessForm(form: typeof MINIMUM_EXCESS_DEFAULT): RateTier[] {
+  const minUpto = parseFloat(form.minimum_upto_m3) || 0;
+  const minAmount = parseFloat(form.minimum_amount) || 0;
+  const excessFrom = parseFloat(form.excess_from_m3) || 0;
+  const excessRate = parseFloat(form.excess_rate) || 0;
+  return cloneTiers([
+    {
+      tier_id: '1',
+      tier_order: 1,
+      from_m3: 0,
+      to_m3: minUpto,
+      charge_type: 'minimum',
+      rate_amount: minAmount,
+      description: '',
+    },
+    {
+      tier_id: '2',
+      tier_order: 2,
+      from_m3: excessFrom,
+      to_m3: null,
+      charge_type: 'per_cubic',
+      rate_amount: excessRate,
+      description: '',
+    },
+  ], 'minimum_excess');
+}
+
+function calculateMinimumExcessAmount(
+  consumption: number,
+  minUpto: number,
+  minAmount: number,
+  excessRate: number
+): number {
+  if (consumption <= minUpto) return minAmount;
+  return minAmount + (consumption - minUpto) * excessRate;
 }
 
 function defaultBaseUnitRate(model: BillingModel): number {
@@ -140,6 +202,7 @@ export default function WaterworksSuppliesPage() {
   const [formTiers, setFormTiers] = useState<RateTier[]>(cloneTiers(DEFAULT_RATE_TIERS, 'progressive'));
   const [billingModel, setBillingModel] = useState<BillingModel>('progressive');
   const [baseUnitRate, setBaseUnitRate] = useState(0);
+  const [minimumExcessForm, setMinimumExcessForm] = useState({ ...MINIMUM_EXCESS_DEFAULT });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -238,10 +301,16 @@ export default function WaterworksSuppliesPage() {
         ? full.rate_tiers
         : await waterworksService.getRateTiers(s.supply_id);
       setFormTiers(cloneTiers(tiers.length ? tiers : tiersForBillingModel(model), model));
+      if (model === 'minimum_excess') {
+        setMinimumExcessForm(minimumExcessFormFromTiers(tiers.length ? tiers : MINIMUM_EXCESS_TIERS));
+      }
     } catch {
       setBillingModel((s.billing_model || 'progressive') as BillingModel);
       setBaseUnitRate(Number(s.rate_per_cubic_meter) || 0);
       setFormTiers(cloneTiers(defaultTiers, (s.billing_model || 'progressive') as BillingModel));
+      if ((s.billing_model || '') === 'minimum_excess') {
+        setMinimumExcessForm(minimumExcessFormFromTiers(defaultTiers));
+      }
     }
     setShowModal(true);
   };
@@ -249,7 +318,30 @@ export default function WaterworksSuppliesPage() {
   const handleBillingModelChange = (model: BillingModel) => {
     setBillingModel(model);
     setBaseUnitRate(defaultBaseUnitRate(model));
-    setFormTiers(tiersForBillingModel(model));
+    if (model === 'minimum_excess') {
+      setMinimumExcessForm({ ...MINIMUM_EXCESS_DEFAULT });
+      setFormTiers(tiersForBillingModel(model));
+    } else {
+      setFormTiers(tiersForBillingModel(model));
+    }
+  };
+
+  const updateMinimumExcessField = (
+    field: keyof typeof MINIMUM_EXCESS_DEFAULT,
+    value: string
+  ) => {
+    setMinimumExcessForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === 'minimum_upto_m3') {
+        const minUpto = parseFloat(value);
+        const excessFrom = parseFloat(next.excess_from_m3);
+        if (Number.isFinite(minUpto) && (!Number.isFinite(excessFrom) || excessFrom <= minUpto)) {
+          next.excess_from_m3 = String(Number.isInteger(minUpto) ? minUpto + 1 : minUpto + 0.01);
+        }
+      }
+      setFormTiers(tiersFromMinimumExcessForm(next));
+      return next;
+    });
   };
 
   const addTier = () => {
@@ -303,6 +395,25 @@ export default function WaterworksSuppliesPage() {
   const validateFormTiers = (): string | null => {
     if (billingModel === 'per_unit_deduction' && baseUnitRate <= 0) {
       return 'Base rate per m³ is required for per-unit deduction billing';
+    }
+    if (billingModel === 'minimum_excess') {
+      const minUpto = parseFloat(minimumExcessForm.minimum_upto_m3);
+      const minAmount = parseFloat(minimumExcessForm.minimum_amount);
+      const excessFrom = parseFloat(minimumExcessForm.excess_from_m3);
+      const excessRate = parseFloat(minimumExcessForm.excess_rate);
+      if (!Number.isFinite(minUpto) || minUpto < 0) {
+        return 'Minimum up to (m³) must be a valid non-negative number';
+      }
+      if (!Number.isFinite(minAmount) || minAmount < 0) {
+        return 'Minimum amount must be a valid non-negative number';
+      }
+      if (!Number.isFinite(excessFrom) || excessFrom <= minUpto) {
+        return 'Excess rate must start after the minimum block (from m³ > minimum up to m³)';
+      }
+      if (!Number.isFinite(excessRate) || excessRate < 0) {
+        return 'Excess rate per m³ must be a valid non-negative number';
+      }
+      return null;
     }
     for (const tier of formTiers) {
       if (tier.from_m3 < 0 || (tier.to_m3 != null && tier.to_m3 < 0)) {
@@ -361,7 +472,10 @@ export default function WaterworksSuppliesPage() {
         billing_day: form.billing_day ? parseInt(form.billing_day, 10) : null,
         billing_model: billingModel,
         base_unit_rate: billingModel === 'per_unit_deduction' ? baseUnitRate : undefined,
-        rate_tiers: formTiers.map(({ tier_order, from_m3, to_m3, charge_type, rate_amount }, index) => ({
+        rate_tiers: (billingModel === 'minimum_excess'
+          ? tiersFromMinimumExcessForm(minimumExcessForm)
+          : formTiers
+        ).map(({ tier_order, from_m3, to_m3, charge_type, rate_amount }, index) => ({
           tier_order: index + 1,
           from_m3,
           to_m3,
@@ -605,6 +719,85 @@ export default function WaterworksSuppliesPage() {
                     />
                   </div>
                 )}
+                {billingModel === 'minimum_excess' ? (
+                  <div className="rounded-lg border border-gray-200 p-4 space-y-4 bg-gray-50/50">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Cubic Rates</label>
+                      <p className="text-xs text-gray-500">
+                        Flat minimum up to a volume, then add a per-m³ charge for each m³ above the minimum block.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Minimum up to (m³)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={minimumExcessForm.minimum_upto_m3}
+                          onChange={(e) => updateMinimumExcessField('minimum_upto_m3', e.target.value)}
+                          className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Minimum amount (₱)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={minimumExcessForm.minimum_amount}
+                          onChange={(e) => updateMinimumExcessField('minimum_amount', e.target.value)}
+                          className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Excess from (m³)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={minimumExcessForm.excess_from_m3}
+                          onChange={(e) => updateMinimumExcessField('excess_from_m3', e.target.value)}
+                          className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Excess rate (₱/m³)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={minimumExcessForm.excess_rate}
+                          onChange={(e) => updateMinimumExcessField('excess_rate', e.target.value)}
+                          className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800 space-y-1">
+                      <p>
+                        <strong>Example (4 m³):</strong>{' '}
+                        {formatPeso(calculateMinimumExcessAmount(
+                          4,
+                          parseFloat(minimumExcessForm.minimum_upto_m3) || 0,
+                          parseFloat(minimumExcessForm.minimum_amount) || 0,
+                          parseFloat(minimumExcessForm.excess_rate) || 0
+                        ))}{' '}
+                        = {formatPeso(parseFloat(minimumExcessForm.minimum_amount) || 0)} minimum
+                        + {Math.max(0, 4 - (parseFloat(minimumExcessForm.minimum_upto_m3) || 0))} m³ × {formatPeso(parseFloat(minimumExcessForm.excess_rate) || 0)}
+                      </p>
+                      <p>
+                        <strong>Example (2 m³):</strong>{' '}
+                        {formatPeso(calculateMinimumExcessAmount(
+                          2,
+                          parseFloat(minimumExcessForm.minimum_upto_m3) || 0,
+                          parseFloat(minimumExcessForm.minimum_amount) || 0,
+                          parseFloat(minimumExcessForm.excess_rate) || 0
+                        ))}{' '}
+                        (minimum only)
+                      </p>
+                    </div>
+                  </div>
+                ) : (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-sm font-medium text-gray-700">Cubic Rates</label>
@@ -713,6 +906,7 @@ export default function WaterworksSuppliesPage() {
                     ))}
                   </div>
                 </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Reading Schedule</label>
                   <p className="text-xs text-gray-500 mb-2">Day(s) of the month when meter reading is conducted</p>

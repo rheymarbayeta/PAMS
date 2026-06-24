@@ -5,7 +5,7 @@
  * - per_unit_deduction: consumption × base rate minus applicable flat deduction
  */
 
-const BILLING_MODELS = ['progressive', 'bracket_flat', 'per_unit_deduction'];
+const BILLING_MODELS = ['progressive', 'bracket_flat', 'per_unit_deduction', 'minimum_excess'];
 
 function calculateProgressiveCharge(consumption, tiers) {
   const sorted = [...tiers].sort((a, b) => a.tier_order - b.tier_order);
@@ -166,6 +166,9 @@ function calculateTieredConsumptionCharge(consumption, tiers, billingModel = 'pr
   }
   if (model === 'per_unit_deduction') {
     return calculatePerUnitDeductionCharge(consumption, tiers, baseUnitRate);
+  }
+  if (model === 'minimum_excess') {
+    return calculateProgressiveCharge(consumption, tiers);
   }
   return calculateProgressiveCharge(consumption, tiers);
 }
