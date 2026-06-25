@@ -3,6 +3,13 @@ const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
+const {
+  getRightsBalanceSnapshot,
+  getRightsRunningBalanceStart,
+  getRentalTotalCollected,
+  getRentalRunningTotalStart,
+  normalizeLegacyAccountInput,
+} = require('../utils/leaseContractBalances');
 
 const router = express.Router();
 
@@ -781,8 +788,24 @@ router.post('/lease-contracts', async (req, res) => {
         monthly_rights_amount,
         monthly_rental_amount,
         downpayment,
-        status = 'active'
+        status = 'active',
+        is_legacy_account,
+        opening_rights_paid,
+        opening_rights_balance,
+        opening_rental_paid,
+        opening_balance_notes,
       } = req.body;
+
+      const legacyFields = normalizeLegacyAccountInput({
+        is_legacy_account,
+        opening_rights_paid,
+        opening_rights_balance,
+        opening_rental_paid,
+        opening_balance_notes,
+      });
+      if (legacyFields.error) {
+        return res.status(400).json({ error: legacyFields.error });
+      }
 
       // Normalise unit IDs: accept array (new) or single id (legacy)
       const unitIds = Array.isArray(property_unit_ids) && property_unit_ids.length > 0
@@ -828,8 +851,13 @@ router.post('/lease-contracts', async (req, res) => {
             monthly_rights_amount,
             monthly_rental_amount,
             downpayment,
-            status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            status,
+            is_legacy_account,
+            opening_rights_paid,
+            opening_rights_balance,
+            opening_rental_paid,
+            opening_balance_notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           lessee_id,
           unitIds[0] || null,
@@ -840,7 +868,12 @@ router.post('/lease-contracts', async (req, res) => {
           monthly_rights_amount || 0,
           monthly_rental_amount || 0,
           downpayment || 0,
-          status
+          status,
+          legacyFields.is_legacy_account,
+          legacyFields.opening_rights_paid,
+          legacyFields.opening_rights_balance,
+          legacyFields.opening_rental_paid,
+          legacyFields.opening_balance_notes,
         ]);
 
         // Insert all units into junction table and mark them occupied if active
@@ -901,8 +934,24 @@ router.put('/lease-contracts/:id', async (req, res) => {
         monthly_rights_amount,
         monthly_rental_amount,
         downpayment,
-        status
+        status,
+        is_legacy_account,
+        opening_rights_paid,
+        opening_rights_balance,
+        opening_rental_paid,
+        opening_balance_notes,
       } = req.body;
+
+      const legacyFields = normalizeLegacyAccountInput({
+        is_legacy_account,
+        opening_rights_paid,
+        opening_rights_balance,
+        opening_rental_paid,
+        opening_balance_notes,
+      });
+      if (legacyFields.error) {
+        return res.status(400).json({ error: legacyFields.error });
+      }
 
       // Normalise incoming unit IDs (may be undefined if not changed)
       const newUnitIds = Array.isArray(property_unit_ids)
@@ -927,7 +976,12 @@ router.put('/lease-contracts/:id', async (req, res) => {
             monthly_rights_amount = COALESCE(?, monthly_rights_amount),
             monthly_rental_amount = COALESCE(?, monthly_rental_amount),
             downpayment = COALESCE(?, downpayment),
-            status = COALESCE(?, status)
+            status = COALESCE(?, status),
+            is_legacy_account = ?,
+            opening_rights_paid = ?,
+            opening_rights_balance = ?,
+            opening_rental_paid = ?,
+            opening_balance_notes = ?
           WHERE id = ?
         `, [
           contract_effective_date,
@@ -937,6 +991,11 @@ router.put('/lease-contracts/:id', async (req, res) => {
           monthly_rental_amount,
           downpayment,
           status,
+          legacyFields.is_legacy_account,
+          legacyFields.opening_rights_paid,
+          legacyFields.opening_rights_balance,
+          legacyFields.opening_rental_paid,
+          legacyFields.opening_balance_notes,
           id
         ]);
 
@@ -1008,6 +1067,9 @@ router.put('/lease-contracts/:id', async (req, res) => {
             }
           }
         }
+
+        await recalculateRightsPaymentBalances(connection, id);
+        await recalculateRentalPaymentBalances(connection, id);
 
         // Get updated contract
         const [updatedContract] = await connection.query(`
@@ -1403,7 +1465,15 @@ router.get('/lease-contracts/:contract_id/balance', async (req, res) => {
 
       // If no balance record exists, calculate from contract and payments
       const [contract] = await connection.query(`
-        SELECT principal_amount, monthly_rights_amount, monthly_rental_amount, downpayment
+        SELECT
+          principal_amount,
+          monthly_rights_amount,
+          monthly_rental_amount,
+          downpayment,
+          is_legacy_account,
+          opening_rights_paid,
+          opening_rights_balance,
+          opening_rental_paid
         FROM lease_contracts
         WHERE id = ?
       `, [contract_id]);
@@ -1429,20 +1499,21 @@ router.get('/lease-contracts/:contract_id/balance', async (req, res) => {
       const rental = parseFloat(contract[0].monthly_rental_amount) || 0;
       const downpay = parseFloat(contract[0].downpayment) || 0;
 
-      const principalBal = princ - downpay;
-      const totalRightsPaid = parseFloat(rightsPayments[0].total_paid) || 0;
-      const totalRentalPaid = parseFloat(rentalPayments[0].total_paid) || 0;
-      // Rights: remaining balance after deducting payments from principal
-      const rightsBal = principalBal - totalRightsPaid;
-      // Rental: cumulative total of rental payments collected
-      const rentalBal = totalRentalPaid;
+      const rightsSnapshot = getRightsBalanceSnapshot(contract[0], parseFloat(rightsPayments[0].total_paid) || 0);
+      const rentalHistoryPaid = parseFloat(rentalPayments[0].total_paid) || 0;
+      const rentalBal = getRentalTotalCollected(contract[0], rentalHistoryPaid);
+      const rightsBal = rightsSnapshot.rightsBalance;
       const totalBal = rightsBal + rentalBal;
 
       res.json({
-        principal_balance: principalBal,
+        principal_balance: rightsSnapshot.netPrincipal,
         rights_balance: rightsBal,
         rental_balance: rentalBal,
-        total_balance: totalBal
+        total_balance: totalBal,
+        opening_rights_paid: rightsSnapshot.openingPaid,
+        opening_rental_paid: getRentalRunningTotalStart(contract[0]),
+        total_rights_paid: rightsSnapshot.totalRightsPaid,
+        total_rental_paid: rentalBal,
       });
     } finally {
       connection.release();
@@ -1461,7 +1532,13 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
     try {
       // Get contract details for balance calculation
       const [contract] = await connection.query(`
-        SELECT principal_amount, downpayment
+        SELECT
+          principal_amount,
+          downpayment,
+          is_legacy_account,
+          opening_rights_paid,
+          opening_rights_balance,
+          opening_rental_paid
         FROM lease_contracts
         WHERE id = ?
       `, [contract_id]);
@@ -1472,7 +1549,6 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
 
       const initialBalance = (contract[0].principal_amount || 0) - (contract[0].downpayment || 0);
 
-      // Get rights payments
       const [rightsPayments] = await connection.query(`
         SELECT 
           id,
@@ -1491,7 +1567,6 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
         ORDER BY payment_date DESC
       `, [contract_id]);
 
-      // Get rental payments
       const [rentalPayments] = await connection.query(`
         SELECT 
           id,
@@ -1510,27 +1585,30 @@ router.get('/lease-contracts/:contract_id/payments', async (req, res) => {
         ORDER BY payment_date DESC
       `, [contract_id]);
 
-      // Combine and sort by date
       const allPayments = [...rightsPayments, ...rentalPayments].sort((a, b) => 
         new Date(b.payment_date) - new Date(a.payment_date)
       );
 
-      // Calculate current balance (initial - sum of all payments)
-      const totalRightsPaid = rightsPayments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0);
-      const totalRentalPaid = rentalPayments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0);
-
-      // Rights: remaining balance (initial minus payments deducted)
-      const currentRightsBalance = initialBalance - totalRightsPaid;
-      // Rental: cumulative total of all rental payments collected
-      const currentRentalBalance = totalRentalPaid;
+      const rightsSnapshot = getRightsBalanceSnapshot(
+        contract[0],
+        rightsPayments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0)
+      );
+      const rentalHistoryPaid = rentalPayments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0);
+      const currentRentalBalance = getRentalTotalCollected(contract[0], rentalHistoryPaid);
 
       res.json({
         payments: allPayments,
         current_balance: {
           initial: initialBalance,
-          rights: currentRightsBalance,
+          rights: rightsSnapshot.rightsBalance,
           rental: currentRentalBalance,
-          total: currentRightsBalance + currentRentalBalance
+          total: rightsSnapshot.rightsBalance + currentRentalBalance,
+          opening_rights_paid: rightsSnapshot.openingPaid,
+          opening_rights_balance: rightsSnapshot.openingBalance,
+          opening_rental_paid: getRentalRunningTotalStart(contract[0]),
+          total_rights_paid: rightsSnapshot.totalRightsPaid,
+          total_rental_paid: currentRentalBalance,
+          is_legacy_account: !!contract[0].is_legacy_account,
         }
       });
     } finally {
@@ -1548,13 +1626,11 @@ function getPaymentTableName(type) {
 
 async function recalculateRightsPaymentBalances(connection, contractId) {
   const [contract] = await connection.query(
-    'SELECT principal_amount, downpayment FROM lease_contracts WHERE id = ?',
+    `SELECT principal_amount, downpayment, is_legacy_account, opening_rights_paid, opening_rights_balance
+     FROM lease_contracts WHERE id = ?`,
     [contractId]
   );
   if (!contract.length) return;
-
-  const initialBalance =
-    (parseFloat(contract[0].principal_amount) || 0) - (parseFloat(contract[0].downpayment) || 0);
 
   const [payments] = await connection.query(
     `SELECT id, amount_paid FROM payment_history_rights
@@ -1562,7 +1638,7 @@ async function recalculateRightsPaymentBalances(connection, contractId) {
     [contractId]
   );
 
-  let runningBalance = initialBalance;
+  let runningBalance = getRightsRunningBalanceStart(contract[0]);
   for (const payment of payments) {
     runningBalance -= parseFloat(payment.amount_paid) || 0;
     await connection.query(
@@ -1573,13 +1649,18 @@ async function recalculateRightsPaymentBalances(connection, contractId) {
 }
 
 async function recalculateRentalPaymentBalances(connection, contractId) {
+  const [contract] = await connection.query(
+    `SELECT opening_rental_paid, is_legacy_account FROM lease_contracts WHERE id = ?`,
+    [contractId]
+  );
+
   const [payments] = await connection.query(
     `SELECT id, amount_paid FROM payment_history_rental
      WHERE lease_contract_id = ? ORDER BY payment_date ASC, id ASC`,
     [contractId]
   );
 
-  let runningTotal = 0;
+  let runningTotal = contract.length ? getRentalRunningTotalStart(contract[0]) : 0;
   for (const payment of payments) {
     runningTotal += parseFloat(payment.amount_paid) || 0;
     await connection.query(
@@ -1855,7 +1936,7 @@ function isBillableRentalMonth(contractEffectiveDate, month, year) {
   return countBillableRentalMonthsThrough(contractEffectiveDate, month, year) > 0;
 }
 
-async function getRentalPaymentsTotalThrough(connection, contractId, throughMonth, throughYear) {
+async function getRentalPaymentsTotalThrough(connection, contractId, throughMonth, throughYear, openingRentalPaid = 0) {
   const [rows] = await connection.query(`
     SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
     FROM payment_history_rental
@@ -1866,7 +1947,7 @@ async function getRentalPaymentsTotalThrough(connection, contractId, throughMont
       )
   `, [contractId, throughYear, throughYear, throughMonth]);
 
-  return parseFloat(rows[0].total_paid) || 0;
+  return getRentalTotalCollected({ opening_rental_paid: openingRentalPaid }, parseFloat(rows[0].total_paid) || 0);
 }
 
 async function getRentalPaymentsForPeriod(connection, contractId, month, year) {
@@ -1973,8 +2054,9 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
         FROM payment_history_rights
         WHERE lease_contract_id = ?
       `, [contract_id]);
-      const totalRightsPaid = parseFloat(rightsTotalRow[0].total_paid) || 0;
-      const rightsBalance   = principal - downpayment - totalRightsPaid;
+      const rightsSnapshot = getRightsBalanceSnapshot(contract, parseFloat(rightsTotalRow[0].total_paid) || 0);
+      const totalRightsPaid = rightsSnapshot.totalRightsPaid;
+      const rightsBalance = rightsSnapshot.rightsBalance;
 
       // Previous month unpaid rental balance (not total collected)
       const prevMonth = billingMonth === 1 ? 12 : billingMonth - 1;
@@ -1984,7 +2066,8 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
         connection,
         contract_id,
         prevMonth,
-        prevYear
+        prevYear,
+        contract.opening_rental_paid
       );
       const prevMonthPaid = await getRentalPaymentsForPeriod(
         connection,
@@ -2093,6 +2176,8 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             downpayment,
             total_paid: totalRightsPaid,
             balance:    rightsBalance,
+            opening_rights_paid: rightsSnapshot.openingPaid,
+            opening_rights_balance: rightsSnapshot.openingBalance,
             monthly_amount: monthlyRights,
             dues:       rightsDues,
             latest_payment: formatPaymentRecord(latestRightsPayment)
@@ -2102,6 +2187,7 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             previous_month_balance: previousMonthBalance,
             outstanding_balance: outstandingBalance,
             outstanding_balance_notes: contract.outstanding_balance_notes || null,
+            opening_rental_paid: getRentalRunningTotalStart(contract),
             total_rental_due_through_prev: totalRentalDueThroughPrev,
             total_rental_collected_through_prev: totalRentalPaidThroughPrev,
             surcharge,
@@ -2148,7 +2234,13 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
 
         // Get lease contract details to calculate initial balance
         const [leaseContract] = await connection.query(`
-          SELECT principal_amount, downpayment
+          SELECT
+            principal_amount,
+            downpayment,
+            is_legacy_account,
+            opening_rights_paid,
+            opening_rights_balance,
+            opening_rental_paid
           FROM lease_contracts
           WHERE id = ?
         `, [contract_id]);
@@ -2158,7 +2250,6 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
         }
 
         const contract = leaseContract[0];
-        const initialBalance = (contract.principal_amount || 0) - (contract.downpayment || 0);
 
         let recordedRights = false;
         let recordedRental = false;
@@ -2201,15 +2292,15 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
           FROM payment_history_rights
           WHERE lease_contract_id = ?
         `, [contract_id]);
-        const totalRightsPaid = parseFloat(rightsPaid[0].total_paid) || 0;
-        const currentRightsBalance = initialBalance - totalRightsPaid;
+        const rightsSnapshot = getRightsBalanceSnapshot(contract, parseFloat(rightsPaid[0].total_paid) || 0);
+        const currentRightsBalance = rightsSnapshot.rightsBalance;
 
         const [rentalPaid] = await connection.query(`
           SELECT COALESCE(SUM(amount_paid), 0) as total_paid
           FROM payment_history_rental
           WHERE lease_contract_id = ?
         `, [contract_id]);
-        const currentRentalBalance = parseFloat(rentalPaid[0].total_paid) || 0;
+        const currentRentalBalance = getRentalTotalCollected(contract, parseFloat(rentalPaid[0].total_paid) || 0);
 
         // Log the action
         await logAction(req.user.user_id, 'CREATE', 'payments', contract_id, 
@@ -2446,19 +2537,23 @@ router.get('/reports', async (req, res) => {
             lc.monthly_rental_amount,
             lc.outstanding_rental_balance,
             lc.outstanding_balance_notes,
+            lc.is_legacy_account,
+            lc.opening_rights_paid,
+            lc.opening_rights_balance,
+            lc.opening_rental_paid,
             lc.status,
-            COALESCE(rp.total_rights_paid, 0) AS total_rights_paid,
-            COALESCE(rt.total_rental_paid, 0) AS total_rental_paid
+            COALESCE(rp.history_rights_paid, 0) AS history_rights_paid,
+            COALESCE(rt.history_rental_paid, 0) AS history_rental_paid
           FROM lease_contracts lc
           JOIN lessees l ON lc.lessee_id = l.id
           JOIN properties p ON lc.property_id = p.id
           LEFT JOIN (
-            SELECT lease_contract_id, SUM(amount_paid) AS total_rights_paid
+            SELECT lease_contract_id, SUM(amount_paid) AS history_rights_paid
             FROM payment_history_rights
             GROUP BY lease_contract_id
           ) rp ON rp.lease_contract_id = lc.id
           LEFT JOIN (
-            SELECT lease_contract_id, SUM(amount_paid) AS total_rental_paid
+            SELECT lease_contract_id, SUM(amount_paid) AS history_rental_paid
             FROM payment_history_rental
             GROUP BY lease_contract_id
           ) rt ON rt.lease_contract_id = lc.id
@@ -2477,9 +2572,10 @@ router.get('/reports', async (req, res) => {
 
           const principal = parseFloat(contract.principal_amount) || 0;
           const downpayment = parseFloat(contract.downpayment) || 0;
-          const totalRightsPaid = parseFloat(contract.total_rights_paid) || 0;
-          const totalRentalPaid = parseFloat(contract.total_rental_paid) || 0;
-          const rightsBalance = parseFloat((principal - downpayment - totalRightsPaid).toFixed(2));
+          const rightsSnapshot = getRightsBalanceSnapshot(contract, parseFloat(contract.history_rights_paid) || 0);
+          const totalRightsPaid = rightsSnapshot.totalRightsPaid;
+          const totalRentalPaid = getRentalTotalCollected(contract, parseFloat(contract.history_rental_paid) || 0);
+          const rightsBalance = rightsSnapshot.rightsBalance;
           const outstandingRental = parseFloat(contract.outstanding_rental_balance) || 0;
           const monthlyRights = parseFloat(contract.monthly_rights_amount) || 0;
           const monthlyRental = parseFloat(contract.monthly_rental_amount) || 0;

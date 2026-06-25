@@ -22,6 +22,12 @@ interface AccountBalance {
   rights_balance: number;
   rental_balance: number;
   total_balance: number;
+  opening_rights_paid?: number;
+  opening_rights_balance?: number;
+  opening_rental_paid?: number;
+  total_rights_paid?: number;
+  total_rental_paid?: number;
+  is_legacy_account?: boolean;
   last_updated?: string;
 }
 
@@ -94,11 +100,18 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
       
       // Set balance from response
       if (paymentsRes.data.current_balance) {
+        const cb = paymentsRes.data.current_balance;
         setBalance({
-          principal_balance: paymentsRes.data.current_balance.initial || 0,
-          rights_balance: paymentsRes.data.current_balance.rights || 0,
-          rental_balance: paymentsRes.data.current_balance.rental || 0,
-          total_balance: paymentsRes.data.current_balance.total || 0
+          principal_balance: cb.initial || 0,
+          rights_balance: cb.rights || 0,
+          rental_balance: cb.rental || 0,
+          total_balance: cb.total || 0,
+          opening_rights_paid: cb.opening_rights_paid,
+          opening_rights_balance: cb.opening_rights_balance,
+          opening_rental_paid: cb.opening_rental_paid,
+          total_rights_paid: cb.total_rights_paid,
+          total_rental_paid: cb.total_rental_paid,
+          is_legacy_account: cb.is_legacy_account,
         });
       } else {
         setBalance({
@@ -345,6 +358,20 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
 
               {/* Payment History */}
               <div>
+                {balance?.is_legacy_account && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <span className="font-semibold">Legacy account:</span>{' '}
+                    Opening totals are on the contract. Rights balance to date:{' '}
+                    <span className="font-semibold">
+                      ₱ {(balance.rights_balance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    {' · '}
+                    Total rental collected:{' '}
+                    <span className="font-semibold">
+                      ₱ {(balance.rental_balance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">Payment History</h3>
                   <div className="flex items-center gap-2">

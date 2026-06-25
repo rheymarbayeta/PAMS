@@ -29,6 +29,16 @@ interface LeaseContractFormProps {
   isLoading: boolean;
 }
 
+function normalizeLessees(rows: Array<{ id: number; name: string }>): Lessee[] {
+  const byId = new Map<number, Lessee>();
+  for (const row of rows) {
+    if (row?.id != null && row?.name) {
+      byId.set(row.id, { id: row.id, name: row.name });
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export default function LeaseContractForm({
   initialData,
   onSubmit,
@@ -48,13 +58,77 @@ export default function LeaseContractForm({
     monthly_rights_amount: '',
     monthly_rental_amount: '',
     downpayment: '',
-    status: 'active'
+    status: 'active',
+    is_legacy_account: false,
+    opening_rights_paid: '',
+    opening_rights_balance: '',
+    opening_rental_paid: '',
+    opening_balance_notes: '',
   });
   const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
   const [noTerminationDate, setNoTerminationDate] = useState(false);
   const [lesseeSearch, setLesseeSearch] = useState('');
   const [lesseeDropdownOpen, setLesseeDropdownOpen] = useState(false);
   const lesseeDropdownRef = useRef<HTMLDivElement>(null);
+  const [showNewLesseeModal, setShowNewLesseeModal] = useState(false);
+  const [creatingLessee, setCreatingLessee] = useState(false);
+  const [lesseeModalError, setLesseeModalError] = useState('');
+  const [newLesseeForm, setNewLesseeForm] = useState({
+    name: '',
+    contact_number: '',
+    email: '',
+  });
+
+  const filteredLessees = lessees.filter((l) =>
+    l.name.toLowerCase().includes(lesseeSearch.toLowerCase())
+  );
+
+  const openNewLesseeModal = (namePrefill = '') => {
+    setNewLesseeForm({
+      name: namePrefill.trim(),
+      contact_number: '',
+      email: '',
+    });
+    setLesseeModalError('');
+    setShowNewLesseeModal(true);
+    setLesseeDropdownOpen(false);
+  };
+
+  const handleCreateLessee = async () => {
+    if (!newLesseeForm.name.trim()) {
+      setLesseeModalError('Lessee name is required');
+      return;
+    }
+
+    setCreatingLessee(true);
+    setLesseeModalError('');
+    try {
+      const response = await api.post('/api/rights-and-rentals/lessees', {
+        name: newLesseeForm.name.trim(),
+        contact_number: newLesseeForm.contact_number.trim() || null,
+        email: newLesseeForm.email.trim() || null,
+      });
+
+      const createdId = response.data.id;
+      const lesseeRes = await api.get('/api/rights-and-rentals/lessees');
+      const refreshedLessees = normalizeLessees(lesseeRes.data || []);
+      setLessees(refreshedLessees);
+
+      const created = refreshedLessees.find((l) => l.id === createdId) ?? {
+        id: createdId,
+        name: response.data.name,
+      };
+
+      setFormData((prev) => ({ ...prev, lessee_id: String(created.id) }));
+      setLesseeSearch('');
+      setShowNewLesseeModal(false);
+      setNewLesseeForm({ name: '', contact_number: '', email: '' });
+    } catch (err: any) {
+      setLesseeModalError(err.response?.data?.error || 'Error creating lessee');
+    } finally {
+      setCreatingLessee(false);
+    }
+  };
 
   // Close lessee dropdown on outside click
   useEffect(() => {
@@ -86,7 +160,12 @@ export default function LeaseContractForm({
         monthly_rights_amount: initialData.monthly_rights_amount?.toString() || '',
         monthly_rental_amount: initialData.monthly_rental_amount?.toString() || '',
         downpayment: initialData.downpayment?.toString() || '',
-        status: initialData.status || 'active'
+        status: initialData.status || 'active',
+        is_legacy_account: !!initialData.is_legacy_account,
+        opening_rights_paid: initialData.opening_rights_paid?.toString() || '',
+        opening_rights_balance: initialData.opening_rights_balance?.toString() ?? '',
+        opening_rental_paid: initialData.opening_rental_paid?.toString() || '',
+        opening_balance_notes: initialData.opening_balance_notes || '',
       });
       // Initialise selected units from property_units array (new) or legacy property_unit_id
       if (Array.isArray(initialData.property_units) && initialData.property_units.length > 0) {
@@ -128,7 +207,7 @@ export default function LeaseContractForm({
         api.get('/api/rights-and-rentals/lessees'),
         api.get('/api/rights-and-rentals/properties')
       ]);
-      setLessees(lesseeRes.data || []);
+      setLessees(normalizeLessees(lesseeRes.data || []));
       setProperties(propertyRes.data || []);
     } catch (error) {
       console.error('Error fetching options:', error);
@@ -139,13 +218,14 @@ export default function LeaseContractForm({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
+    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
     if (name === 'property_id') {
       setSelectedUnitIds([]);
     }
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     }));
   };
 
@@ -158,6 +238,13 @@ export default function LeaseContractForm({
       return;
     }
 
+    if (formData.is_legacy_account) {
+      if (formData.opening_rights_balance === '') {
+        setError('Outstanding rights balance is required for legacy accounts');
+        return;
+      }
+    }
+
     try {
       await onSubmit({
         ...formData,
@@ -168,7 +255,20 @@ export default function LeaseContractForm({
         principal_amount: formData.principal_amount ? parseFloat(formData.principal_amount) : 0,
         monthly_rights_amount: formData.monthly_rights_amount ? parseFloat(formData.monthly_rights_amount) : 0,
         monthly_rental_amount: formData.monthly_rental_amount ? parseFloat(formData.monthly_rental_amount) : 0,
-        downpayment: formData.downpayment ? parseFloat(formData.downpayment) : 0
+        downpayment: formData.downpayment ? parseFloat(formData.downpayment) : 0,
+        is_legacy_account: formData.is_legacy_account,
+        opening_rights_paid: formData.is_legacy_account && formData.opening_rights_paid
+          ? parseFloat(formData.opening_rights_paid)
+          : 0,
+        opening_rights_balance: formData.is_legacy_account && formData.opening_rights_balance !== ''
+          ? parseFloat(formData.opening_rights_balance)
+          : 0,
+        opening_rental_paid: formData.is_legacy_account && formData.opening_rental_paid
+          ? parseFloat(formData.opening_rental_paid)
+          : 0,
+        opening_balance_notes: formData.is_legacy_account
+          ? formData.opening_balance_notes.trim() || null
+          : null,
       });
     } catch (error: any) {
       setError(error.response?.data?.error || 'Error submitting form');
@@ -187,6 +287,7 @@ export default function LeaseContractForm({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3">
@@ -200,9 +301,18 @@ export default function LeaseContractForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Lessee – searchable */}
         <div className="relative" ref={lesseeDropdownRef}>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Lessee *
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Lessee *
+            </label>
+            <button
+              type="button"
+              onClick={() => openNewLesseeModal(lesseeSearch)}
+              className="text-xs text-indigo-600 hover:underline"
+            >
+              + Add new lessee
+            </button>
+          </div>
           {/* Hidden native input for form validation */}
           <input type="hidden" name="lessee_id" value={formData.lessee_id} required />
           <div
@@ -242,9 +352,7 @@ export default function LeaseContractForm({
                 >
                   — Select a lessee —
                 </li>
-                {lessees
-                  .filter(l => l.name.toLowerCase().includes(lesseeSearch.toLowerCase()))
-                  .map(lessee => (
+                {filteredLessees.map(lessee => (
                     <li
                       key={lessee.id}
                       className={`px-4 py-2 text-sm cursor-pointer hover:bg-indigo-50 ${
@@ -259,8 +367,21 @@ export default function LeaseContractForm({
                       {lessee.name}
                     </li>
                   ))}
-                {lessees.filter(l => l.name.toLowerCase().includes(lesseeSearch.toLowerCase())).length === 0 && (
-                  <li className="px-4 py-2 text-sm text-gray-400 italic">No matches found</li>
+                {filteredLessees.length === 0 && (
+                  <li className="px-4 py-3 border-t border-gray-100">
+                    <p className="text-sm text-gray-500 mb-2">
+                      {lesseeSearch
+                        ? `No lessee found matching "${lesseeSearch}"`
+                        : 'No lessees available yet'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => openNewLesseeModal(lesseeSearch)}
+                      className="w-full px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-indigo-700 text-sm font-medium"
+                    >
+                      + Add New Lessee
+                    </button>
+                  </li>
                 )}
               </ul>
             </div>
@@ -491,6 +612,91 @@ export default function LeaseContractForm({
         </div>
       </div>
 
+      <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-5 space-y-4">
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            name="is_legacy_account"
+            checked={formData.is_legacy_account}
+            onChange={handleChange}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-gray-900">Legacy / old account</span>
+            <span className="block text-sm text-gray-600 mt-0.5">
+              Enter totals from prior records (Excel/manual ledgers). New payments recorded in the system will adjust from these opening figures — you do not need to enter each historical payment.
+            </span>
+          </span>
+        </label>
+
+        {formData.is_legacy_account && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-amber-200">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Total Paid Rights (PHP)
+              </label>
+              <input
+                type="number"
+                name="opening_rights_paid"
+                value={formData.opening_rights_paid}
+                onChange={handleChange}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              />
+              <p className="mt-1 text-xs text-gray-500">All rights payments collected before using this system.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Outstanding Rights Balance (PHP) *
+              </label>
+              <input
+                type="number"
+                name="opening_rights_balance"
+                value={formData.opening_rights_balance}
+                onChange={handleChange}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                required={formData.is_legacy_account}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              />
+              <p className="mt-1 text-xs text-gray-500">Remaining rights principal owed as of today (before new system payments).</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Total Paid Rentals (PHP)
+              </label>
+              <input
+                type="number"
+                name="opening_rental_paid"
+                value={formData.opening_rental_paid}
+                onChange={handleChange}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              />
+              <p className="mt-1 text-xs text-gray-500">All rental payments collected before using this system.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Notes / Source
+              </label>
+              <input
+                type="text"
+                name="opening_balance_notes"
+                value={formData.opening_balance_notes}
+                onChange={handleChange}
+                placeholder="e.g., Records from Excel 2024–2025"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Submit Button */}
       <div className="flex gap-3 pt-6">
         <button
@@ -502,5 +708,92 @@ export default function LeaseContractForm({
         </button>
       </div>
     </form>
+
+      {showNewLesseeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowNewLesseeModal(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-md rounded-xl bg-white shadow-xl"
+          >
+            <div className="border-b border-gray-100 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">Add New Lessee</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Saves to the lessees list and selects them for this contract.
+              </p>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {lesseeModalError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-800 text-sm">{lesseeModalError}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Lessee Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newLesseeForm.name}
+                  onChange={(e) => setNewLesseeForm({ ...newLesseeForm, name: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCreateLessee();
+                    }
+                  }}
+                  placeholder="Enter lessee name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
+                <input
+                  type="tel"
+                  value={newLesseeForm.contact_number}
+                  onChange={(e) => setNewLesseeForm({ ...newLesseeForm, contact_number: e.target.value })}
+                  placeholder="Enter contact number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={newLesseeForm.email}
+                  onChange={(e) => setNewLesseeForm({ ...newLesseeForm, email: e.target.value })}
+                  placeholder="Enter email address"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowNewLesseeModal(false)}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateLessee}
+                disabled={creatingLessee}
+                className="flex-1 px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 font-medium disabled:opacity-50"
+              >
+                {creatingLessee ? 'Saving...' : 'Save Lessee'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -28,6 +28,11 @@ interface LeaseContract {
   downpayment: number;
   outstanding_rental_balance?: number;
   outstanding_balance_notes?: string | null;
+  is_legacy_account?: boolean;
+  opening_rights_paid?: number;
+  opening_rights_balance?: number;
+  opening_rental_paid?: number;
+  opening_balance_notes?: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -485,6 +490,41 @@ export default function ViewLeaseContractPage() {
                 </div>
               </div>
             </div>
+
+            {contract.is_legacy_account && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Legacy Account Opening Balances</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Pre-system totals from prior records. Only new payments recorded here adjust these figures.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-lg p-4 border border-amber-100">
+                    <p className="text-sm text-gray-600">Total Paid Rights (opening)</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">
+                      {formatCurrency(contract.opening_rights_paid ?? 0)}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-amber-100">
+                    <p className="text-sm text-gray-600">Outstanding Rights Balance (opening)</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">
+                      {formatCurrency(contract.opening_rights_balance ?? 0)}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-amber-100">
+                    <p className="text-sm text-gray-600">Total Paid Rentals (opening)</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">
+                      {formatCurrency(contract.opening_rental_paid ?? 0)}
+                    </p>
+                  </div>
+                  {contract.opening_balance_notes && (
+                    <div className="bg-white rounded-lg p-4 border border-amber-100 md:col-span-2">
+                      <p className="text-sm text-gray-600">Notes / Source</p>
+                      <p className="text-sm font-medium text-gray-900 mt-1">{contract.opening_balance_notes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Outstanding Balance */}
             <div className="bg-white rounded-lg shadow p-6">
