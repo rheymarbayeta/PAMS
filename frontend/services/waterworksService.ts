@@ -277,7 +277,85 @@ const waterworksService = {
     });
     return response.data.data;
   },
+
+  getRateComputation: async (supplyId: string) => {
+    const response = await api.get<{ data: RateComputationPayload }>(
+      `/api/waterworks/supplies/${supplyId}/rate-computation`
+    );
+    return response.data.data;
+  },
+
+  saveRateComputation: async (supplyId: string, data: RateComputationInput) => {
+    const response = await api.put<{ data: RateComputationPayload }>(
+      `/api/waterworks/supplies/${supplyId}/rate-computation`,
+      data
+    );
+    return response.data.data;
+  },
+
+  applyRateComputation: async (
+    supplyId: string,
+    classification: 'tapstand' | 'residential' | 'commercial' = 'residential'
+  ) => {
+    const response = await api.post(`/api/waterworks/supplies/${supplyId}/rate-computation/apply`, {
+      classification,
+    });
+    return response.data;
+  },
 };
+
+export interface RateComputationStaffRow {
+  staff_id?: string;
+  role_name: string;
+  headcount: number;
+  monthly_rate: number;
+  sort_order?: number;
+  total?: number;
+}
+
+export interface RateComputationOpexRow {
+  opex_id?: string;
+  category_name: string;
+  amount_monthly: number;
+  sort_order?: number;
+}
+
+export interface RateComputationAssetRow {
+  asset_id?: string;
+  component_name: string;
+  cost: number;
+  service_life_years: number;
+  depreciable_percent: number;
+  sort_order?: number;
+  depreciation_yearly?: number;
+  depreciation_monthly?: number;
+}
+
+export interface RateComputationInput {
+  household_count?: number;
+  avg_household_size?: number;
+  liters_per_person_day?: number;
+  days_per_month?: number;
+  inflation_rate_percent?: number;
+  amortization_monthly?: number;
+  min_volume_m3?: number;
+  excess_block_size_m3?: number;
+  escalation_percent?: number;
+  markup_tapstand_percent?: number;
+  markup_residential_percent?: number;
+  markup_commercial_percent?: number;
+  notes?: string | null;
+  staff?: RateComputationStaffRow[];
+  opex?: RateComputationOpexRow[];
+  assets?: RateComputationAssetRow[];
+}
+
+export interface RateComputationPayload extends RateComputationInput {
+  supply: { supply_id: string; supply_code: string; supply_name: string };
+  worksheet?: Record<string, unknown> | null;
+  computation: any;
+  is_default?: boolean;
+}
 
 export interface RateTier {
   tier_id: string;

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Water Rate Computation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; color: #111; }
+  .controls {
+    padding: 10px 16px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;
+    display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 100;
+  }
+  .btn { padding: 7px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; color: #fff; background: #1d4ed8; }
+  .btn:disabled { background: #6c757d; cursor: not-allowed; }
+  #loadStatus { font-size: 13px; color: #555; }
+  #wrap { display: flex; justify-content: center; padding: 20px 12px 40px; }
+  #wrap.hidden { display: none; }
+  .doc {
+    width: 8.5in; background: #fff; border: 1px solid #d1d5db;
+    padding: 0.45in; font-size: 10pt; line-height: 1.4;
+  }
+  h1 { font-size: 14pt; text-align: center; color: #1e3a8a; }
+  h2 { font-size: 11pt; margin: 16px 0 8px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+  .sub { text-align: center; color: #64748b; font-size: 9pt; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; }
+  th, td { border: 1px solid #cbd5e1; padding: 5px 7px; }
+  th { background: #f1f5f9; text-align: left; font-size: 9pt; }
+  td.num, th.num { text-align: right; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 8px 0; }
+  .kv { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dotted #e2e8f0; padding: 3px 0; }
+  .total { font-weight: bold; background: #eff6ff; }
+  @media print {
+    .controls { display: none; }
+    body { background: #fff; }
+    #wrap { padding: 0; }
+    .doc { border: none; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="controls">
+  <span id="loadStatus">Loading...</span>
+  <div style="flex:1"></div>
+  <button class="btn" id="btnPrint" disabled onclick="window.print()">Print</button>
+</div>
+<div id="wrap" class="hidden"></div>
+<script>
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  var supplyId = params.get('supply_id');
+  var token = params.get('token') || localStorage.getItem('token');
+  var api = window.location.origin.includes('6070')
+    ? 'http://' + window.location.hostname + ':5040'
+    : (window.location.origin.replace(':3000', ':5000'));
+
+  function fmt(n) {
+    return Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function esc(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s == null ? '' : String(s)));
+    return d.innerHTML;
+  }
+
+  if (!supplyId || !token) {
+    document.getElementById('loadStatus').textContent = 'Missing supply_id or token';
+    return;
+  }
+
+  fetch(api + '/api/waterworks/supplies/' + encodeURIComponent(supplyId) + '/rate-computation', {
+    headers: { Authorization: 'Bearer ' + token }
+  })
+    .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Failed'); return d; }); })
+    .then(function (res) {
+      var data = res.data;
+      var s = data.supply || {};
+      var c = data.computation || {};
+      var dmd = c.demand || {};
+      var exp = c.expenses || {};
+      var cls = c.classifications || {};
+      var opex = (c.opex && c.opex.rows) || data.opex || [];
+      var assets = (c.assets && c.assets.rows) || data.assets || [];
+      var staff = (c.staff && c.staff.rows) || data.staff || [];
+
+      var opexRows = opex.map(function (r) {
+        return '<tr><td>' + esc(r.category_name) + '</td><td class="num">₱ ' + fmt(r.amount_monthly) + '</td></tr>';
+      }).join('');
+
+      var sched = '';
+      var resTiers = (cls.residential && cls.residential.tiers) || [];
+      for (var i = 0; i < resTiers.length; i++) {
+        var t = resTiers[i];
+        var tap = (cls.tapstand && cls.tapstand.tiers[i]) || {};
+        var com = (cls.commercial && cls.commercial.tiers[i]) || {};
+        sched += '<tr><td>' + esc(t.label) + '</td><td class="num">₱ ' + fmt(tap.rate_per_m3 || tap.minimum_bill) +
+          '</td><td class="num">₱ ' + fmt(t.rate_per_m3 || t.minimum_bill) +
+          '</td><td class="num">₱ ' + fmt(com.rate_per_m3 || com.minimum_bill) + '</td></tr>';
+      }
+
+      document.getElementById('wrap').innerHTML =
+        '<div class="doc">' +
+        '<h1>WATER RATE COMPUTATION</h1>' +
+        '<p class="sub">Full Cost Recovery — ' + esc(s.supply_name) + ' (' + esc(s.supply_code) + ')</p>' +
+        '<h2>1.1 Projected Water Volume</h2>' +
+        '<div class="grid">' +
+          '<div class="kv"><span>Households</span><strong>' + esc(dmd.household_count) + '</strong></div>' +
+          '<div class="kv"><span>Ave. HH size</span><strong>' + esc(dmd.avg_household_size) + '</strong></div>' +
+          '<div class="kv"><span>L / person / day</span><strong>' + esc(dmd.liters_per_person_day) + '</strong></div>' +
+          '<div class="kv"><span>Projected monthly m³</span><strong>' + fmt(dmd.projected_monthly_m3) + '</strong></div>' +
+        '</div>' +
+        '<h2>2.1 Operating Costs</h2>' +
+        '<table><thead><tr><th>Category</th><th class="num">Monthly (₱)</th></tr></thead><tbody>' +
+        opexRows +
+        '<tr class="total"><td>Total Operating</td><td class="num">₱ ' + fmt(exp.operating_cost) + '</td></tr>' +
+        '</tbody></table>' +
+        (staff.length ? '<p style="font-size:9pt;color:#64748b;margin-bottom:8px;">Staff reference headcount: ' +
+          esc((c.staff && c.staff.total_headcount) || 0) + '</p>' : '') +
+        '<h2>2.2 Depreciation Cost</h2>' +
+        '<table><thead><tr><th>#</th><th>System Components</th><th class="num">Cost Mat\'s &amp; Labor (PhP)</th><th class="num">Service Life* (yr)</th><th class="num">% of Cost to be depreciated</th><th class="num">Yearly</th><th class="num">Monthly</th></tr></thead><tbody>' +
+        assets.map(function (r, i) {
+          var hasCost = Number(r.cost || 0) > 0;
+          return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.component_name) + '</td><td class="num">' +
+            (hasCost ? '₱ ' + fmt(r.cost) : '—') + '</td><td class="num">' +
+            esc(r.service_life_years) + '</td><td class="num">' + esc(r.depreciable_percent) + '%</td><td class="num">' +
+            (hasCost ? '₱ ' + fmt(r.depreciation_yearly) : '—') + '</td><td class="num">' +
+            (hasCost ? '₱ ' + fmt(r.depreciation_monthly) : '—') + '</td></tr>';
+        }).join('') +
+        '<tr class="total"><td colspan="2">TOTAL</td><td class="num">₱ ' + fmt((c.assets && c.assets.total_cost) || 0) +
+        '</td><td colspan="2"></td><td class="num">₱ ' + fmt((c.assets && c.assets.total_depreciation_yearly) || 0) +
+        '</td><td class="num">₱ ' + fmt(exp.depreciation_cost) + '</td></tr>' +
+        '</tbody></table>' +
+        '<p style="font-size:8pt;color:#64748b;margin-bottom:8px;">* Economic / Usable Life</p>' +
+        '<h2>Summary of Expenses</h2>' +
+        '<table><tbody>' +
+        '<tr><td>Operating Cost</td><td class="num">₱ ' + fmt(exp.operating_cost) + '</td></tr>' +
+        '<tr><td>Depreciation Cost</td><td class="num">₱ ' + fmt(exp.depreciation_cost) + '</td></tr>' +
+        '<tr><td>Inflation Cost (' + esc(exp.inflation_rate_percent) + '%)</td><td class="num">₱ ' + fmt(exp.inflation_cost) + '</td></tr>' +
+        '<tr><td>Amortization Cost</td><td class="num">₱ ' + fmt(exp.amortization_cost) + '</td></tr>' +
+        '<tr class="total"><td>TOTAL</td><td class="num">₱ ' + fmt(exp.total) + ' / month</td></tr>' +
+        '</tbody></table>' +
+        '<p style="margin:12px 0;"><strong>Base Rate</strong> = Total Expenses ÷ Projected Volume = ' +
+          '<strong>₱ ' + fmt(c.base_rate) + ' / Cu. M.</strong></p>' +
+        '<h2>Water Rate Schedule</h2>' +
+        '<table><thead><tr><th>Bracket</th><th class="num">Tapstand</th><th class="num">Residential</th><th class="num">Commercial</th></tr></thead><tbody>' +
+        sched +
+        '</tbody></table>' +
+        '</div>';
+
+      document.getElementById('wrap').classList.remove('hidden');
+      document.getElementById('btnPrint').disabled = false;
+      document.getElementById('loadStatus').textContent = 'Ready';
+    })
+    .catch(function (err) {
+      document.getElementById('loadStatus').textContent = err.message || 'Error loading report';
+    });
+})();
+</script>
+</body>
+</html>

@@ -173,6 +173,7 @@ export default function Layout({ children }: LayoutProps) {
         { href: '/admin/waterworks/readings', label: 'Readings' },
         { href: '/admin/waterworks/billing', label: 'Billing' },
         { href: '/admin/waterworks/payments', label: 'Payments' },
+        { href: '/admin/waterworks/rate-computation', label: 'Rate Computation' },
         { href: '/admin/waterworks/reports', label: 'Reports' },
       ],
     },

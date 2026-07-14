@@ -40,7 +40,11 @@ const ID_PREFIXES = {
   WW_BILL: 'wwbill',
   WW_PAYMENT: 'wwpay',
   WW_ASSIGNMENT: 'wwasgn',
-  WW_TIER: 'wwtier'
+  WW_TIER: 'wwtier',
+  WW_RATE_WS: 'wwrcws',
+  WW_RATE_STAFF: 'wwrcst',
+  WW_RATE_OPEX: 'wwrcox',
+  WW_RATE_ASSET: 'wwrcas',
 };
 
 /**

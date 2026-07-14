@@ -9,6 +9,11 @@ const {
   getRateTiersForSupply,
   getSupplyBillingConfig,
 } = require('../utils/waterworksBilling');
+const {
+  buildDefaultWorksheetPayload,
+  computeRateWorksheet,
+  classificationToProgressiveTiers,
+} = require('../utils/waterworksRateComputation');
 
 const router = express.Router();
 
@@ -2164,6 +2169,397 @@ router.post('/mobile/readings', async (req, res) => {
   } catch (error) {
     console.error('Mobile submit reading error:', error);
     res.status(500).json({ error: 'Failed to submit reading' });
+  }
+});
+
+// ========== RATE COMPUTATION (Full Cost Recovery Worksheet) ==========
+
+async function loadWorksheetChildren(connection, worksheetId) {
+  const [staff] = await connection.query(
+    `SELECT staff_id, role_name, headcount, monthly_rate, sort_order
+     FROM ww_rate_worksheet_staff WHERE worksheet_id = ? ORDER BY sort_order ASC, role_name ASC`,
+    [worksheetId]
+  );
+  const [opex] = await connection.query(
+    `SELECT opex_id, category_name, amount_monthly, sort_order
+     FROM ww_rate_worksheet_opex WHERE worksheet_id = ? ORDER BY sort_order ASC, category_name ASC`,
+    [worksheetId]
+  );
+  const [assets] = await connection.query(
+    `SELECT asset_id, component_name, cost, service_life_years, depreciable_percent, sort_order
+     FROM ww_rate_worksheet_assets WHERE worksheet_id = ? ORDER BY sort_order ASC, component_name ASC`,
+    [worksheetId]
+  );
+  return { staff, opex, assets };
+}
+
+async function replaceWorksheetChildren(connection, worksheetId, staff, opex, assets) {
+  await connection.query('DELETE FROM ww_rate_worksheet_staff WHERE worksheet_id = ?', [worksheetId]);
+  await connection.query('DELETE FROM ww_rate_worksheet_opex WHERE worksheet_id = ?', [worksheetId]);
+  await connection.query('DELETE FROM ww_rate_worksheet_assets WHERE worksheet_id = ?', [worksheetId]);
+
+  for (let i = 0; i < (staff || []).length; i += 1) {
+    const row = staff[i];
+    await connection.query(
+      `INSERT INTO ww_rate_worksheet_staff
+        (staff_id, worksheet_id, role_name, headcount, monthly_rate, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        generateId(ID_PREFIXES.WW_RATE_STAFF),
+        worksheetId,
+        String(row.role_name || '').trim() || `Staff ${i + 1}`,
+        Math.max(0, parseInt(row.headcount, 10) || 0),
+        parseFloat(row.monthly_rate) || 0,
+        parseInt(row.sort_order, 10) || i + 1,
+      ]
+    );
+  }
+
+  for (let i = 0; i < (opex || []).length; i += 1) {
+    const row = opex[i];
+    await connection.query(
+      `INSERT INTO ww_rate_worksheet_opex
+        (opex_id, worksheet_id, category_name, amount_monthly, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        generateId(ID_PREFIXES.WW_RATE_OPEX),
+        worksheetId,
+        String(row.category_name || '').trim() || `Expense ${i + 1}`,
+        parseFloat(row.amount_monthly) || 0,
+        parseInt(row.sort_order, 10) || i + 1,
+      ]
+    );
+  }
+
+  for (let i = 0; i < (assets || []).length; i += 1) {
+    const row = assets[i];
+    await connection.query(
+      `INSERT INTO ww_rate_worksheet_assets
+        (asset_id, worksheet_id, component_name, cost, service_life_years, depreciable_percent, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        generateId(ID_PREFIXES.WW_RATE_ASSET),
+        worksheetId,
+        String(row.component_name || '').trim() || `Component ${i + 1}`,
+        parseFloat(row.cost) || 0,
+        Math.max(0.01, parseFloat(row.service_life_years) || 1),
+        parseFloat(row.depreciable_percent) || 0,
+        parseInt(row.sort_order, 10) || i + 1,
+      ]
+    );
+  }
+}
+
+function parseWorksheetHeader(body, existing = {}) {
+  const num = (v, fallback) => {
+    if (v === undefined || v === null || v === '') return fallback;
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const int = (v, fallback) => {
+    if (v === undefined || v === null || v === '') return fallback;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  return {
+    household_count: int(body.household_count, existing.household_count ?? 0),
+    avg_household_size: num(body.avg_household_size, existing.avg_household_size ?? 5),
+    liters_per_person_day: num(body.liters_per_person_day, existing.liters_per_person_day ?? 60),
+    days_per_month: Math.max(1, int(body.days_per_month, existing.days_per_month ?? 30)),
+    inflation_rate_percent: num(body.inflation_rate_percent, existing.inflation_rate_percent ?? 10),
+    amortization_monthly: Math.max(0, num(body.amortization_monthly, existing.amortization_monthly ?? 0)),
+    min_volume_m3: Math.max(0, num(body.min_volume_m3, existing.min_volume_m3 ?? 3)),
+    excess_block_size_m3: Math.max(0.01, num(body.excess_block_size_m3, existing.excess_block_size_m3 ?? 5)),
+    escalation_percent: num(body.escalation_percent, existing.escalation_percent ?? 10),
+    markup_tapstand_percent: num(body.markup_tapstand_percent, existing.markup_tapstand_percent ?? 0),
+    markup_residential_percent: num(body.markup_residential_percent, existing.markup_residential_percent ?? 10),
+    markup_commercial_percent: num(body.markup_commercial_percent, existing.markup_commercial_percent ?? 20),
+    notes: body.notes !== undefined ? (body.notes ? String(body.notes).trim() : null) : (existing.notes || null),
+  };
+}
+
+router.get('/supplies/:id/rate-computation', async (req, res) => {
+  try {
+    if (!hasAnyRole(req.user, WW_MANAGER_ROLES)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    const { id } = req.params;
+    const connection = await pool.getConnection();
+    try {
+      const [supplies] = await connection.query(
+        'SELECT supply_id, supply_code, supply_name FROM ww_water_supplies WHERE supply_id = ?',
+        [id]
+      );
+      if (!supplies.length) {
+        return res.status(404).json({ error: 'Water supply not found' });
+      }
+
+      const [rows] = await connection.query(
+        'SELECT * FROM ww_rate_worksheets WHERE supply_id = ?',
+        [id]
+      );
+
+      if (!rows.length) {
+        const defaults = buildDefaultWorksheetPayload();
+        const computation = computeRateWorksheet(defaults, defaults.staff, defaults.opex, defaults.assets);
+        return res.json({
+          data: {
+            supply: supplies[0],
+            worksheet: null,
+            ...defaults,
+            computation,
+            is_default: true,
+          },
+        });
+      }
+
+      const worksheet = rows[0];
+      const children = await loadWorksheetChildren(connection, worksheet.worksheet_id);
+      const computation = computeRateWorksheet(worksheet, children.staff, children.opex, children.assets);
+
+      res.json({
+        data: {
+          supply: supplies[0],
+          worksheet,
+          household_count: worksheet.household_count,
+          avg_household_size: worksheet.avg_household_size,
+          liters_per_person_day: worksheet.liters_per_person_day,
+          days_per_month: worksheet.days_per_month,
+          inflation_rate_percent: worksheet.inflation_rate_percent,
+          amortization_monthly: worksheet.amortization_monthly,
+          min_volume_m3: worksheet.min_volume_m3,
+          excess_block_size_m3: worksheet.excess_block_size_m3,
+          escalation_percent: worksheet.escalation_percent,
+          markup_tapstand_percent: worksheet.markup_tapstand_percent,
+          markup_residential_percent: worksheet.markup_residential_percent,
+          markup_commercial_percent: worksheet.markup_commercial_percent,
+          notes: worksheet.notes,
+          staff: children.staff,
+          opex: children.opex,
+          assets: children.assets,
+          computation,
+          is_default: false,
+        },
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Get rate computation error:', error);
+    if (error.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(500).json({
+        error: 'Rate computation tables missing. Run database/migrations/add_waterworks_rate_computation.sql',
+      });
+    }
+    res.status(500).json({ error: 'Failed to load rate computation' });
+  }
+});
+
+router.put('/supplies/:id/rate-computation', async (req, res) => {
+  try {
+    authorize(...WW_MANAGER_ROLES)(req, res, async () => {
+      const { id } = req.params;
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+
+        const [supplies] = await connection.query(
+          'SELECT supply_id, supply_code, supply_name FROM ww_water_supplies WHERE supply_id = ?',
+          [id]
+        );
+        if (!supplies.length) {
+          await connection.rollback();
+          return res.status(404).json({ error: 'Water supply not found' });
+        }
+
+        const [existingRows] = await connection.query(
+          'SELECT * FROM ww_rate_worksheets WHERE supply_id = ?',
+          [id]
+        );
+
+        const header = parseWorksheetHeader(req.body, existingRows[0] || {});
+        let worksheetId = existingRows[0]?.worksheet_id;
+
+        if (!worksheetId) {
+          worksheetId = generateId(ID_PREFIXES.WW_RATE_WS);
+          await connection.query(
+            `INSERT INTO ww_rate_worksheets (
+              worksheet_id, supply_id, household_count, avg_household_size, liters_per_person_day,
+              days_per_month, inflation_rate_percent, amortization_monthly, min_volume_m3,
+              excess_block_size_m3, escalation_percent, markup_tapstand_percent,
+              markup_residential_percent, markup_commercial_percent, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              worksheetId, id, header.household_count, header.avg_household_size, header.liters_per_person_day,
+              header.days_per_month, header.inflation_rate_percent, header.amortization_monthly, header.min_volume_m3,
+              header.excess_block_size_m3, header.escalation_percent, header.markup_tapstand_percent,
+              header.markup_residential_percent, header.markup_commercial_percent, header.notes,
+            ]
+          );
+        } else {
+          await connection.query(
+            `UPDATE ww_rate_worksheets SET
+              household_count = ?, avg_household_size = ?, liters_per_person_day = ?,
+              days_per_month = ?, inflation_rate_percent = ?, amortization_monthly = ?,
+              min_volume_m3 = ?, excess_block_size_m3 = ?, escalation_percent = ?,
+              markup_tapstand_percent = ?, markup_residential_percent = ?, markup_commercial_percent = ?,
+              notes = ?
+             WHERE worksheet_id = ?`,
+            [
+              header.household_count, header.avg_household_size, header.liters_per_person_day,
+              header.days_per_month, header.inflation_rate_percent, header.amortization_monthly,
+              header.min_volume_m3, header.excess_block_size_m3, header.escalation_percent,
+              header.markup_tapstand_percent, header.markup_residential_percent, header.markup_commercial_percent,
+              header.notes, worksheetId,
+            ]
+          );
+        }
+
+        const defaults = buildDefaultWorksheetPayload();
+        const staff = Array.isArray(req.body.staff) ? req.body.staff : defaults.staff;
+        const opex = Array.isArray(req.body.opex) ? req.body.opex : defaults.opex;
+        const assets = Array.isArray(req.body.assets) ? req.body.assets : defaults.assets;
+
+        await replaceWorksheetChildren(connection, worksheetId, staff, opex, assets);
+
+        await logAction(
+          req.user.user_id,
+          existingRows.length ? 'UPDATE' : 'CREATE',
+          'ww_rate_worksheets',
+          worksheetId,
+          `Saved rate computation for supply ${supplies[0].supply_code}`
+        );
+
+        await connection.commit();
+
+        const [worksheetRows] = await connection.query(
+          'SELECT * FROM ww_rate_worksheets WHERE worksheet_id = ?',
+          [worksheetId]
+        );
+        const children = await loadWorksheetChildren(connection, worksheetId);
+        const computation = computeRateWorksheet(
+          worksheetRows[0],
+          children.staff,
+          children.opex,
+          children.assets
+        );
+
+        res.json({
+          data: {
+            supply: supplies[0],
+            worksheet: worksheetRows[0],
+            staff: children.staff,
+            opex: children.opex,
+            assets: children.assets,
+            computation,
+            is_default: false,
+          },
+        });
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Save rate computation error:', error);
+    if (error.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(500).json({
+        error: 'Rate computation tables missing. Run database/migrations/add_waterworks_rate_computation.sql',
+      });
+    }
+    res.status(500).json({ error: 'Failed to save rate computation' });
+  }
+});
+
+router.post('/supplies/:id/rate-computation/apply', async (req, res) => {
+  try {
+    authorize(...WW_MANAGER_ROLES)(req, res, async () => {
+      const { id } = req.params;
+      const classificationKey = String(req.body.classification || 'residential').toLowerCase();
+      const allowed = ['tapstand', 'residential', 'commercial'];
+      if (!allowed.includes(classificationKey)) {
+        return res.status(400).json({ error: 'classification must be tapstand, residential, or commercial' });
+      }
+
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+
+        const [supplies] = await connection.query(
+          'SELECT supply_id, supply_code, supply_name FROM ww_water_supplies WHERE supply_id = ?',
+          [id]
+        );
+        if (!supplies.length) {
+          await connection.rollback();
+          return res.status(404).json({ error: 'Water supply not found' });
+        }
+
+        const [rows] = await connection.query(
+          'SELECT * FROM ww_rate_worksheets WHERE supply_id = ?',
+          [id]
+        );
+        if (!rows.length) {
+          await connection.rollback();
+          return res.status(400).json({ error: 'Save the rate computation worksheet before applying rates' });
+        }
+
+        const children = await loadWorksheetChildren(connection, rows[0].worksheet_id);
+        const computation = computeRateWorksheet(rows[0], children.staff, children.opex, children.assets);
+        const classification = computation.classifications[classificationKey];
+        if (!classification || !computation.base_rate) {
+          await connection.rollback();
+          return res.status(400).json({
+            error: 'Cannot apply rates: projected volume or expenses are zero. Complete demand and cost entries first.',
+          });
+        }
+
+        const tiers = classificationToProgressiveTiers(classification);
+        const normalized = normalizeRateTiersInput(tiers, 'progressive');
+        if (normalized.error) {
+          await connection.rollback();
+          return res.status(400).json({ error: normalized.error });
+        }
+
+        await saveSupplyRateTiers(connection, id, normalized.tiers, 'progressive');
+
+        await logAction(
+          req.user.user_id,
+          'UPDATE',
+          'ww_water_supplies',
+          id,
+          `Applied ${classificationKey} rate schedule from cost-recovery worksheet (base ₱${computation.base_rate}/m³)`
+        );
+
+        await connection.commit();
+
+        const rateTiers = await getRateTiersForSupply(connection, id);
+
+        res.json({
+          message: `Applied ${classificationKey} schedule to supply rates (progressive billing)`,
+          data: {
+            supply_id: id,
+            classification: classificationKey,
+            base_rate: computation.base_rate,
+            basic_rate: classification.basic_rate,
+            minimum_bill: classification.minimum_bill,
+            billing_model: 'progressive',
+            rate_tiers: rateTiers,
+          },
+        });
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    });
+  } catch (error) {
+    console.error('Apply rate computation error:', error);
+    res.status(500).json({ error: 'Failed to apply computed rates to supply' });
   }
 });
 

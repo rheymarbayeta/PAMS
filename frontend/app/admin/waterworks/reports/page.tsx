@@ -51,6 +51,21 @@ export default function WaterworksReportsPage() {
           <h1 className="text-2xl font-bold mb-2">Reports</h1>
           <p className="text-gray-600 text-sm mb-6">Collection summary by water supply</p>
 
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-blue-900 text-sm">Cost Recovery / Rate Computation</p>
+              <p className="text-xs text-blue-800/80 mt-0.5">
+                Enter demand and expenses, then print the Rempark-style rate worksheet.
+              </p>
+            </div>
+            <Link
+              href="/admin/waterworks/rate-computation"
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium"
+            >
+              Open Rate Computation
+            </Link>
+          </div>
+
           <div className="flex flex-wrap gap-3 mb-6">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Water Supply</label>

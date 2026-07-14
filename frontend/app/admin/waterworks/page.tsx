@@ -616,6 +616,7 @@ export default function WaterworksSuppliesPage() {
                       </td>
                       <td className="px-4 py-3 text-right text-sm space-x-2">
                         <Link href={`/admin/waterworks/accounts?supply_id=${s.supply_id}`} className="text-blue-600 hover:underline">Accounts</Link>
+                        <Link href={`/admin/waterworks/rate-computation?supply=${s.supply_id}`} className="text-amber-700 hover:underline">Rates</Link>
                         <button onClick={() => openReaders(s.supply_id)} className="text-indigo-600 hover:underline">Readers</button>
                         <button onClick={() => openEdit(s)} className="text-gray-600 hover:underline">Edit</button>
                         <button onClick={() => handleDelete(s)} className="text-red-600 hover:underline">Delete</button>
