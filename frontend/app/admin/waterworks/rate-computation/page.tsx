@@ -373,19 +373,28 @@ export default function RateComputationPage() {
                           );
                         })}
                       </div>
-                      <p className="text-sm font-semibold text-right mt-3 pt-2 border-t border-gray-200">
-                        Operating total:{' '}
-                        {formatPeso(
-                          opex.reduce((s, r) => {
-                            const isHon = String(r.category_name || '').trim().toLowerCase() === 'honorarium';
-                            if (isHon) {
-                              const staffDaily = staff.reduce((sum, row) => sum + num(row.headcount) * num(row.monthly_rate), 0);
-                              return s + staffDaily * Math.max(1, form.days_per_month);
-                            }
-                            return s + num(r.amount_monthly);
-                          }, 0)
-                        )}
-                      </p>
+                      <div className="flex items-center gap-2 text-sm font-bold mt-3 pt-3 border-t border-gray-400">
+                        <span className="w-5" />
+                        <span className="flex-1">TOTAL</span>
+                        <span className="text-gray-600 font-medium">= PhP</span>
+                        <span className="inline-flex min-w-[7rem] justify-end px-2 py-1 border-2 border-gray-800 rounded bg-white tabular-nums">
+                          {opex
+                            .reduce((s, r) => {
+                              const isHon = String(r.category_name || '').trim().toLowerCase() === 'honorarium';
+                              if (isHon) {
+                                const staffDaily = staff.reduce(
+                                  (sum, row) => sum + num(row.headcount) * num(row.monthly_rate),
+                                  0
+                                );
+                                return s + staffDaily * Math.max(1, form.days_per_month);
+                              }
+                              return s + num(r.amount_monthly);
+                            }, 0)
+                            .toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-gray-500 font-medium w-14">/month</span>
+                        <span className="w-5" />
+                      </div>
                       <p className="text-xs text-gray-500 mt-1">
                         Honorarium is auto-calculated from Technical Staff (daily rate total × {form.days_per_month} days).
                       </p>

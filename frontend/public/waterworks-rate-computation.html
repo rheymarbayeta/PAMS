@@ -35,6 +35,13 @@
   .opex-line .letter { width: 18px; color: #475569; }
   .opex-line .name { flex: 1; }
   .opex-line .box { min-width: 72px; border: 1px solid #94a3b8; background: #f1f5f9; padding: 2px 6px; text-align: right; }
+  .opex-total {
+    display: flex; align-items: baseline; gap: 6px; margin: 10px 0 4px; padding-top: 8px;
+    border-top: 1px solid #94a3b8; font-size: 9.5pt; font-weight: bold;
+  }
+  .opex-total .box {
+    min-width: 90px; border: 2px solid #111; background: #fff; padding: 2px 8px; text-align: right;
+  }
   .staff-meta { margin: 6px 0 10px; font-size: 10pt; }
   .staff-meta .box { display: inline-block; min-width: 2.5rem; border: 1px solid #94a3b8; background: #e2e8f0; padding: 2px 8px; text-align: center; font-weight: bold; }
   @media print {
@@ -146,7 +153,15 @@
         '<h2 style="border:none;margin-top:4px;">2.1 Operating Cost:</h2>' +
         '<div class="staff-meta">Number of Staff = <span class="box">' + esc(staffHeadcount) + '</span></div>' +
         '<div class="opex-layout">' +
-          '<div>' + opexLines + '</div>' +
+          '<div>' + opexLines +
+            '<div class="opex-total">' +
+              '<span class="letter"></span>' +
+              '<span class="name">TOTAL</span>' +
+              '<span>= PhP</span>' +
+              '<span class="box">' + fmt(exp.operating_cost) + '</span>' +
+              '<span>/month</span>' +
+            '</div>' +
+          '</div>' +
           '<div>' +
             '<p style="font-weight:bold;margin-bottom:6px;">Technical Staff:</p>' +
             '<table><thead><tr><th>Technical Staff</th><th class="num">No.</th><th class="num">Rate</th><th class="num">Total</th></tr></thead><tbody>' +
