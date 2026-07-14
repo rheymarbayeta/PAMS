@@ -30,11 +30,22 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 8px 0; }
   .kv { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dotted #e2e8f0; padding: 3px 0; }
   .total { font-weight: bold; background: #eff6ff; }
+  .opex-layout { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; margin: 8px 0 12px; align-items: start; }
+  .opex-line { display: flex; align-items: baseline; gap: 6px; margin: 4px 0; font-size: 9.5pt; }
+  .opex-line .letter { width: 18px; color: #475569; }
+  .opex-line .name { flex: 1; }
+  .opex-line .box { min-width: 72px; border: 1px solid #94a3b8; background: #f1f5f9; padding: 2px 6px; text-align: right; }
+  .staff-meta { margin: 6px 0 10px; font-size: 10pt; }
+  .staff-meta .box { display: inline-block; min-width: 2.5rem; border: 1px solid #94a3b8; background: #e2e8f0; padding: 2px 8px; text-align: center; font-weight: bold; }
   @media print {
     .controls { display: none; }
     body { background: #fff; }
     #wrap { padding: 0; }
     .doc { border: none; width: 100%; }
+    .opex-layout { grid-template-columns: 1.1fr 1fr; }
+  }
+  @media (max-width: 800px) {
+    .opex-layout { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -82,9 +93,31 @@
       var opex = (c.opex && c.opex.rows) || data.opex || [];
       var assets = (c.assets && c.assets.rows) || data.assets || [];
       var staff = (c.staff && c.staff.rows) || data.staff || [];
+      var staffHeadcount = (c.staff && c.staff.total_headcount != null)
+        ? c.staff.total_headcount
+        : staff.reduce(function (s, r) { return s + (Number(r.headcount) || 0); }, 0);
+      var staffDailyTotal = (c.staff && c.staff.total_daily != null)
+        ? c.staff.total_daily
+        : staff.reduce(function (s, r) { return s + (Number(r.headcount) || 0) * (Number(r.monthly_rate) || 0); }, 0);
 
-      var opexRows = opex.map(function (r) {
-        return '<tr><td>' + esc(r.category_name) + '</td><td class="num">₱ ' + fmt(r.amount_monthly) + '</td></tr>';
+      var letters = 'abcdefghijk';
+      var opexLines = opex.map(function (r, i) {
+        var letter = letters[i] || String(i + 1);
+        var amount = Number(r.amount_monthly) || 0;
+        var show = amount > 0 ? fmt(amount) : '';
+        return '<div class="opex-line"><span class="letter">' + letter + '.</span>' +
+          '<span class="name">' + esc(r.category_name) + '</span>' +
+          '<span>= PhP</span><span class="box">' + show + '</span><span>/month</span></div>';
+      }).join('');
+
+      var staffRowsHtml = staff.map(function (r) {
+        var no = Number(r.headcount) || 0;
+        var rate = Number(r.monthly_rate) || 0;
+        var total = no * rate;
+        return '<tr><td>' + esc(r.role_name) + '</td>' +
+          '<td class="num">' + (no ? no : '') + '</td>' +
+          '<td class="num">' + (rate ? fmt(rate) : '') + '</td>' +
+          '<td class="num">' + fmt(total) + '</td></tr>';
       }).join('');
 
       var sched = '';
@@ -109,13 +142,20 @@
           '<div class="kv"><span>L / person / day</span><strong>' + esc(dmd.liters_per_person_day) + '</strong></div>' +
           '<div class="kv"><span>Projected monthly m³</span><strong>' + fmt(dmd.projected_monthly_m3) + '</strong></div>' +
         '</div>' +
-        '<h2>2.1 Operating Costs</h2>' +
-        '<table><thead><tr><th>Category</th><th class="num">Monthly (₱)</th></tr></thead><tbody>' +
-        opexRows +
-        '<tr class="total"><td>Total Operating</td><td class="num">₱ ' + fmt(exp.operating_cost) + '</td></tr>' +
-        '</tbody></table>' +
-        (staff.length ? '<p style="font-size:9pt;color:#64748b;margin-bottom:8px;">Staff reference headcount: ' +
-          esc((c.staff && c.staff.total_headcount) || 0) + '</p>' : '') +
+        '<h2>2 EXPENSES</h2>' +
+        '<h2 style="border:none;margin-top:4px;">2.1 Operating Cost:</h2>' +
+        '<div class="staff-meta">Number of Staff = <span class="box">' + esc(staffHeadcount) + '</span></div>' +
+        '<div class="opex-layout">' +
+          '<div>' + opexLines + '</div>' +
+          '<div>' +
+            '<p style="font-weight:bold;margin-bottom:6px;">Technical Staff:</p>' +
+            '<table><thead><tr><th>Technical Staff</th><th class="num">No.</th><th class="num">Rate</th><th class="num">Total</th></tr></thead><tbody>' +
+            staffRowsHtml +
+            '<tr class="total"><td>Total</td><td class="num">' + esc(staffHeadcount) + '</td><td></td><td class="num">' + fmt(staffDailyTotal) + '</td></tr>' +
+            '</tbody></table>' +
+          '</div>' +
+        '</div>' +
+        '<p style="font-size:8pt;color:#64748b;margin-bottom:8px;">Honorarium = staff Total × days/month. Staff Rate is daily.</p>' +
         '<h2>2.2 Depreciation Cost</h2>' +
         '<table><thead><tr><th>#</th><th>System Components</th><th class="num">Cost Mat\'s &amp; Labor (PhP)</th><th class="num">Service Life* (yr)</th><th class="num">% of Cost to be depreciated</th><th class="num">Yearly</th><th class="num">Monthly</th></tr></thead><tbody>' +
         assets.map(function (r, i) {
@@ -131,13 +171,27 @@
         '</td><td class="num">₱ ' + fmt(exp.depreciation_cost) + '</td></tr>' +
         '</tbody></table>' +
         '<p style="font-size:8pt;color:#64748b;margin-bottom:8px;">* Economic / Usable Life</p>' +
-        '<h2>Summary of Expenses</h2>' +
-        '<table><tbody>' +
-        '<tr><td>Operating Cost</td><td class="num">₱ ' + fmt(exp.operating_cost) + '</td></tr>' +
-        '<tr><td>Depreciation Cost</td><td class="num">₱ ' + fmt(exp.depreciation_cost) + '</td></tr>' +
-        '<tr><td>Inflation Cost (' + esc(exp.inflation_rate_percent) + '%)</td><td class="num">₱ ' + fmt(exp.inflation_cost) + '</td></tr>' +
-        '<tr><td>Amortization Cost</td><td class="num">₱ ' + fmt(exp.amortization_cost) + '</td></tr>' +
-        '<tr class="total"><td>TOTAL</td><td class="num">₱ ' + fmt(exp.total) + ' / month</td></tr>' +
+        '<h2>2.3 Amortization Cost</h2>' +
+        '<p style="font-size:9.5pt;margin:6px 0 10px;">NOTE: If grant, no need to compute. However, if loan, add monthly amortization amount to the &lsquo;Expense&rsquo;.</p>' +
+        '<div class="kv" style="max-width:420px;"><span>Monthly Amortization</span><strong>PhP ' + fmt(exp.amortization_cost) + ' /month</strong></div>' +
+        '<h2>2.4 Inflation Cost</h2>' +
+        '<p style="font-size:9.5pt;margin:6px 0;">Inflation Cost = Inflation rate of the month × (Operating cost + Depreciation cost)</p>' +
+        '<p style="font-size:9.5pt;margin:6px 0;">Inflation rate = <span class="box" style="display:inline-block;min-width:3rem;text-align:center;border:1px solid #94a3b8;background:#f1f5f9;padding:2px 8px;">' +
+          esc(exp.inflation_rate_percent) + '%</span> <span style="color:#64748b;">(latest / highest monthly figure from NEDA)</span></p>' +
+        '<div style="margin:10px 0 6px;font-size:9.5pt;">' +
+          'Total Expenses = (PhP ' + fmt(exp.operating_cost) + ' + PhP ' + fmt(exp.depreciation_cost) + ') = <strong>PhP ' + fmt(exp.inflation_base) + '</strong>' +
+        '</div>' +
+        '<div style="margin:6px 0 14px;font-size:9.5pt;">' +
+          'Inflation Cost = PhP ' + fmt(exp.inflation_base) + ' × ' + esc(exp.inflation_rate_percent) + '% = ' +
+          '<strong style="display:inline-block;border:2px solid #111;padding:2px 10px;min-width:5rem;text-align:right;">PhP ' + fmt(exp.inflation_cost) + '</strong> / month' +
+        '</div>' +
+        '<h2>Summary of Expenses:</h2>' +
+        '<table style="max-width:420px;"><tbody>' +
+        '<tr><td>Operating Cost</td><td class="num">PhP ' + fmt(exp.operating_cost) + ' /month</td></tr>' +
+        '<tr><td>Depreciation Cost</td><td class="num">PhP ' + fmt(exp.depreciation_cost) + ' /month</td></tr>' +
+        '<tr><td>Inflation Cost</td><td class="num">PhP ' + fmt(exp.inflation_cost) + ' /month</td></tr>' +
+        '<tr><td>Amortization Cost</td><td class="num">PhP ' + (Number(exp.amortization_cost) > 0 ? fmt(exp.amortization_cost) : '—') + ' /month</td></tr>' +
+        '<tr class="total"><td>TOTAL</td><td class="num">PhP ' + fmt(exp.total) + ' /month</td></tr>' +
         '</tbody></table>' +
         '<p style="margin:12px 0;"><strong>Base Rate</strong> = Total Expenses ÷ Projected Volume = ' +
           '<strong>₱ ' + fmt(c.base_rate) + ' / Cu. M.</strong></p>' +

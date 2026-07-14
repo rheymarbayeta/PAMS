@@ -33,12 +33,18 @@ const DEFAULT_OPEX_CATEGORIES = [
   'Communication',
   'Per Diem',
   'Office Supplies',
-  'Spare Parts / Chemicals',
+  'Spare Parts (Chemicals)',
   'Representation',
-  'Tools / Equipment / Furniture',
-  'Light / Power',
+  'Tools/Equipment/Furniture',
+  'Light/Power',
   'Maintenance',
 ];
+
+const OPEX_LETTERS = 'abcdefghijk'.split('');
+
+function isHonorariumCategory(name) {
+  return String(name || '').trim().toLowerCase() === 'honorarium';
+}
 
 const DEFAULT_ASSETS = [
   { component_name: 'Spring Box', service_life_years: 25, depreciable_percent: 15 },
@@ -198,26 +204,33 @@ function computeRateWorksheet(worksheet, staff = [], opex = [], assets = []) {
 
   const staffRows = (staff || []).map((s) => {
     const headcount = Math.max(0, parseInt(s.headcount, 10) || 0);
-    const monthly_rate = money(s.monthly_rate);
+    // Stored as monthly_rate historically; Rempark worksheet treats this as daily rate
+    const daily_rate = money(s.monthly_rate);
     return {
       ...s,
       headcount,
-      monthly_rate: round2(monthly_rate),
-      total: round2(headcount * monthly_rate),
+      monthly_rate: round2(daily_rate),
+      daily_rate: round2(daily_rate),
+      total: round2(headcount * daily_rate),
     };
   });
   const staffHeadcount = staffRows.reduce((sum, s) => sum + s.headcount, 0);
-  const staffCost = round2(staffRows.reduce((sum, s) => sum + s.total, 0));
+  const staffDailyTotal = round2(staffRows.reduce((sum, s) => sum + s.total, 0));
+  const days = Math.max(1, parseInt(worksheet.days_per_month, 10) || 30);
+  const honorariumMonthly = round2(staffDailyTotal * days);
 
-  const opexRows = (opex || []).map((o) => ({
-    ...o,
-    amount_monthly: round2(o.amount_monthly),
-  }));
+  const opexRows = (opex || []).map((o, index) => {
+    const name = String(o.category_name || '').trim() || `Expense ${index + 1}`;
+    const amount = isHonorariumCategory(name) ? honorariumMonthly : round2(o.amount_monthly);
+    return {
+      ...o,
+      category_name: name,
+      letter: OPEX_LETTERS[index] || String(index + 1),
+      amount_monthly: amount,
+      is_honorarium: isHonorariumCategory(name),
+    };
+  });
   const opexTotal = round2(opexRows.reduce((sum, o) => sum + money(o.amount_monthly), 0));
-
-  // Honorarium in Rempark is often the staff cost line; if Honorarium is 0 and staffCost > 0,
-  // operating still uses explicit opex amounts. Staff is informational unless an opex line is named Honorarium
-  // and the UI synced them. Total operating = sum of opex lines (encoder enters honorarium there).
   const operatingCost = opexTotal;
 
   const assetRows = (assets || []).map(computeAssetDepreciation);
@@ -267,7 +280,10 @@ function computeRateWorksheet(worksheet, staff = [], opex = [], assets = []) {
     staff: {
       rows: staffRows,
       total_headcount: staffHeadcount,
-      total_cost: staffCost,
+      total_daily: staffDailyTotal,
+      total_cost: staffDailyTotal,
+      honorarium_monthly: honorariumMonthly,
+      days_per_month: days,
     },
     opex: {
       rows: opexRows,
@@ -342,6 +358,8 @@ module.exports = {
   DEFAULT_STAFF_ROLES,
   DEFAULT_OPEX_CATEGORIES,
   DEFAULT_ASSETS,
+  OPEX_LETTERS,
+  isHonorariumCategory,
   buildDefaultWorksheetPayload,
   computeRateWorksheet,
   computeAssetDepreciation,

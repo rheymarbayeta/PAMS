@@ -112,28 +112,35 @@ export default function RateComputationPage() {
     [supplies, supplyId]
   );
 
-  const buildPayload = () => ({
-    ...form,
-    notes: form.notes.trim() || null,
-    staff: staff.map((s, i) => ({
-      role_name: s.role_name,
-      headcount: num(s.headcount),
-      monthly_rate: num(s.monthly_rate),
-      sort_order: i + 1,
-    })),
-    opex: opex.map((o, i) => ({
-      category_name: o.category_name,
-      amount_monthly: num(o.amount_monthly),
-      sort_order: i + 1,
-    })),
-    assets: assets.map((a, i) => ({
-      component_name: a.component_name,
-      cost: num(a.cost),
-      service_life_years: Math.max(0.01, num(a.service_life_years, 1)),
-      depreciable_percent: num(a.depreciable_percent),
-      sort_order: i + 1,
-    })),
-  });
+  const buildPayload = () => {
+    const staffDaily = staff.reduce((s, r) => s + num(r.headcount) * num(r.monthly_rate), 0);
+    const honorarium = Math.round(staffDaily * Math.max(1, form.days_per_month) * 100) / 100;
+    return {
+      ...form,
+      notes: form.notes.trim() || null,
+      staff: staff.map((s, i) => ({
+        role_name: s.role_name,
+        headcount: num(s.headcount),
+        monthly_rate: num(s.monthly_rate),
+        sort_order: i + 1,
+      })),
+      opex: opex.map((o, i) => {
+        const isHon = String(o.category_name || '').trim().toLowerCase() === 'honorarium';
+        return {
+          category_name: o.category_name,
+          amount_monthly: isHon ? honorarium : num(o.amount_monthly),
+          sort_order: i + 1,
+        };
+      }),
+      assets: assets.map((a, i) => ({
+        component_name: a.component_name,
+        cost: num(a.cost),
+        service_life_years: Math.max(0.01, num(a.service_life_years, 1)),
+        depreciable_percent: num(a.depreciable_percent),
+        sort_order: i + 1,
+      })),
+    };
+  };
 
   const handleSave = async () => {
     if (!supplyId) return;
@@ -294,107 +301,195 @@ export default function RateComputationPage() {
               )}
 
               {tab === 'operating' && (
-                <section className="space-y-4">
-                  <div className="bg-white rounded-xl border p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="font-semibold text-gray-900">Technical Staff</h2>
-                      <button
-                        type="button"
-                        className="text-sm text-blue-600 hover:underline"
-                        onClick={() => setStaff([...staff, { role_name: '', headcount: 0, monthly_rate: 0 }])}
-                      >
-                        + Add role
-                      </button>
+                <section className="bg-white rounded-xl border p-5 space-y-4">
+                  <div>
+                    <h2 className="font-semibold text-gray-900">2 EXPENSES</h2>
+                    <h3 className="font-medium text-gray-800 mt-1">2.1 Operating Cost:</h3>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium text-gray-700">Number of Staff =</span>
+                      <span className="inline-flex min-w-[3rem] justify-center px-3 py-1 bg-gray-100 border border-gray-300 rounded font-semibold">
+                        {staff.reduce((s, r) => s + num(r.headcount), 0)}
+                      </span>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-3 py-2 text-left">Role</th>
-                            <th className="px-3 py-2 text-right w-24">No.</th>
-                            <th className="px-3 py-2 text-right w-32">Rate</th>
-                            <th className="px-3 py-2 text-right w-32">Total</th>
-                            <th className="w-10" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {staff.map((row, idx) => (
-                            <tr key={idx}>
-                              <td className="px-3 py-1.5">
-                                <input className="w-full border rounded px-2 py-1" value={row.role_name}
-                                  onChange={(e) => {
-                                    const next = [...staff];
-                                    next[idx] = { ...row, role_name: e.target.value };
-                                    setStaff(next);
-                                  }} />
-                              </td>
-                              <td className="px-3 py-1.5">
-                                <input type="number" min={0} className="w-full border rounded px-2 py-1 text-right" value={row.headcount}
-                                  onChange={(e) => {
-                                    const next = [...staff];
-                                    next[idx] = { ...row, headcount: num(e.target.value) };
-                                    setStaff(next);
-                                  }} />
-                              </td>
-                              <td className="px-3 py-1.5">
-                                <input type="number" min={0} step="0.01" className="w-full border rounded px-2 py-1 text-right" value={row.monthly_rate}
-                                  onChange={(e) => {
-                                    const next = [...staff];
-                                    next[idx] = { ...row, monthly_rate: num(e.target.value) };
-                                    setStaff(next);
-                                  }} />
-                              </td>
-                              <td className="px-3 py-1.5 text-right text-gray-700">
-                                {formatPeso(num(row.headcount) * num(row.monthly_rate))}
-                              </td>
-                              <td className="px-1">
-                                <button type="button" className="text-red-500 text-xs" onClick={() => setStaff(staff.filter((_, i) => i !== idx))}>×</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Staff total (reference): {formatPeso(staff.reduce((s, r) => s + num(r.headcount) * num(r.monthly_rate), 0))}.
-                      Enter the honorarium amount under Operating Expenses if it is charged to the service fee.
-                    </p>
                   </div>
 
-                  <div className="bg-white rounded-xl border p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="font-semibold text-gray-900">2.1 Operating Costs (Monthly)</h2>
-                      <button
-                        type="button"
-                        className="text-sm text-blue-600 hover:underline"
-                        onClick={() => setOpex([...opex, { category_name: '', amount_monthly: 0 }])}
-                      >
-                        + Add expense
-                      </button>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left: a–k operating expenses */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-gray-700">Monthly expense items</p>
+                        <button
+                          type="button"
+                          className="text-sm text-blue-600 hover:underline"
+                          onClick={() => setOpex([...opex, { category_name: '', amount_monthly: 0 }])}
+                        >
+                          + Add expense
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {opex.map((row, idx) => {
+                          const letter = String.fromCharCode(97 + idx);
+                          const isHon = String(row.category_name || '').trim().toLowerCase() === 'honorarium';
+                          const staffDaily = staff.reduce((s, r) => s + num(r.headcount) * num(r.monthly_rate), 0);
+                          const honorarium = Math.round(staffDaily * Math.max(1, form.days_per_month) * 100) / 100;
+                          const displayAmount = isHon ? honorarium : num(row.amount_monthly);
+                          return (
+                            <div key={idx} className="flex items-center gap-2 text-sm">
+                              <span className="w-5 text-gray-500 font-medium">{letter}.</span>
+                              <input
+                                className="flex-1 border border-gray-300 rounded px-2 py-1.5 bg-gray-50 min-w-0"
+                                value={row.category_name}
+                                onChange={(e) => {
+                                  const next = [...opex];
+                                  next[idx] = { ...row, category_name: e.target.value };
+                                  setOpex(next);
+                                }}
+                              />
+                              <span className="text-gray-500 shrink-0">= PhP</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                disabled={isHon}
+                                title={isHon ? `Auto: staff daily total × ${form.days_per_month} days` : undefined}
+                                className={`w-28 border border-gray-300 rounded px-2 py-1.5 text-right ${isHon ? 'bg-gray-100 text-gray-700' : 'bg-gray-50'}`}
+                                value={displayAmount}
+                                onChange={(e) => {
+                                  if (isHon) return;
+                                  const next = [...opex];
+                                  next[idx] = { ...row, amount_monthly: num(e.target.value) };
+                                  setOpex(next);
+                                }}
+                              />
+                              <span className="text-gray-500 shrink-0 w-14">/month</span>
+                              <button
+                                type="button"
+                                className="text-red-500 px-1"
+                                onClick={() => setOpex(opex.filter((_, i) => i !== idx))}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-sm font-semibold text-right mt-3 pt-2 border-t border-gray-200">
+                        Operating total:{' '}
+                        {formatPeso(
+                          opex.reduce((s, r) => {
+                            const isHon = String(r.category_name || '').trim().toLowerCase() === 'honorarium';
+                            if (isHon) {
+                              const staffDaily = staff.reduce((sum, row) => sum + num(row.headcount) * num(row.monthly_rate), 0);
+                              return s + staffDaily * Math.max(1, form.days_per_month);
+                            }
+                            return s + num(r.amount_monthly);
+                          }, 0)
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Honorarium is auto-calculated from Technical Staff (daily rate total × {form.days_per_month} days).
+                      </p>
                     </div>
-                    <div className="space-y-2">
-                      {opex.map((row, idx) => (
-                        <div key={idx} className="flex gap-2 items-center">
-                          <input className="flex-1 border rounded px-2 py-1.5 text-sm" value={row.category_name}
-                            onChange={(e) => {
-                              const next = [...opex];
-                              next[idx] = { ...row, category_name: e.target.value };
-                              setOpex(next);
-                            }} />
-                          <input type="number" min={0} step="0.01" className="w-36 border rounded px-2 py-1.5 text-sm text-right"
-                            value={row.amount_monthly}
-                            onChange={(e) => {
-                              const next = [...opex];
-                              next[idx] = { ...row, amount_monthly: num(e.target.value) };
-                              setOpex(next);
-                            }} />
-                          <button type="button" className="text-red-500 px-1" onClick={() => setOpex(opex.filter((_, i) => i !== idx))}>×</button>
-                        </div>
-                      ))}
+
+                    {/* Right: Technical Staff table */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-gray-700">Technical Staff:</p>
+                        <button
+                          type="button"
+                          className="text-sm text-blue-600 hover:underline"
+                          onClick={() => setStaff([...staff, { role_name: '', headcount: 0, monthly_rate: 0 }])}
+                        >
+                          + Add role
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto border border-gray-300 rounded-lg">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-gray-100">
+                            <tr>
+                              <th className="px-2 py-2 text-left border-b border-gray-300">Technical Staff</th>
+                              <th className="px-2 py-2 text-center border-b border-gray-300 w-16">No.</th>
+                              <th className="px-2 py-2 text-right border-b border-gray-300 w-24">Rate</th>
+                              <th className="px-2 py-2 text-right border-b border-gray-300 w-24">Total</th>
+                              <th className="w-8 border-b border-gray-300" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {staff.map((row, idx) => (
+                              <tr key={idx} className="border-b border-gray-200 last:border-0">
+                                <td className="px-2 py-1">
+                                  <input
+                                    className="w-full border border-gray-200 rounded px-2 py-1 bg-white"
+                                    value={row.role_name}
+                                    onChange={(e) => {
+                                      const next = [...staff];
+                                      next[idx] = { ...row, role_name: e.target.value };
+                                      setStaff(next);
+                                    }}
+                                  />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    className="w-full border border-gray-200 rounded px-2 py-1 text-center bg-gray-50"
+                                    value={row.headcount}
+                                    onChange={(e) => {
+                                      const next = [...staff];
+                                      next[idx] = { ...row, headcount: num(e.target.value) };
+                                      setStaff(next);
+                                    }}
+                                  />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    className="w-full border border-gray-200 rounded px-2 py-1 text-right bg-gray-50"
+                                    value={row.monthly_rate}
+                                    title="Daily rate (Rempark worksheet)"
+                                    onChange={(e) => {
+                                      const next = [...staff];
+                                      next[idx] = { ...row, monthly_rate: num(e.target.value) };
+                                      setStaff(next);
+                                    }}
+                                  />
+                                </td>
+                                <td className="px-2 py-1 text-right tabular-nums text-gray-800">
+                                  {formatPeso(num(row.headcount) * num(row.monthly_rate))}
+                                </td>
+                                <td className="px-1 text-center">
+                                  <button
+                                    type="button"
+                                    className="text-red-500 text-xs"
+                                    onClick={() => setStaff(staff.filter((_, i) => i !== idx))}
+                                  >
+                                    ×
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-gray-100 font-semibold">
+                              <td className="px-2 py-2">Total</td>
+                              <td className="px-2 py-2 text-center">
+                                {staff.reduce((s, r) => s + num(r.headcount), 0)}
+                              </td>
+                              <td className="px-2 py-2" />
+                              <td className="px-2 py-2 text-right tabular-nums">
+                                {formatPeso(staff.reduce((s, r) => s + num(r.headcount) * num(r.monthly_rate), 0))}
+                              </td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Rate = daily rate. Row Total = No. × Rate. Honorarium = staff Total × {form.days_per_month}.
+                      </p>
                     </div>
-                    <p className="text-sm font-medium text-right mt-3">
-                      Operating total: {formatPeso(opex.reduce((s, r) => s + num(r.amount_monthly), 0))}
-                    </p>
                   </div>
                 </section>
               )}
