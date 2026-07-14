@@ -200,12 +200,21 @@
           'Inflation Cost = PhP ' + fmt(exp.inflation_base) + ' × ' + esc(exp.inflation_rate_percent) + '% = ' +
           '<strong style="display:inline-block;border:2px solid #111;padding:2px 10px;min-width:5rem;text-align:right;">PhP ' + fmt(exp.inflation_cost) + '</strong> / month' +
         '</div>' +
+        '<h2>OTHER POSSIBLE ITEMS TO BE INCLUDED UNDER ITEM EXPENSE:</h2>' +
+        '<div style="margin:8px 0 14px;font-size:9.5pt;">' +
+          '<div class="kv"><span>2.5 Benefits</span><strong>PhP ' + fmt((exp.other && exp.other.benefits) || 0) + ' /month</strong></div>' +
+          '<div class="kv"><span>2.6 Watershed Management</span><strong>PhP ' + fmt((exp.other && exp.other.watershed_management) || 0) + ' /month</strong></div>' +
+          '<div class="kv"><span>2.7 Climate Change</span><strong>PhP ' + fmt((exp.other && exp.other.climate_change) || 0) + ' /month</strong></div>' +
+          '<div class="kv"><span>2.8 Capability-Building</span><strong>PhP ' + fmt((exp.other && exp.other.capability_building) || 0) + ' /month</strong></div>' +
+          '<div class="kv" style="margin-top:6px;font-weight:bold;"><span>Other items subtotal</span><strong>PhP ' + fmt(exp.other_total || 0) + ' /month</strong></div>' +
+        '</div>' +
         '<h2>Summary of Expenses:</h2>' +
         '<table style="max-width:420px;"><tbody>' +
         '<tr><td>Operating Cost</td><td class="num">PhP ' + fmt(exp.operating_cost) + ' /month</td></tr>' +
         '<tr><td>Depreciation Cost</td><td class="num">PhP ' + fmt(exp.depreciation_cost) + ' /month</td></tr>' +
         '<tr><td>Inflation Cost</td><td class="num">PhP ' + fmt(exp.inflation_cost) + ' /month</td></tr>' +
         '<tr><td>Amortization Cost</td><td class="num">PhP ' + (Number(exp.amortization_cost) > 0 ? fmt(exp.amortization_cost) : '—') + ' /month</td></tr>' +
+        '<tr><td>Other Items (2.5–2.8)</td><td class="num">PhP ' + (Number(exp.other_total) > 0 ? fmt(exp.other_total) : '—') + ' /month</td></tr>' +
         '<tr class="total"><td>TOTAL</td><td class="num">PhP ' + fmt(exp.total) + ' /month</td></tr>' +
         '</tbody></table>' +
         '<p style="margin:12px 0;"><strong>Base Rate</strong> = Total Expenses ÷ Projected Volume = ' +

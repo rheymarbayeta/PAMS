@@ -69,6 +69,10 @@ function buildDefaultWorksheetPayload() {
     days_per_month: 30,
     inflation_rate_percent: 10,
     amortization_monthly: 0,
+    expense_benefits: 0,
+    expense_watershed_management: 0,
+    expense_climate_change: 0,
+    expense_capability_building: 0,
     min_volume_m3: 3,
     excess_block_size_m3: 5,
     escalation_percent: 10,
@@ -239,10 +243,24 @@ function computeRateWorksheet(worksheet, staff = [], opex = [], assets = []) {
   const depreciationMonthly = round2(assetRows.reduce((sum, a) => sum + money(a.depreciation_monthly), 0));
 
   const amortization = round2(worksheet.amortization_monthly);
+  const otherExpenses = {
+    benefits: round2(worksheet.expense_benefits),
+    watershed_management: round2(worksheet.expense_watershed_management),
+    climate_change: round2(worksheet.expense_climate_change),
+    capability_building: round2(worksheet.expense_capability_building),
+  };
+  const otherExpensesTotal = round2(
+    otherExpenses.benefits +
+      otherExpenses.watershed_management +
+      otherExpenses.climate_change +
+      otherExpenses.capability_building
+  );
   const inflationBase = round2(operatingCost + depreciationMonthly);
   const inflationRate = money(worksheet.inflation_rate_percent);
   const inflationCost = round2(inflationBase * (inflationRate / 100));
-  const totalExpenses = round2(operatingCost + depreciationMonthly + inflationCost + amortization);
+  const totalExpenses = round2(
+    operatingCost + depreciationMonthly + inflationCost + amortization + otherExpensesTotal
+  );
 
   const volume = money(demand.projected_monthly_m3);
   const baseRate = volume > 0 ? round2(totalExpenses / volume) : 0;
@@ -302,6 +320,8 @@ function computeRateWorksheet(worksheet, staff = [], opex = [], assets = []) {
       amortization_cost: amortization,
       inflation_base: inflationBase,
       inflation_rate_percent: inflationRate,
+      other: otherExpenses,
+      other_total: otherExpensesTotal,
       total: totalExpenses,
     },
     base_rate: baseRate,

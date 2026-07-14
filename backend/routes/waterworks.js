@@ -2269,6 +2269,10 @@ function parseWorksheetHeader(body, existing = {}) {
     days_per_month: Math.max(1, int(body.days_per_month, existing.days_per_month ?? 30)),
     inflation_rate_percent: num(body.inflation_rate_percent, existing.inflation_rate_percent ?? 10),
     amortization_monthly: Math.max(0, num(body.amortization_monthly, existing.amortization_monthly ?? 0)),
+    expense_benefits: Math.max(0, num(body.expense_benefits, existing.expense_benefits ?? 0)),
+    expense_watershed_management: Math.max(0, num(body.expense_watershed_management, existing.expense_watershed_management ?? 0)),
+    expense_climate_change: Math.max(0, num(body.expense_climate_change, existing.expense_climate_change ?? 0)),
+    expense_capability_building: Math.max(0, num(body.expense_capability_building, existing.expense_capability_building ?? 0)),
     min_volume_m3: Math.max(0, num(body.min_volume_m3, existing.min_volume_m3 ?? 3)),
     excess_block_size_m3: Math.max(0.01, num(body.excess_block_size_m3, existing.excess_block_size_m3 ?? 5)),
     escalation_percent: num(body.escalation_percent, existing.escalation_percent ?? 10),
@@ -2329,6 +2333,10 @@ router.get('/supplies/:id/rate-computation', async (req, res) => {
           days_per_month: worksheet.days_per_month,
           inflation_rate_percent: worksheet.inflation_rate_percent,
           amortization_monthly: worksheet.amortization_monthly,
+          expense_benefits: worksheet.expense_benefits,
+          expense_watershed_management: worksheet.expense_watershed_management,
+          expense_climate_change: worksheet.expense_climate_change,
+          expense_capability_building: worksheet.expense_capability_building,
           min_volume_m3: worksheet.min_volume_m3,
           excess_block_size_m3: worksheet.excess_block_size_m3,
           escalation_percent: worksheet.escalation_percent,
@@ -2387,14 +2395,16 @@ router.put('/supplies/:id/rate-computation', async (req, res) => {
           await connection.query(
             `INSERT INTO ww_rate_worksheets (
               worksheet_id, supply_id, household_count, avg_household_size, liters_per_person_day,
-              days_per_month, inflation_rate_percent, amortization_monthly, min_volume_m3,
-              excess_block_size_m3, escalation_percent, markup_tapstand_percent,
+              days_per_month, inflation_rate_percent, amortization_monthly,
+              expense_benefits, expense_watershed_management, expense_climate_change, expense_capability_building,
+              min_volume_m3, excess_block_size_m3, escalation_percent, markup_tapstand_percent,
               markup_residential_percent, markup_commercial_percent, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               worksheetId, id, header.household_count, header.avg_household_size, header.liters_per_person_day,
-              header.days_per_month, header.inflation_rate_percent, header.amortization_monthly, header.min_volume_m3,
-              header.excess_block_size_m3, header.escalation_percent, header.markup_tapstand_percent,
+              header.days_per_month, header.inflation_rate_percent, header.amortization_monthly,
+              header.expense_benefits, header.expense_watershed_management, header.expense_climate_change, header.expense_capability_building,
+              header.min_volume_m3, header.excess_block_size_m3, header.escalation_percent, header.markup_tapstand_percent,
               header.markup_residential_percent, header.markup_commercial_percent, header.notes,
             ]
           );
@@ -2403,6 +2413,7 @@ router.put('/supplies/:id/rate-computation', async (req, res) => {
             `UPDATE ww_rate_worksheets SET
               household_count = ?, avg_household_size = ?, liters_per_person_day = ?,
               days_per_month = ?, inflation_rate_percent = ?, amortization_monthly = ?,
+              expense_benefits = ?, expense_watershed_management = ?, expense_climate_change = ?, expense_capability_building = ?,
               min_volume_m3 = ?, excess_block_size_m3 = ?, escalation_percent = ?,
               markup_tapstand_percent = ?, markup_residential_percent = ?, markup_commercial_percent = ?,
               notes = ?
@@ -2410,6 +2421,7 @@ router.put('/supplies/:id/rate-computation', async (req, res) => {
             [
               header.household_count, header.avg_household_size, header.liters_per_person_day,
               header.days_per_month, header.inflation_rate_percent, header.amortization_monthly,
+              header.expense_benefits, header.expense_watershed_management, header.expense_climate_change, header.expense_capability_building,
               header.min_volume_m3, header.excess_block_size_m3, header.escalation_percent,
               header.markup_tapstand_percent, header.markup_residential_percent, header.markup_commercial_percent,
               header.notes, worksheetId,

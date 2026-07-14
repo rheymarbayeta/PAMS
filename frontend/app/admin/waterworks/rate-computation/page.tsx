@@ -15,14 +15,13 @@ import { showAlert } from '@/utils/modal';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 
-type TabKey = 'demand' | 'operating' | 'depreciation' | 'policy' | 'results';
+type TabKey = 'revenue' | 'expenses' | 'rate' | 'results';
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'demand', label: '1. Demand' },
-  { key: 'operating', label: '2. Operating' },
-  { key: 'depreciation', label: '3. Depreciation' },
-  { key: 'policy', label: '4. Rate Policy' },
-  { key: 'results', label: '5. Results' },
+  { key: 'revenue', label: '1. Revenue' },
+  { key: 'expenses', label: '2. Expenses' },
+  { key: 'rate', label: '3. Water Rate' },
+  { key: 'results', label: 'Results' },
 ];
 
 function num(v: string | number | undefined | null, fallback = 0) {
@@ -34,7 +33,7 @@ function num(v: string | number | undefined | null, fallback = 0) {
 export default function RateComputationPage() {
   const [supplies, setSupplies] = useState<WaterSupply[]>([]);
   const [supplyId, setSupplyId] = useState('');
-  const [tab, setTab] = useState<TabKey>('demand');
+  const [tab, setTab] = useState<TabKey>('revenue');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -49,6 +48,10 @@ export default function RateComputationPage() {
     days_per_month: 30,
     inflation_rate_percent: 10,
     amortization_monthly: 0,
+    expense_benefits: 0,
+    expense_watershed_management: 0,
+    expense_climate_change: 0,
+    expense_capability_building: 0,
     min_volume_m3: 3,
     excess_block_size_m3: 5,
     escalation_percent: 10,
@@ -84,6 +87,10 @@ export default function RateComputationPage() {
         days_per_month: num(data.days_per_month ?? data.worksheet?.days_per_month as number, 30),
         inflation_rate_percent: num(data.inflation_rate_percent ?? data.worksheet?.inflation_rate_percent as number, 10),
         amortization_monthly: num(data.amortization_monthly ?? data.worksheet?.amortization_monthly as number),
+        expense_benefits: num(data.expense_benefits ?? data.worksheet?.expense_benefits as number),
+        expense_watershed_management: num(data.expense_watershed_management ?? data.worksheet?.expense_watershed_management as number),
+        expense_climate_change: num(data.expense_climate_change ?? data.worksheet?.expense_climate_change as number),
+        expense_capability_building: num(data.expense_capability_building ?? data.worksheet?.expense_capability_building as number),
         min_volume_m3: num(data.min_volume_m3 ?? data.worksheet?.min_volume_m3 as number, 3),
         excess_block_size_m3: num(data.excess_block_size_m3 ?? data.worksheet?.excess_block_size_m3 as number, 5),
         escalation_percent: num(data.escalation_percent ?? data.worksheet?.escalation_percent as number, 10),
@@ -275,9 +282,15 @@ export default function RateComputationPage() {
                 ))}
               </div>
 
-              {tab === 'demand' && (
+              {tab === 'revenue' && (
                 <section className="bg-white rounded-xl border p-5 space-y-4">
-                  <h2 className="font-semibold text-gray-900">1.1 Projected Water Volume Consumed</h2>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">1. REVENUES</h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Full cost recovery uses projected volume from households. Income sources typically include membership fees, water bill payments, connection/reconnection fees, fines/penalties, donations, and grants.
+                    </p>
+                    <h3 className="font-medium text-gray-800 mt-4">1.1 Projected Water Volume Consumed</h3>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <Field label="No. of Households" type="number" value={form.household_count}
                       onChange={(v) => setForm({ ...form, household_count: num(v) })} />
@@ -300,10 +313,11 @@ export default function RateComputationPage() {
                 </section>
               )}
 
-              {tab === 'operating' && (
+              {tab === 'expenses' && (
+                <div className="space-y-4">
                 <section className="bg-white rounded-xl border p-5 space-y-4">
                   <div>
-                    <h2 className="font-semibold text-gray-900">2 EXPENSES</h2>
+                    <h2 className="font-semibold text-gray-900">2. EXPENSES</h2>
                     <h3 className="font-medium text-gray-800 mt-1">2.1 Operating Cost:</h3>
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium text-gray-700">Number of Staff =</span>
@@ -501,10 +515,7 @@ export default function RateComputationPage() {
                     </div>
                   </div>
                 </section>
-              )}
 
-              {tab === 'depreciation' && (
-                <section className="space-y-4">
                   <div className="bg-white rounded-xl border p-5">
                     <div className="flex items-center justify-between mb-3">
                       <h2 className="font-semibold text-gray-900">2.2 Depreciation Cost:</h2>
@@ -672,12 +683,61 @@ export default function RateComputationPage() {
                       </p>
                     </div>
                   </div>
-                </section>
+
+                  <div className="bg-white rounded-xl border p-5">
+                    <h2 className="font-semibold text-gray-900 mb-1">
+                      OTHER POSSIBLE ITEMS TO BE INCLUDED UNDER ITEM EXPENSE:
+                    </h2>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Optional monthly amounts. Leave blank or 0 if not applicable. These add to total expenses and the base rate.
+                    </p>
+                    <div className="space-y-3 max-w-xl">
+                      {[
+                        { key: 'expense_benefits' as const, label: '2.5 Benefits' },
+                        { key: 'expense_watershed_management' as const, label: '2.6 Watershed Management' },
+                        { key: 'expense_climate_change' as const, label: '2.7 Climate Change' },
+                        { key: 'expense_capability_building' as const, label: '2.8 Capability-Building' },
+                      ].map((item) => (
+                        <div key={item.key} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="font-medium text-gray-800 min-w-[11rem] sm:min-w-[14rem]">{item.label}</span>
+                          <span className="text-gray-500">= PhP</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="w-36 border border-gray-300 rounded px-2 py-1.5 text-right bg-gray-50"
+                            value={form[item.key]}
+                            onChange={(e) => setForm({ ...form, [item.key]: num(e.target.value) })}
+                          />
+                          <span className="text-gray-500">/month</span>
+                        </div>
+                      ))}
+                      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold pt-2 border-t border-gray-200">
+                        <span className="min-w-[11rem] sm:min-w-[14rem]">Subtotal (2.5–2.8)</span>
+                        <span className="text-gray-500 font-medium">= PhP</span>
+                        <span className="inline-flex min-w-[9rem] justify-end px-2 py-1 border border-gray-300 rounded bg-white tabular-nums">
+                          {(
+                            num(form.expense_benefits) +
+                            num(form.expense_watershed_management) +
+                            num(form.expense_climate_change) +
+                            num(form.expense_capability_building)
+                          ).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-gray-500 font-medium">/month</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
-              {tab === 'policy' && (
-                <section className="bg-white rounded-xl border p-5 space-y-4">
-                  <h2 className="font-semibold text-gray-900">Rate Policy & Classification Markups</h2>
+              {tab === 'rate' && (
+                <section className="space-y-4">
+                <div className="bg-white rounded-xl border p-5 space-y-4">
+                  <h2 className="font-semibold text-gray-900">3. WATER RATE</h2>
+                  <p className="text-xs text-gray-500">
+                    Base rate = Total Expenses ÷ Projected Monthly Volume. Classification markups and increasing blocks follow Rempark schedule rules.
+                  </p>
+                  <h3 className="font-medium text-gray-800">Rate Policy & Classification Markups</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <Field label="Minimum Volume (m³)" type="number" step="0.01" value={form.min_volume_m3}
                       onChange={(v) => setForm({ ...form, min_volume_m3: num(v, 3) })} />
@@ -701,71 +761,83 @@ export default function RateComputationPage() {
                       placeholder="e.g., Rempark full cost recovery worksheet"
                     />
                   </div>
+                </div>
+
+                {c && (
+                  <>
+                    <div className="bg-white rounded-xl border p-5">
+                      <h3 className="font-semibold text-gray-900 mb-2">Base Rate</h3>
+                      <p className="text-sm text-gray-700">
+                        Water Rate = Total Expenses ({formatPeso(c.expenses.total)}) ÷ Projected Volume ({c.demand.projected_monthly_m3} m³)
+                      </p>
+                      <p className="text-xl font-bold text-blue-800 mt-2">
+                        {formatPeso(c.base_rate)} / Cu. M.
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm mt-4">
+                        <Stat label="1.0 Cu. M." value={formatPeso(c.unit_conversions.per_cu_m)} />
+                        <Stat label="1 Drum (200 L)" value={formatPeso(c.unit_conversions.per_drum_200l)} />
+                        <Stat label="1 Container (20 L)" value={formatPeso(c.unit_conversions.per_container_20l)} />
+                        <Stat label="1 Gallon (4 L)" value={formatPeso(c.unit_conversions.per_gallon_4l)} />
+                        <Stat label="1 Liter" value={formatPeso(c.unit_conversions.per_liter)} />
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border p-5 overflow-x-auto">
+                      <h3 className="font-semibold text-gray-900 mb-3">Water Rate Schedule</h3>
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Bracket</th>
+                            <th className="px-3 py-2 text-right">Tapstand</th>
+                            <th className="px-3 py-2 text-right">Residential</th>
+                            <th className="px-3 py-2 text-right">Commercial</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          <tr className="bg-blue-50/50">
+                            <td className="px-3 py-2">Basic rate (₱/m³)</td>
+                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.tapstand.basic_rate)}</td>
+                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.residential.basic_rate)}</td>
+                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.commercial.basic_rate)}</td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2">Minimum bill ({c.rate_policy.min_volume_m3} m³)</td>
+                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.tapstand.minimum_bill)}</td>
+                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.residential.minimum_bill)}</td>
+                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.commercial.minimum_bill)}</td>
+                          </tr>
+                          {(c.classifications.residential.tiers.slice(1) as any[]).map((tier: any, i: number) => (
+                            <tr key={i}>
+                              <td className="px-3 py-2">{tier.label}</td>
+                              <td className="px-3 py-2 text-right">{formatPeso(c.classifications.tapstand.tiers[i + 1]?.rate_per_m3)}</td>
+                              <td className="px-3 py-2 text-right">{formatPeso(tier.rate_per_m3)}</td>
+                              <td className="px-3 py-2 text-right">{formatPeso(c.classifications.commercial.tiers[i + 1]?.rate_per_m3)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
                 </section>
               )}
 
               {tab === 'results' && c && (
                 <section className="space-y-4">
                   <div className="bg-white rounded-xl border p-5">
-                    <h2 className="font-semibold text-gray-900 mb-3">Expense Summary</h2>
+                    <h2 className="font-semibold text-gray-900 mb-3">Summary of Expenses</h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                       <Stat label="Operating" value={formatPeso(c.expenses.operating_cost)} />
                       <Stat label="Depreciation" value={formatPeso(c.expenses.depreciation_cost)} />
                       <Stat label="Inflation" value={formatPeso(c.expenses.inflation_cost)} />
                       <Stat label="Amortization" value={formatPeso(c.expenses.amortization_cost)} />
+                      <Stat label="Other (2.5–2.8)" value={formatPeso(c.expenses.other_total || 0)} />
                       <Stat label="Projected Volume" value={`${c.demand.projected_monthly_m3} m³`} />
                       <Stat label="Base Rate" value={`${formatPeso(c.base_rate)} / m³`} highlight />
                     </div>
                     <p className="text-lg font-bold mt-4 text-gray-900">
                       Total Expenses: {formatPeso(c.expenses.total)} / month
                     </p>
-                  </div>
-
-                  <div className="bg-white rounded-xl border p-5">
-                    <h2 className="font-semibold text-gray-900 mb-3">Unit Conversions (from base rate)</h2>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                      <Stat label="1.0 Cu. M." value={formatPeso(c.unit_conversions.per_cu_m)} />
-                      <Stat label="1 Drum (200 L)" value={formatPeso(c.unit_conversions.per_drum_200l)} />
-                      <Stat label="1 Container (20 L)" value={formatPeso(c.unit_conversions.per_container_20l)} />
-                      <Stat label="1 Gallon (4 L)" value={formatPeso(c.unit_conversions.per_gallon_4l)} />
-                      <Stat label="1 Liter" value={formatPeso(c.unit_conversions.per_liter)} />
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-xl border p-5 overflow-x-auto">
-                    <h2 className="font-semibold text-gray-900 mb-3">Water Rate Schedule</h2>
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Bracket</th>
-                          <th className="px-3 py-2 text-right">Tapstand</th>
-                          <th className="px-3 py-2 text-right">Residential</th>
-                          <th className="px-3 py-2 text-right">Commercial</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        <tr className="bg-blue-50/50">
-                          <td className="px-3 py-2">Basic rate (₱/m³)</td>
-                          <td className="px-3 py-2 text-right">{formatPeso(c.classifications.tapstand.basic_rate)}</td>
-                          <td className="px-3 py-2 text-right">{formatPeso(c.classifications.residential.basic_rate)}</td>
-                          <td className="px-3 py-2 text-right">{formatPeso(c.classifications.commercial.basic_rate)}</td>
-                        </tr>
-                        <tr>
-                          <td className="px-3 py-2">Minimum bill ({c.rate_policy.min_volume_m3} m³)</td>
-                          <td className="px-3 py-2 text-right">{formatPeso(c.classifications.tapstand.minimum_bill)}</td>
-                          <td className="px-3 py-2 text-right">{formatPeso(c.classifications.residential.minimum_bill)}</td>
-                          <td className="px-3 py-2 text-right">{formatPeso(c.classifications.commercial.minimum_bill)}</td>
-                        </tr>
-                        {(c.classifications.residential.tiers.slice(1) as any[]).map((tier: any, i: number) => (
-                          <tr key={i}>
-                            <td className="px-3 py-2">{tier.label}</td>
-                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.tapstand.tiers[i + 1]?.rate_per_m3)}</td>
-                            <td className="px-3 py-2 text-right">{formatPeso(tier.rate_per_m3)}</td>
-                            <td className="px-3 py-2 text-right">{formatPeso(c.classifications.commercial.tiers[i + 1]?.rate_per_m3)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
                   </div>
 
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">

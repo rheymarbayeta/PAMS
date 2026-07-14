@@ -338,6 +338,10 @@ export interface RateComputationInput {
   days_per_month?: number;
   inflation_rate_percent?: number;
   amortization_monthly?: number;
+  expense_benefits?: number;
+  expense_watershed_management?: number;
+  expense_climate_change?: number;
+  expense_capability_building?: number;
   min_volume_m3?: number;
   excess_block_size_m3?: number;
   escalation_percent?: number;
