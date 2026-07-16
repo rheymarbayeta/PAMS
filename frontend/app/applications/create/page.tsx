@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { WizardSteps, WizardNav } from '@/components/ui/Wizard';
-import { PageHeader, Button } from '@/components/ui/Primitives';
+import { PageHeader } from '@/components/ui/Primitives';
 import api from '@/services/api';
 import { showAlert } from '@/utils/modal';
 
@@ -103,12 +103,7 @@ export default function CreateApplicationWizardPage() {
         <div className="max-w-3xl mx-auto">
           <PageHeader
             title="New Application"
-            description="Guided wizard (Phase 2). Use the classic form if you need advanced fields."
-            actions={
-              <Button variant="secondary" onClick={() => router.push('/applications/new')}>
-                Classic form
-              </Button>
-            }
+            description="Guided application wizard"
           />
 
           <WizardSteps steps={STEPS} current={step} onStepClick={(i) => i <= step && setStep(i)} />

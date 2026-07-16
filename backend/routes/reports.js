@@ -1,12 +1,13 @@
 const express = require('express');
 const pool = require('../config/database');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requirePermission } = require('../middleware/auth');
 const { generateReport } = require('../utils/puppeteerReportGenerator');
 
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication + reports permission (Phase 8)
 router.use(authenticate);
+router.use(requirePermission('reports', 'view_reports'));
 
 // Get report data with filters
 router.get('/', async (req, res) => {

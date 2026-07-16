@@ -1,11 +1,12 @@
 const express = require('express');
 const pool = require('../config/database');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requirePermission('dashboard_view'));
 
 // Get distinct permit type names for dashboard grouping
 router.get('/permit-categories', async (req, res) => {

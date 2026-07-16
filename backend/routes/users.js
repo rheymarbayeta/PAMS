@@ -5,43 +5,80 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
+const { paginated } = require('../utils/apiResponse');
+
 const router = express.Router();
 
 // All routes require authentication and admin role
 router.use(authenticate);
 router.use(authorize('SuperAdmin', 'Admin'));
 
-// Get all users with their roles
+// Get users with roles (paginated; legacy array when page omitted)
 router.get('/', async (req, res) => {
   try {
+    const wantsPagination = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || (wantsPagination ? 50 : 500)));
+    const offset = (page - 1) * limit;
+    const search = String(req.query.search || '').trim();
+
+    let where = '';
+    const params = [];
+    if (search) {
+      where = ' WHERE u.username LIKE ? OR u.full_name LIKE ?';
+      const term = `%${search}%`;
+      params.push(term, term);
+    }
+
+    const [countRows] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM users u${where}`,
+      params
+    );
+    const total = countRows[0]?.total || 0;
+
     const [users] = await pool.execute(
       `SELECT u.user_id, u.username, u.full_name, u.role_id, r.role_name, u.created_at, u.updated_at
        FROM users u
        INNER JOIN roles r ON u.role_id = r.role_id
-       ORDER BY u.created_at DESC`
+       ${where}
+       ORDER BY u.created_at DESC
+       LIMIT ${limit} OFFSET ${offset}`,
+      params
     );
 
-    // Get all roles for each user
-    for (const user of users) {
-      const [userRoles] = await pool.execute(
-        `SELECT r.role_id, r.role_name 
-         FROM user_roles ur 
-         INNER JOIN roles r ON ur.role_id = r.role_id 
-         WHERE ur.user_id = ?`,
-        [user.user_id]
+    // Batch-load roles to avoid N+1
+    const userIds = users.map((u) => u.user_id);
+    let rolesByUser = {};
+    if (userIds.length) {
+      const placeholders = userIds.map(() => '?').join(',');
+      const [allRoles] = await pool.execute(
+        `SELECT ur.user_id, r.role_id, r.role_name
+         FROM user_roles ur
+         INNER JOIN roles r ON ur.role_id = r.role_id
+         WHERE ur.user_id IN (${placeholders})`,
+        userIds
       );
-      
+      for (const row of allRoles) {
+        if (!rolesByUser[row.user_id]) rolesByUser[row.user_id] = [];
+        rolesByUser[row.user_id].push(row);
+      }
+    }
+
+    for (const user of users) {
+      const userRoles = rolesByUser[user.user_id] || [];
       if (userRoles.length > 0) {
-        user.roles = userRoles.map(r => r.role_name);
-        user.role_ids = userRoles.map(r => r.role_id);
+        user.roles = userRoles.map((r) => r.role_name);
+        user.role_ids = userRoles.map((r) => r.role_id);
       } else {
-        // Fallback to single role
         user.roles = [user.role_name];
         user.role_ids = [user.role_id];
       }
     }
 
-    res.json(users);
+    if (!wantsPagination) {
+      return res.json(users);
+    }
+    return paginated(res, users, { page, limit, total });
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Internal server error' });

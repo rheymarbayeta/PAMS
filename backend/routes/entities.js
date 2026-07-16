@@ -1,9 +1,10 @@
 const express = require('express');
 const pool = require('../config/database');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, requirePermission } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const etracsService = require('../utils/etracsService');
+const { paginated } = require('../utils/apiResponse');
 
 const router = express.Router();
 
@@ -53,24 +54,41 @@ async function getEntityRelatedModules(entityId) {
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requirePermission('entities', 'applications', 'create_applications'));
 
-// Get all entities (with optional search)
+// Get entities (paginated; backward-compatible array when page omitted)
 router.get('/', async (req, res) => {
   try {
     const search = req.query.search || '';
-    let query = 'SELECT * FROM entities';
-    const params = [];
+    const wantsPagination = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || (wantsPagination ? 50 : 2000)));
+    const offset = (page - 1) * limit;
 
+    let where = '';
+    const params = [];
     if (search) {
-      query += ' WHERE entity_name LIKE ? OR contact_person LIKE ?';
+      where = ' WHERE entity_name LIKE ? OR contact_person LIKE ? OR phone LIKE ?';
       const searchPattern = `%${search}%`;
-      params.push(searchPattern, searchPattern);
+      params.push(searchPattern, searchPattern, searchPattern);
     }
 
-    query += ' ORDER BY entity_name';
+    const [countRows] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM entities${where}`,
+      params
+    );
+    const total = countRows[0]?.total || 0;
 
-    const [entities] = await pool.execute(query, params);
-    res.json(entities);
+    const [entities] = await pool.execute(
+      `SELECT * FROM entities${where} ORDER BY entity_name LIMIT ${limit} OFFSET ${offset}`,
+      params
+    );
+
+    if (!wantsPagination) {
+      // Legacy clients expect a bare array (capped)
+      return res.json(entities);
+    }
+    return paginated(res, entities, { page, limit, total });
   } catch (error) {
     console.error('Get entities error:', error);
     res.status(500).json({ error: 'Internal server error' });

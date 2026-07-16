@@ -5,8 +5,30 @@ const { fail } = require('../utils/apiResponse');
 const { generateId } = require('../utils/idGenerator');
 const { sendSms } = require('../utils/integrationHub');
 const { notifyRole } = require('../utils/notificationService');
+const { rateLimit } = require('../utils/rateLimit');
 
 const router = express.Router();
+
+const MAX_OTP_ATTEMPTS = 5;
+const OTP_LOCK_MINUTES = 15;
+
+const trackLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyFn: (req) => `portal-track:${req.ip || req.socket?.remoteAddress || 'unknown'}`,
+});
+
+const otpRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  keyFn: (req) => `portal-otp-req:${req.ip || req.socket?.remoteAddress || 'unknown'}`,
+});
+
+const otpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyFn: (req) => `portal-otp-ver:${req.ip || req.socket?.remoteAddress || 'unknown'}`,
+});
 
 function hashOtp(otp) {
   return crypto.createHash('sha256').update(String(otp)).digest('hex');
@@ -53,10 +75,10 @@ async function requirePortalSession(req) {
 }
 
 /**
- * Citizen / self-service portal — track + OTP + payment intake (Phase 4).
+ * Citizen / self-service portal — track + OTP + payment intake (Phase 4 / 8).
  */
 
-router.get('/track', async (req, res) => {
+router.get('/track', trackLimiter, async (req, res) => {
   try {
     const number = String(req.query.application_number || req.query.q || '').trim();
     if (!number || number.length < 4) {
@@ -64,19 +86,25 @@ router.get('/track', async (req, res) => {
     }
 
     const app = await findApplicationByNumber(number);
-    if (!app) return fail(res, 404, 'Application not found');
+    // Anti-enumeration: same message whether missing or found with unknown number shape
+    if (!app) {
+      return fail(res, 404, 'Application not found');
+    }
 
+    // Minimal public payload (Phase 8 — no contact fields)
     res.json({
       data: {
         application_number: app.application_number,
         permit_type: app.permit_type,
         status: app.status,
-        entity_name: app.entity_name,
+        entity_name: (() => {
+          const n = app.entity_name ? String(app.entity_name).trim() : '';
+          if (n.length <= 2) return n ? `${n[0]}*` : null;
+          return `${n[0]}***${n[n.length - 1]}`;
+        })(),
         submitted_at: app.created_at,
-        issued_at: app.issued_at,
-        validity_date: app.validity_date,
         public_message: publicStatusMessage(app.status),
-        payment_eligible: ['Approved', 'Paid', 'Pending Approval'].includes(app.status),
+        payment_eligible: ['Approved', 'Paid'].includes(app.status),
       },
     });
   } catch (error) {
@@ -89,7 +117,7 @@ router.get('/track', async (req, res) => {
  * POST /api/portal/otp/request
  * body: { application_number, channel?: 'sms'|'email', destination? }
  */
-router.post('/otp/request', async (req, res) => {
+router.post('/otp/request', otpRequestLimiter, async (req, res) => {
   try {
     const number = String(req.body.application_number || '').trim();
     const channel = req.body.channel === 'email' ? 'email' : 'sms';
@@ -112,8 +140,8 @@ router.post('/otp/request', async (req, res) => {
 
     await pool.execute(
       `INSERT INTO portal_otp_challenges
-        (challenge_id, application_number, channel, destination, otp_hash, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        (challenge_id, application_number, channel, destination, otp_hash, expires_at, attempt_count)
+       VALUES (?, ?, ?, ?, ?, ?, 0)`,
       [challengeId, number, channel, destination, hashOtp(otp), expires]
     );
 
@@ -148,7 +176,7 @@ router.post('/otp/request', async (req, res) => {
  * POST /api/portal/otp/verify
  * body: { challenge_id, otp }
  */
-router.post('/otp/verify', async (req, res) => {
+router.post('/otp/verify', otpVerifyLimiter, async (req, res) => {
   try {
     const { challenge_id, otp } = req.body;
     if (!challenge_id || !otp) return fail(res, 400, 'challenge_id and otp required');
@@ -161,12 +189,34 @@ router.post('/otp/verify', async (req, res) => {
     const row = rows[0];
     if (row.verified_at) return fail(res, 400, 'Already verified');
     if (new Date(row.expires_at) < new Date()) return fail(res, 400, 'OTP expired');
-    if (row.otp_hash !== hashOtp(otp)) return fail(res, 401, 'Invalid OTP');
+
+    if (row.locked_until && new Date(row.locked_until) > new Date()) {
+      return fail(res, 429, 'Too many failed attempts. Try again later.');
+    }
+
+    if (row.otp_hash !== hashOtp(otp)) {
+      const attempts = (parseInt(row.attempt_count, 10) || 0) + 1;
+      if (attempts >= MAX_OTP_ATTEMPTS) {
+        await pool.execute(
+          `UPDATE portal_otp_challenges
+           SET attempt_count = ?, locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE)
+           WHERE challenge_id = ?`,
+          [attempts, OTP_LOCK_MINUTES, challenge_id]
+        );
+        return fail(res, 429, 'Too many failed attempts. Challenge locked.');
+      }
+      await pool.execute(
+        'UPDATE portal_otp_challenges SET attempt_count = ? WHERE challenge_id = ?',
+        [attempts, challenge_id]
+      );
+      return fail(res, 401, 'Invalid OTP');
+    }
 
     const sessionToken = crypto.randomBytes(24).toString('hex');
     await pool.execute(
       `UPDATE portal_otp_challenges
-       SET verified_at = NOW(), session_token = ?, expires_at = DATE_ADD(NOW(), INTERVAL 2 HOUR)
+       SET verified_at = NOW(), session_token = ?, attempt_count = 0, locked_until = NULL,
+           expires_at = DATE_ADD(NOW(), INTERVAL 2 HOUR)
        WHERE challenge_id = ?`,
       [sessionToken, challenge_id]
     );

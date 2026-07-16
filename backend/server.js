@@ -7,7 +7,7 @@ require('dotenv').config();
 const pool = require('./config/database');
 const { setSocketIO } = require('./utils/notificationService');
 const { runMigrations } = require('./utils/migrationRunner');
-const { verifyToken, loadUserWithRoles } = require('./middleware/auth');
+const { verifyToken, loadUserWithRoles, authenticate, requirePermission } = require('./middleware/auth');
 const logger = require('./utils/logger');
 
 // Import routes
@@ -208,15 +208,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'PAMS API is running' });
 });
 
-app.get('/api/health/detailed', async (req, res) => {
-  try {
-    const detailed = await getDetailedHealth();
-    const code = detailed.status === 'error' ? 503 : 200;
-    res.status(code).json(detailed);
-  } catch (err) {
-    res.status(503).json({ status: 'error', error: err.message });
+app.get(
+  '/api/health/detailed',
+  authenticate,
+  requirePermission('settings'),
+  async (req, res) => {
+    try {
+      const detailed = await getDetailedHealth();
+      const code = detailed.status === 'error' ? 503 : 200;
+      res.status(code).json(detailed);
+    } catch (err) {
+      res.status(503).json({ status: 'error', error: err.message });
+    }
   }
-});
+);
 
 // Track online users: Map<userId, Set<socketId>>
 const onlineUsers = new Map();

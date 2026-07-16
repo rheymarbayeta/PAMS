@@ -390,6 +390,38 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 
 ---
 
+### Phase 8 — Consolidate & Secure (post–audit)
+
+**Goal:** Harden portal/RBAC, paginate hot lists, consolidate duplicate UX paths from enterprise audit.  
+**Status:** Implemented 2026-07-16 (MVP)
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P8-1 | Seed missing roles (R&R Manager, Traffic Officer, Citation Manager) + OTP lockout columns | Critical | Done |
+| P8-2 | Portal rate limits + OTP attempt lockout; minimal public track payload | Critical | Done |
+| P8-3 | Auth-gate `/api/health/detailed`; `requirePermission` on reports/dashboard | Critical | Done |
+| P8-4 | Paginate entities + users APIs (backward-compatible) | High | Done |
+| P8-5 | Redirect `/applications/new`, `/admin/reports`, `/admin/templates` | High | Done |
+| P8-6 | Citations list-only; wizard at `/citations/create` | High | Done |
+
+**Deliverables**
+
+- `utils/rateLimit.js` + portal OTP lockout migration
+- RBAC on reports, dashboard, entities list
+- Legacy page redirects; citations inline form removed
+
+**Exit criteria**
+
+- [x] Portal track/OTP rate-limited; OTP locks after 5 failures
+- [x] Detailed health requires `settings` permission
+- [x] Reports/dashboard permission-gated
+- [x] Entities/users support pagination
+- [x] Duplicate create/report paths redirect or removed
+
+**Dependencies:** Phase 7 MVP complete
+
+---
+
 ## 6. Timeline Overview
 
 | Phase | Agent-led coding effort | Realistic calendar (with review/UAT) |
@@ -402,6 +434,7 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 | Phase 5 (ops continuity) | Short slices | After Phase 4 engineering |
 | Phase 6 (money integrity) | Short slices | After Phase 5 |
 | Phase 7 (domain money extracts) | Short slices | After Phase 6 |
+| Phase 8 (consolidate & secure) | Short slices | After audit |
 | **All phases** | — | **~6–12 months** (+ deepen) |
 
 **Recommended first ship:** Phase 0 + Phase 1 (~1–2 months) for maximum risk reduction.
@@ -416,7 +449,8 @@ flowchart LR
   P5[Phase 5 Ops Continuity]
   P6[Phase 6 Money Integrity]
   P7[Phase 7 Domain Money]
-  P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7
+  P8[Phase 8 Consolidate]
+  P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8
 ```
 
 ---
@@ -513,9 +547,9 @@ flowchart LR
 
 ## 12. Next Action
 
-1. Continue deepen slices after Phase 7: rentals/lease payment writes into rentals module; thin applications mutations next.
-2. Stakeholder UAT on portal + integrations remains optional / deferred.
-3. Prefer vertical money slices over greenfield domains.
+1. **Phase 9 (Platform Shell):** `(authenticated)/layout.tsx`, Cashier workspace, move `pageGroups` to module registry.
+2. Continue service extraction: R&R payments/billing, applications assess/approve/issue.
+3. Stakeholder UAT remains optional / deferred.
 
 ---
 
