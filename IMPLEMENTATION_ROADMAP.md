@@ -251,6 +251,42 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 
 ---
 
+### Phase 4 — Harden & Deepen (ongoing after Phase 3 MVP)
+
+**Goal:** Turn Phase 1–3 MVPs into production-hardened depth without new greenfield domains.  
+**Status:** In progress 2026-07-16
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P4-1 | Extract **waterworks** into routes → services → repositories (accounts/readings pilot) | High | Done |
+| P4-2 | Finish wizard UX for citations + lease contracts | High | Done |
+| P4-3 | Attachments on citations and lease contracts (not only permits) | High | Done |
+| P4-4 | Expand OpenAPI for portal/org/attachments/health/waterworks + CI `npm test` | High | Done |
+| P4-5 | Continue domain extracts (citations, rentals, markets) | Medium | Pending |
+| P4-6 | Durable job queue (Redis/BullMQ) when scale requires | Medium | Pending |
+| P4-7 | Portal OTP auth + online payment intake | Medium | Pending |
+| P4-8 | Stakeholder UAT sign-off for portal/integrations | Medium | Pending (ops/product) |
+
+**Deliverables**
+
+- Second layered module (`backend/modules/waterworks/`)
+- Citation guided wizard (`/citations/create`) + lease wizard chrome
+- Attachments on citation and lease detail pages
+- GitHub Actions CI for backend unit tests
+- OpenAPI coverage for Phase 3+ endpoints
+
+**Exit criteria**
+
+- [x] Waterworks list endpoints use service/repository layer
+- [x] Citation and lease create flows expose wizard UX
+- [x] Attachments available on ≥3 modules (permits, citations, rentals)
+- [x] CI runs `npm test` on push/PR
+- [ ] Remaining fat domains extracted (citations/rentals/markets)
+
+**Dependencies:** Phase 3 MVP complete
+
+---
+
 ## 6. Timeline Overview
 
 | Phase | Agent-led coding effort | Realistic calendar (with review/UAT) |
@@ -259,7 +295,8 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 | Phase 1 | 3–6 weeks | 1–2 months |
 | Phase 2 | 2–4 months | 3–5 months |
 | Phase 3 | 3–6 months | 4–8 months |
-| **All phases** | — | **~6–12 months** |
+| Phase 4 (deepen) | Ongoing slices | After Phase 3 MVP |
+| **All phases** | — | **~6–12 months** (+ deepen) |
 
 **Recommended first ship:** Phase 0 + Phase 1 (~1–2 months) for maximum risk reduction.
 
@@ -269,7 +306,8 @@ flowchart LR
   P1[Phase 1 Platform]
   P2[Phase 2 Modular UX]
   P3[Phase 3 Enterprise]
-  P0 --> P1 --> P2 --> P3
+  P4[Phase 4 Harden]
+  P0 --> P1 --> P2 --> P3 --> P4
 ```
 
 ---
@@ -366,9 +404,9 @@ flowchart LR
 
 ## 12. Next Action
 
-1. Approve this roadmap.
-2. Start **Phase 0** in Agent mode on a dedicated branch.
-3. After Phase 0 exit criteria pass, begin **Phase 1** RBAC + permits pilot.
+1. Continue **Phase 4** deepen items (remaining domain extracts, durable queue, portal OTP).
+2. Run stakeholder UAT on portal + integrations; sign off exit criteria.
+3. Prefer vertical slices: extract one domain module at a time (citations → rentals → markets).
 
 ---
 

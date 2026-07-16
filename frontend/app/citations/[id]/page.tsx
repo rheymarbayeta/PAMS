@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
@@ -1288,6 +1289,12 @@ export default function CitationDetailsPage() {
               </div>
             )}
           </div>
+
+          <AttachmentsPanel
+            module="citations"
+            referenceType="citation"
+            referenceId={String(citation.citation_id)}
+          />
 
           {/* Metadata Footer */}
           <div className="bg-slate-50 rounded-lg border border-slate-200 px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">

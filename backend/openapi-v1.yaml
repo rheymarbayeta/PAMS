@@ -4,8 +4,8 @@ info:
   version: 1.0.0
   description: |
     Permit Assessment & Management System API.
-    Phase 1 introduces permission-based RBAC, paginated list envelopes,
-    async PDF jobs, and a My Work task inbox.
+    Phase 1–3 foundations plus Phase 4 deepen: RBAC, pagination,
+    jobs, portal, org units, attachments, waterworks module layering.
 servers:
   - url: /api
     description: Current API (treated as v1)
@@ -16,6 +16,11 @@ tags:
   - name: Applications
   - name: Tasks
   - name: Jobs
+  - name: Portal
+  - name: OrgUnits
+  - name: Attachments
+  - name: Health
+  - name: Waterworks
 paths:
   /auth/login:
     post:
@@ -112,6 +117,91 @@ paths:
       responses:
         '200':
           description: Job status and optional result
+  /portal/track:
+    get:
+      tags: [Portal]
+      summary: Public application status lookup
+      parameters:
+        - in: query
+          name: application_number
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Public status payload
+        '404':
+          description: Not found
+  /org-units:
+    get:
+      tags: [OrgUnits]
+      summary: List organizational units
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Org unit list
+  /attachments:
+    get:
+      tags: [Attachments]
+      summary: List attachments for a reference
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: module
+          required: true
+          schema: { type: string }
+        - in: query
+          name: reference_type
+          required: true
+          schema: { type: string }
+        - in: query
+          name: reference_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Attachment metadata list
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      responses:
+        '200':
+          description: OK
+  /health/detailed:
+    get:
+      tags: [Health]
+      summary: Deep health (DB, disk, queue, ETRACS)
+      responses:
+        '200':
+          description: Detailed checks
+        '503':
+          description: Unhealthy
+  /waterworks/accounts:
+    get:
+      tags: [Waterworks]
+      summary: List consumer accounts (paginated)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: supply_id
+          schema: { type: string }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated accounts
+  /waterworks/readings:
+    get:
+      tags: [Waterworks]
+      summary: List meter readings (paginated)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Paginated readings
 components:
   securitySchemes:
     bearerAuth:

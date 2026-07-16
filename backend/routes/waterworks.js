@@ -81,10 +81,10 @@ async function resolveAccountConsumerFields(body) {
   };
 }
 
-const ACCOUNT_SELECT = `SELECT a.*, s.supply_name, s.supply_code, e.entity_name AS linked_entity_name`;
-const ACCOUNT_FROM = `FROM ww_consumer_accounts a
-       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
-       LEFT JOIN entities e ON e.entity_id = a.entity_id`;
+const waterworksAccounts = require('../modules/waterworks/accountsService');
+
+const ACCOUNT_SELECT = waterworksAccounts.ACCOUNT_SELECT;
+const ACCOUNT_FROM = waterworksAccounts.ACCOUNT_FROM;
 
 function hasAnyRole(user, roles) {
   const userRoles = user.roles || [];
@@ -93,9 +93,7 @@ function hasAnyRole(user, roles) {
 }
 
 function parsePagination(query) {
-  const page = Math.max(1, parseInt(query.page) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 20));
-  return { page, limit, offset: (page - 1) * limit };
+  return waterworksAccounts.parsePagination(query);
 }
 
 const SUPPLY_CODE_PREFIX = 'WS';
@@ -864,47 +862,8 @@ router.get('/accounts', async (req, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    const { supply_id, status, search } = req.query;
-    const { page, limit, offset } = parsePagination(req.query);
-
-    let where = 'WHERE 1=1';
-    const params = [];
-
-    if (supply_id) {
-      where += ' AND a.supply_id = ?';
-      params.push(supply_id);
-    }
-    if (status) {
-      where += ' AND a.status = ?';
-      params.push(status);
-    }
-    if (search) {
-      where += ' AND (a.account_number LIKE ? OR a.consumer_name LIKE ? OR a.meter_number LIKE ? OR a.address LIKE ? OR e.entity_name LIKE ?)';
-      const pattern = `%${search}%`;
-      params.push(pattern, pattern, pattern, pattern, pattern);
-    }
-
-    const [countRows] = await pool.execute(
-      `SELECT COUNT(*) AS total FROM ww_consumer_accounts a
-       LEFT JOIN entities e ON e.entity_id = a.entity_id
-       ${where}`,
-      params
-    );
-    const total = countRows[0]?.total || 0;
-
-    const [rows] = await pool.execute(
-      `${ACCOUNT_SELECT}
-       ${ACCOUNT_FROM}
-       ${where}
-       ORDER BY a.account_number ASC
-       LIMIT ${offset}, ${limit}`,
-      params
-    );
-
-    res.json({
-      data: rows,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    const result = await waterworksAccounts.listAccountsForUser(req.query);
+    res.json(result);
   } catch (error) {
     console.error('Get accounts error:', error);
     res.status(500).json({ error: 'Failed to fetch accounts' });
@@ -913,14 +872,9 @@ router.get('/accounts', async (req, res) => {
 
 router.get('/accounts/:id', async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      `${ACCOUNT_SELECT}, s.rate_per_cubic_meter, s.minimum_charge
-       ${ACCOUNT_FROM}
-       WHERE a.account_id = ?`,
-      [req.params.id]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Account not found' });
-    res.json({ data: rows[0] });
+    const account = await waterworksAccounts.getAccount(req.params.id);
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    res.json({ data: account });
   } catch (error) {
     console.error('Get account error:', error);
     res.status(500).json({ error: 'Failed to fetch account' });
@@ -1280,59 +1234,8 @@ router.get('/readings', async (req, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    const { supply_id, status, period_month, period_year, account_id } = req.query;
-    const { page, limit, offset } = parsePagination(req.query);
-
-    let where = 'WHERE 1=1';
-    const params = [];
-
-    if (supply_id) {
-      where += ' AND a.supply_id = ?';
-      params.push(supply_id);
-    }
-    if (status) {
-      where += ' AND r.status = ?';
-      params.push(status);
-    }
-    if (period_month) {
-      where += ' AND r.reading_period_month = ?';
-      params.push(parseInt(period_month));
-    }
-    if (period_year) {
-      where += ' AND r.reading_period_year = ?';
-      params.push(parseInt(period_year));
-    }
-    if (account_id) {
-      where += ' AND r.account_id = ?';
-      params.push(account_id);
-    }
-
-    const [countRows] = await pool.execute(
-      `SELECT COUNT(*) AS total
-       FROM ww_meter_readings r
-       JOIN ww_consumer_accounts a ON a.account_id = r.account_id
-       ${where}`,
-      params
-    );
-    const total = countRows[0]?.total || 0;
-
-    const [rows] = await pool.execute(
-      `SELECT r.*, a.account_number, a.consumer_name, a.meter_number, a.supply_id,
-              s.supply_name, u.full_name AS recorded_by_name
-       FROM ww_meter_readings r
-       JOIN ww_consumer_accounts a ON a.account_id = r.account_id
-       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
-       LEFT JOIN users u ON u.user_id = r.recorded_by
-       ${where}
-       ORDER BY r.created_at DESC
-       LIMIT ${offset}, ${limit}`,
-      params
-    );
-
-    res.json({
-      data: rows,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    const result = await waterworksAccounts.listReadingsForUser(req.query);
+    res.json(result);
   } catch (error) {
     console.error('Get readings error:', error);
     res.status(500).json({ error: 'Failed to fetch readings' });

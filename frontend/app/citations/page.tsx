@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
@@ -518,6 +519,12 @@ export default function CitationsPage() {
             >
               Create Citation
             </button>
+            <Link
+              href="/citations/create"
+              className="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            >
+              Wizard
+            </Link>
             <button
               onClick={() => setActiveTab('list')}
               className={`px-4 py-3 font-medium text-sm transition-all duration-200 ${

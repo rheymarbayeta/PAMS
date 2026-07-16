@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import LesseePaymentDetails from '@/components/LesseePaymentDetails';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -369,6 +370,14 @@ export default function ViewLeaseContractPage() {
                 Back
               </Link>
             </div>
+          </div>
+
+          <div className="mb-6">
+            <AttachmentsPanel
+              module="rentals"
+              referenceType="lease_contract"
+              referenceId={String(contract.id)}
+            />
           </div>
 
           {/* Main Content: left contract info + right payment panel */}
