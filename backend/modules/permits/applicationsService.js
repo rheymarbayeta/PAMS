@@ -1,8 +1,12 @@
 const repo = require('./applicationsRepository');
 const { orgUnitFilterClause } = require('../../utils/orgScope');
+const { generateId, ID_PREFIXES } = require('../../utils/idGenerator');
+const { recordLedgerEntry } = require('../../utils/paymentLedger');
+const { assertPermitTransition } = require('../../utils/stateMachines');
+const { validatePaymentInput, httpError } = require('./paymentValidation');
 
 /**
- * Applications domain service (permits module — Phase 1 pilot).
+ * Applications domain service (permits module — Phase 1 pilot / Phase 6 payments).
  */
 
 function buildListFilters(user, query) {
@@ -106,7 +110,89 @@ async function listForUser(user, query = {}) {
   };
 }
 
+/**
+ * Record an application payment + ledger dual-write + Paid transition when fully paid.
+ * Shared by staff POST /applications/:id/payment and portal intent confirm.
+ */
+async function recordPayment(applicationId, body, userId) {
+  const { official_receipt_no, payment_date, address, amount } = body;
+  const { decimalAmount } = validatePaymentInput({
+    official_receipt_no,
+    payment_date,
+    amount,
+  });
+
+  const app = await repo.findById(applicationId);
+  if (!app) throw httpError(404, 'Application not found');
+
+  if (app.status !== 'Approved' && app.status !== 'Paid') {
+    throw httpError(400, 'Payment can only be recorded for approved or paid applications');
+  }
+
+  const paymentId = generateId(ID_PREFIXES.PAYMENT);
+
+  try {
+    await repo.insertPayment({
+      paymentId,
+      applicationId,
+      officialReceiptNo: official_receipt_no,
+      paymentDate: payment_date,
+      address: address || null,
+      amount: decimalAmount,
+      recordedByUserId: userId,
+    });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      throw httpError(400, 'This official receipt number has already been recorded for this application');
+    }
+    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
+      throw httpError(400, 'Foreign key constraint error. Please verify the application and user IDs.');
+    }
+    throw error;
+  }
+
+  try {
+    await recordLedgerEntry({
+      module: 'permits',
+      referenceType: 'application',
+      referenceId: applicationId,
+      entityId: app.entity_id || null,
+      amount: decimalAmount,
+      paymentDate: payment_date,
+      receiptNo: official_receipt_no,
+      recordedBy: userId,
+      sourceTable: 'payments',
+      sourceId: paymentId,
+    });
+  } catch (ledgerErr) {
+    console.error('[Payment] Ledger write failed (non-fatal):', ledgerErr.message);
+  }
+
+  let markedPaid = false;
+  const totalAmountDue = await repo.getAssessmentTotalDue(applicationId);
+  if (totalAmountDue !== null && totalAmountDue > 0) {
+    const totalPaid = await repo.getTotalPaid(applicationId);
+    if (totalPaid >= totalAmountDue) {
+      assertPermitTransition(app.status, 'Paid');
+      await repo.updateStatus(applicationId, 'Paid');
+      markedPaid = true;
+    }
+  }
+
+  return {
+    payment_id: paymentId,
+    application_id: applicationId,
+    application_number: app.application_number,
+    entity_name: app.entity_name || 'Unknown',
+    amount: decimalAmount,
+    official_receipt_no,
+    marked_paid: markedPaid,
+  };
+}
+
 module.exports = {
   listForUser,
   buildListFilters,
+  validatePaymentInput,
+  recordPayment,
 };

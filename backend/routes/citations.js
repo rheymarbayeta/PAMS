@@ -4,7 +4,6 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const etracsService = require('../utils/etracsService');
-const { recordLedgerEntry } = require('../utils/paymentLedger');
 const citationsService = require('../modules/citations/citationsService');
 
 const router = express.Router();
@@ -161,127 +160,18 @@ router.get('/:id', async (req, res) => {
 // Create new citation
 router.post('/', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager', 'Assessor'), async (req, res) => {
   try {
-    const {
-      ticketNumber,
-      driverName,
-      driverAddress,
-      driverContact,
-      licenseNumber,
-      licenseExpiry,
-      vehicleType,
-      vehicleColor,
-      plateNumber,
-      vehicleRegistration,
-      vehicleOwner,
-      ownerName,
-      ownerAddress,
-      ownerContact,
-      violations,
-      otherViolations,
-      violationLocation,
-      violationTime,
-      violationDate,
-      remarks,
-      fineAmount,
-      paymentStatus,
-      enforcerId,
-      enforcerName,
-      enforcerBadge,
-      enforcerSignature,
-      witnessName,
-      witnessSignature,
-      supervisorName,
-      supervisorSignature,
-      sealStamp,
-      isCompleted,
-    } = req.body;
-
-    const citationId = generateId(ID_PREFIXES.CITATION);
-    const finalTicketNumber = ticketNumber || generateTicketNumber();
-
-    // Auto-resolve enforcer name and badge from enforcers table if not provided
-    let resolvedEnforcerName = enforcerName || null;
-    let resolvedEnforcerBadge = enforcerBadge || null;
-    if (enforcerId && (!resolvedEnforcerName || !resolvedEnforcerBadge)) {
-      try {
-        const [enforcerRows] = await pool.execute(
-          'SELECT full_name, badge_number FROM enforcers WHERE enforcer_id = ?',
-          [enforcerId]
-        );
-        if (enforcerRows.length > 0) {
-          resolvedEnforcerName = resolvedEnforcerName || enforcerRows[0].full_name;
-          resolvedEnforcerBadge = resolvedEnforcerBadge || enforcerRows[0].badge_number;
-        }
-      } catch (e) {
-        console.warn('Could not look up enforcer details:', e.message);
-      }
-    }
-
-    const [result] = await pool.execute(
-      `INSERT INTO citations (
-        citation_id, ticket_number, driver_name, driver_address, driver_contact,
-        license_number, license_expiry, vehicle_type, vehicle_color, plate_number,
-        vehicle_registration, vehicle_owner, owner_name, owner_address, owner_contact,
-        violations, other_violations, violation_location, violation_time, violation_date,
-        remarks, fine_amount, payment_status, enforcer_id, enforcer_name, enforcer_badge,
-        enforcer_signature, witness_name, witness_signature, supervisor_name,
-        supervisor_signature, seal_stamp, is_completed, issued_by_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        citationId,
-        finalTicketNumber,
-        driverName || null,
-        driverAddress || null,
-        driverContact || null,
-        licenseNumber || null,
-        parseDate(licenseExpiry),
-        vehicleType || null,
-        vehicleColor || null,
-        plateNumber || null,
-        vehicleRegistration || null,
-        vehicleOwner || null,
-        ownerName || null,
-        ownerAddress || null,
-        ownerContact || null,
-        JSON.stringify(violations || []),
-        otherViolations || null,
-        violationLocation || null,
-        violationTime || null,
-        parseDate(violationDate),
-        remarks || null,
-        fineAmount || 0,
-        paymentStatus || 'Pending',
-        enforcerId || null,
-        resolvedEnforcerName,
-        resolvedEnforcerBadge,
-        enforcerSignature || null,
-        witnessName || null,
-        witnessSignature || null,
-        supervisorName || null,
-        supervisorSignature || null,
-        sealStamp || null,
-        isCompleted || false,
-        req.user.user_id,
-      ]
+    const created = await citationsService.create(req.body, req.user.user_id);
+    const enforcerNote = req.body.enforcerId ? ` by enforcer ${req.body.enforcerId}` : '';
+    await logAction(
+      req.user.user_id,
+      'CREATE_CITATION',
+      `Created citation ticket: ${created.ticket_number}${enforcerNote}`,
+      created.citation_id
     );
-
-    // Update enforcer metrics if enforcer_id provided
-    if (enforcerId) {
-      const fineAmountNum = parseFloat(fineAmount) || 0;
-      await pool.execute(
-        `UPDATE enforcers SET citations_issued = citations_issued + 1, total_fines = total_fines + ? WHERE enforcer_id = ?`,
-        [fineAmountNum, enforcerId]
-      );
-    }
-
-    // Log action
-    const enforcerNote = enforcerId ? ` by enforcer ${enforcerId}` : '';
-    await logAction(req.user.user_id, 'CREATE_CITATION', `Created citation ticket: ${finalTicketNumber}${enforcerNote}`, citationId);
-
     res.status(201).json({
       message: 'Citation created successfully',
-      citation_id: citationId,
-      ticket_number: finalTicketNumber,
+      citation_id: created.citation_id,
+      ticket_number: created.ticket_number,
     });
   } catch (error) {
     console.error('Create citation error:', error);
@@ -542,73 +432,25 @@ router.delete('/:id', authorize('Admin', 'SuperAdmin', 'Citation Manager'), asyn
 // Record citation payment
 router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager'), async (req, res) => {
   try {
-    const citationId = req.params.id;
-    const { amountPaid, paymentMethod, receiptNumber, notes, paymentDate } = req.body;
-
-    const [citation] = await pool.execute(
-      'SELECT * FROM citations WHERE citation_id = ?',
-      [citationId]
+    const created = await citationsService.recordPayment(
+      req.params.id,
+      req.body,
+      req.user.user_id
     );
-
-    if (citation.length === 0) {
-      return res.status(404).json({ error: 'Citation not found' });
-    }
-
-    const paymentId = generateId(ID_PREFIXES.CITATION_PAYMENT);
-
-    // Use provided paymentDate or current timestamp
-    const finalPaymentDate = paymentDate ? new Date(paymentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-
-    await pool.execute(
-      `INSERT INTO citation_payments (
-        payment_id, citation_id, amount_paid, payment_method, receipt_number, notes, payment_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [paymentId, citationId, amountPaid, paymentMethod, receiptNumber || null, notes || null, finalPaymentDate]
+    await logAction(
+      req.user.user_id,
+      'RECORD_CITATION_PAYMENT',
+      `Recorded payment for citation: ${created.citation_id}`,
+      created.citation_id
     );
-
-    try {
-      await recordLedgerEntry({
-        module: 'citations',
-        referenceType: 'citation',
-        referenceId: citationId,
-        entityId: citation[0].entity_id || null,
-        amount: amountPaid,
-        paymentDate: finalPaymentDate,
-        receiptNo: receiptNumber || null,
-        method: paymentMethod || null,
-        recordedBy: req.user.user_id,
-        sourceTable: 'citation_payments',
-        sourceId: paymentId,
-        notes: notes || null,
-      });
-    } catch (ledgerErr) {
-      console.error('[Citation Payment] Ledger write failed (non-fatal):', ledgerErr.message);
-    }
-
-    // Check if fully paid
-    const [payments] = await pool.execute(
-      'SELECT SUM(amount_paid) as total_paid FROM citation_payments WHERE citation_id = ?',
-      [citationId]
-    );
-
-    const totalPaid = payments[0].total_paid || 0;
-    const newStatus = totalPaid >= citation[0].fine_amount ? 'Paid' : 'Partially Paid';
-
-    await pool.execute(
-      'UPDATE citations SET payment_status = ?, updated_at = NOW() WHERE citation_id = ?',
-      [newStatus, citationId]
-    );
-
-    // Log action
-    await logAction(req.user.user_id, 'RECORD_CITATION_PAYMENT', `Recorded payment for citation: ${citationId}`, citationId);
-
     res.status(201).json({
       message: 'Payment recorded successfully',
-      payment_id: paymentId,
-      status: newStatus,
+      payment_id: created.payment_id,
+      status: created.status,
     });
   } catch (error) {
     console.error('Record payment error:', error);
+    if (error.status) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: 'Failed to record payment' });
   }
 });
@@ -616,74 +458,21 @@ router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 
 // Update an existing payment record (receipt number, amount, payment date)
 router.put('/:id/payment/:paymentId', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager'), async (req, res) => {
   try {
-    const { id: citationId, paymentId } = req.params;
-    const { receiptNumber, amountPaid, paymentDate } = req.body;
-
-    // Verify citation exists
-    const [citations] = await pool.execute(
-      'SELECT * FROM citations WHERE citation_id = ?',
-      [citationId]
+    const updated = await citationsService.updatePayment(
+      req.params.id,
+      req.params.paymentId,
+      req.body
     );
-    if (citations.length === 0) {
-      return res.status(404).json({ error: 'Citation not found' });
-    }
-
-    // Verify payment belongs to this citation
-    const [payments] = await pool.execute(
-      'SELECT * FROM citation_payments WHERE payment_id = ? AND citation_id = ?',
-      [paymentId, citationId]
+    await logAction(
+      req.user.user_id,
+      'UPDATE_CITATION_PAYMENT',
+      `Updated payment ${updated.payment_id} for citation: ${updated.citation_id}`,
+      updated.citation_id
     );
-    if (payments.length === 0) {
-      return res.status(404).json({ error: 'Payment record not found' });
-    }
-
-    const fields = [];
-    const values = [];
-
-    if (receiptNumber !== undefined) {
-      fields.push('receipt_number = ?');
-      values.push(receiptNumber || null);
-    }
-    if (amountPaid !== undefined) {
-      const amount = parseFloat(amountPaid);
-      if (isNaN(amount) || amount <= 0) {
-        return res.status(400).json({ error: 'Invalid amount' });
-      }
-      fields.push('amount_paid = ?');
-      values.push(amount);
-    }
-    if (paymentDate !== undefined) {
-      fields.push('payment_date = ?');
-      values.push(new Date(paymentDate).toISOString().split('T')[0]);
-    }
-
-    if (fields.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    values.push(paymentId, citationId);
-    await pool.execute(
-      `UPDATE citation_payments SET ${fields.join(', ')} WHERE payment_id = ? AND citation_id = ?`,
-      values
-    );
-
-    // Recompute citation payment_status based on current total
-    const [totals] = await pool.execute(
-      'SELECT SUM(amount_paid) as total_paid FROM citation_payments WHERE citation_id = ?',
-      [citationId]
-    );
-    const totalPaid = totals[0].total_paid || 0;
-    const newStatus = totalPaid >= citations[0].fine_amount ? 'Paid' : 'Partially Paid';
-    await pool.execute(
-      'UPDATE citations SET payment_status = ?, updated_at = NOW() WHERE citation_id = ?',
-      [newStatus, citationId]
-    );
-
-    await logAction(req.user.user_id, 'UPDATE_CITATION_PAYMENT', `Updated payment ${paymentId} for citation: ${citationId}`, citationId);
-
-    res.json({ message: 'Payment updated successfully', status: newStatus });
+    res.json({ message: 'Payment updated successfully', status: updated.status });
   } catch (error) {
     console.error('Update payment error:', error);
+    if (error.status) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: 'Failed to update payment' });
   }
 });

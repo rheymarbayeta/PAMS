@@ -44,6 +44,7 @@ const scheduledReportsRoutes = require('./routes/scheduledReports');
 const portalRoutes = require('./routes/portal');
 const integrationsRoutes = require('./routes/integrations');
 const anomaliesRoutes = require('./routes/anomalies');
+const portalPaymentsRoutes = require('./routes/portalPayments');
 const { getDetailedHealth } = require('./utils/healthCheck');
 const { startScheduler } = require('./utils/reportScheduler');
 const { recoverDurableJobs } = require('./utils/jobQueue');
@@ -180,6 +181,8 @@ app.use('/api/integrations', integrationsRoutes);
 console.log('  ✓ /api/integrations');
 app.use('/api/anomalies', anomaliesRoutes);
 console.log('  ✓ /api/anomalies');
+app.use('/api/portal-payments', portalPaymentsRoutes);
+console.log('  ✓ /api/portal-payments');
 console.log('✅ All routes registered');
 
 // API v1 aliases (same handlers — Phase 1)

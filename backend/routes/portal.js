@@ -4,6 +4,7 @@ const pool = require('../config/database');
 const { fail } = require('../utils/apiResponse');
 const { generateId } = require('../utils/idGenerator');
 const { sendSms } = require('../utils/integrationHub');
+const { notifyRole } = require('../utils/notificationService');
 
 const router = express.Router();
 
@@ -216,6 +217,13 @@ router.post('/payments/intent', async (req, res) => {
         req.body.notes || 'Citizen portal payment intent',
       ]
     );
+
+    try {
+      const msg = `Portal payment intent ₱${amount.toFixed(2)} for ${app.application_number}`;
+      await notifyRole('Admin', msg, '/admin/portal-payments');
+      await notifyRole('SuperAdmin', msg, '/admin/portal-payments');
+      await notifyRole('Approver', msg, '/admin/portal-payments');
+    } catch (_) { /* optional */ }
 
     res.status(201).json({
       intent_id: intentId,

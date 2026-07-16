@@ -57,11 +57,17 @@ export const MODULE_NAV: NavItem[] = [
     permissions: ['reports', 'view_reports', 'settings'],
     order: 46,
   },
-  { id: 'org-units', href: '/admin/org-units', label: 'Org Units', section: 'admin', permissions: ['settings', 'users', 'org_units_manage'], order: 47 },
-  { id: 'approval-chains', href: '/admin/approval-chains', label: 'Approval Chains', section: 'admin', permissions: ['settings', 'permits'], order: 48 },
-  { id: 'scheduled-reports', href: '/admin/scheduled-reports', label: 'Scheduled Reports', section: 'admin', permissions: ['reports', 'view_reports', 'settings'], order: 49 },
-  { id: 'integrations', href: '/admin/integrations', label: 'Integrations', section: 'admin', permissions: ['settings', 'integrations_manage'], order: 51 },
-  { id: 'health', href: '/admin/health', label: 'System Health', section: 'admin', permissions: ['settings'], order: 52 },
+  {
+    id: 'portal-payments',
+    href: '/admin/portal-payments',
+    label: 'Portal Payments',
+    section: 'admin',
+    permissions: ['settings', 'reports', 'view_reports', 'applications'],
+    order: 47,
+  },
+  { id: 'org-units', href: '/admin/org-units', label: 'Org Units', section: 'admin', permissions: ['settings', 'users', 'org_units_manage'], order: 48 },
+  { id: 'approval-chains', href: '/admin/approval-chains', label: 'Approval Chains', section: 'admin', permissions: ['settings', 'permits'], order: 49 },
+  { id: 'scheduled-reports', href: '/admin/scheduled-reports', label: 'Scheduled Reports', section: 'admin', permissions: ['reports', 'view_reports', 'settings'], order: 50 },
   {
     id: 'settings',
     href: '/admin/settings',
@@ -69,8 +75,10 @@ export const MODULE_NAV: NavItem[] = [
     section: 'admin',
     permissions: ['settings'],
     activePaths: ['/admin/settings'],
-    order: 50,
+    order: 51,
   },
+  { id: 'integrations', href: '/admin/integrations', label: 'Integrations', section: 'admin', permissions: ['settings', 'integrations_manage'], order: 52 },
+  { id: 'health', href: '/admin/health', label: 'System Health', section: 'admin', permissions: ['settings'], order: 53 },
 ];
 
 export function resolveNavItems(

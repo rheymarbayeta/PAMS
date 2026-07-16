@@ -4,8 +4,8 @@ info:
   version: 1.0.0
   description: |
     Permit Assessment & Management System API.
-    Phase 1–3 foundations plus Phase 4 deepen: RBAC, pagination,
-    jobs, portal, org units, attachments, waterworks module layering.
+    Phase 1–6: RBAC, pagination, jobs, portal OTP/payments,
+    org units, attachments, waterworks module layering, portal confirm dual-write.
 servers:
   - url: /api
     description: Current API (treated as v1)
@@ -17,10 +17,12 @@ tags:
   - name: Tasks
   - name: Jobs
   - name: Portal
+  - name: PortalPayments
   - name: OrgUnits
   - name: Attachments
   - name: Health
   - name: Waterworks
+  - name: Citations
 paths:
   /auth/login:
     post:
@@ -131,6 +133,134 @@ paths:
           description: Public status payload
         '404':
           description: Not found
+  /portal/otp/request:
+    post:
+      tags: [Portal]
+      summary: Request OTP for portal payment session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                application_number: { type: string }
+                channel: { type: string, enum: [sms, email] }
+                destination: { type: string }
+      responses:
+        '200':
+          description: Challenge created
+  /portal/otp/verify:
+    post:
+      tags: [Portal]
+      summary: Verify OTP and receive portal session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, otp]
+              properties:
+                challenge_id: { type: string }
+                otp: { type: string }
+      responses:
+        '200':
+          description: Session token issued
+  /portal/payments/intent:
+    post:
+      tags: [Portal]
+      summary: Submit citizen payment intent (requires X-Portal-Session)
+      parameters:
+        - in: header
+          name: X-Portal-Session
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number }
+                payer_name: { type: string }
+                payer_contact: { type: string }
+                reference_no: { type: string }
+                notes: { type: string }
+      responses:
+        '201':
+          description: Intent submitted
+  /portal/payments/intents:
+    get:
+      tags: [Portal]
+      summary: List payment intents for current portal session
+      parameters:
+        - in: header
+          name: X-Portal-Session
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Intent list
+  /portal-payments:
+    get:
+      tags: [PortalPayments]
+      summary: Staff list of portal payment intents
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Paginated intents
+  /portal-payments/{id}/confirm:
+    put:
+      tags: [PortalPayments]
+      summary: Confirm intent — records payment, ledger, optional Paid status, treasury event
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reference_no: { type: string }
+                official_receipt_no: { type: string }
+                payment_date: { type: string, format: date }
+                amount: { type: number }
+      responses:
+        '200':
+          description: Confirmed with payment_id
+        '400':
+          description: Validation or status error
+  /portal-payments/{id}/cancel:
+    put:
+      tags: [PortalPayments]
+      summary: Cancel a submitted portal payment intent
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Cancelled
   /org-units:
     get:
       tags: [OrgUnits]
@@ -202,6 +332,66 @@ paths:
       responses:
         '200':
           description: Paginated readings
+  /waterworks/bills/generate:
+    post:
+      tags: [Waterworks]
+      summary: Generate bills for verified readings in a period
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [billing_month, billing_year]
+              properties:
+                billing_month: { type: integer }
+                billing_year: { type: integer }
+                supply_id: { type: string }
+                account_ids: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Bills generated
+  /waterworks/accounts/{id}/payments:
+    post:
+      tags: [Waterworks]
+      summary: Record waterworks payment (ledger dual-write)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_paid]
+              properties:
+                amount_paid: { type: number }
+                bill_id: { type: string }
+                payment_date: { type: string, format: date }
+                or_number: { type: string }
+                payment_method: { type: string }
+                notes: { type: string }
+      responses:
+        '201':
+          description: Payment recorded
+  /citations/{id}/payment:
+    post:
+      tags: [Citations]
+      summary: Record citation payment (ledger dual-write)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '201':
+          description: Payment recorded
 components:
   securitySchemes:
     bearerAuth:

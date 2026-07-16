@@ -1,7 +1,8 @@
 const pool = require('../../config/database');
+const { generateId, ID_PREFIXES } = require('../../utils/idGenerator');
 
 /**
- * Citations data access (Phase 4 domain extract).
+ * Citations data access (Phase 4–5 domain extract).
  */
 
 function parseViolations(row) {
@@ -13,6 +14,20 @@ function parseViolations(row) {
     }
   }
   return row;
+}
+
+function parseDate(dateValue) {
+  if (!dateValue) return null;
+  if (typeof dateValue === 'string' && dateValue.includes('T')) {
+    return dateValue.split('T')[0];
+  }
+  return dateValue;
+}
+
+function generateTicketNumber() {
+  const prefix = 'DG-' + new Date().getFullYear();
+  const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+  return prefix + '-' + random;
 }
 
 async function listCitations(query = {}) {
@@ -86,4 +101,192 @@ async function listCitations(query = {}) {
   };
 }
 
-module.exports = { listCitations, parseViolations };
+async function createCitation(body, userId) {
+  const {
+    ticketNumber,
+    driverName,
+    driverAddress,
+    driverContact,
+    licenseNumber,
+    licenseExpiry,
+    vehicleType,
+    vehicleColor,
+    plateNumber,
+    vehicleRegistration,
+    vehicleOwner,
+    ownerName,
+    ownerAddress,
+    ownerContact,
+    violations,
+    otherViolations,
+    violationLocation,
+    placeViolation,
+    violationTime,
+    violationDate,
+    remarks,
+    fineAmount,
+    paymentStatus,
+    enforcerId,
+    enforcerName,
+    enforcerBadge,
+    enforcerSignature,
+    witnessName,
+    witnessSignature,
+    supervisorName,
+    supervisorSignature,
+    sealStamp,
+    isCompleted,
+  } = body;
+
+  const citationId = generateId(ID_PREFIXES.CITATION);
+  const finalTicketNumber = ticketNumber || generateTicketNumber();
+
+  let resolvedEnforcerName = enforcerName || null;
+  let resolvedEnforcerBadge = enforcerBadge || null;
+  if (enforcerId && (!resolvedEnforcerName || !resolvedEnforcerBadge)) {
+    try {
+      const [enforcerRows] = await pool.execute(
+        'SELECT full_name, badge_number FROM enforcers WHERE enforcer_id = ?',
+        [enforcerId]
+      );
+      if (enforcerRows.length > 0) {
+        resolvedEnforcerName = resolvedEnforcerName || enforcerRows[0].full_name;
+        resolvedEnforcerBadge = resolvedEnforcerBadge || enforcerRows[0].badge_number;
+      }
+    } catch (_) { /* optional */ }
+  }
+
+  const location = violationLocation || placeViolation || null;
+
+  await pool.execute(
+    `INSERT INTO citations (
+      citation_id, ticket_number, driver_name, driver_address, driver_contact,
+      license_number, license_expiry, vehicle_type, vehicle_color, plate_number,
+      vehicle_registration, vehicle_owner, owner_name, owner_address, owner_contact,
+      violations, other_violations, violation_location, violation_time, violation_date,
+      remarks, fine_amount, payment_status, enforcer_id, enforcer_name, enforcer_badge,
+      enforcer_signature, witness_name, witness_signature, supervisor_name,
+      supervisor_signature, seal_stamp, is_completed, issued_by_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      citationId,
+      finalTicketNumber,
+      driverName || null,
+      driverAddress || null,
+      driverContact || null,
+      licenseNumber || null,
+      parseDate(licenseExpiry),
+      vehicleType || null,
+      vehicleColor || null,
+      plateNumber || null,
+      vehicleRegistration || null,
+      vehicleOwner || null,
+      ownerName || null,
+      ownerAddress || null,
+      ownerContact || null,
+      JSON.stringify(violations || []),
+      otherViolations || null,
+      location,
+      violationTime || null,
+      parseDate(violationDate),
+      remarks || null,
+      fineAmount || 0,
+      paymentStatus || 'Pending',
+      enforcerId || null,
+      resolvedEnforcerName,
+      resolvedEnforcerBadge,
+      enforcerSignature || null,
+      witnessName || null,
+      witnessSignature || null,
+      supervisorName || null,
+      supervisorSignature || null,
+      sealStamp || null,
+      isCompleted || false,
+      userId,
+    ]
+  );
+
+  if (enforcerId) {
+    const fineAmountNum = parseFloat(fineAmount) || 0;
+    await pool.execute(
+      `UPDATE enforcers SET citations_issued = citations_issued + 1, total_fines = total_fines + ? WHERE enforcer_id = ?`,
+      [fineAmountNum, enforcerId]
+    );
+  }
+
+  return { citation_id: citationId, ticket_number: finalTicketNumber };
+}
+
+async function findById(citationId) {
+  const [rows] = await pool.execute('SELECT * FROM citations WHERE citation_id = ?', [citationId]);
+  return rows[0] || null;
+}
+
+async function insertPayment({
+  paymentId,
+  citationId,
+  amountPaid,
+  paymentMethod,
+  receiptNumber,
+  notes,
+  paymentDate,
+}) {
+  await pool.execute(
+    `INSERT INTO citation_payments (
+      payment_id, citation_id, amount_paid, payment_method, receipt_number, notes, payment_date
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      paymentId,
+      citationId,
+      amountPaid,
+      paymentMethod,
+      receiptNumber || null,
+      notes || null,
+      paymentDate,
+    ]
+  );
+}
+
+async function getTotalPaid(citationId) {
+  const [rows] = await pool.execute(
+    'SELECT SUM(amount_paid) AS total_paid FROM citation_payments WHERE citation_id = ?',
+    [citationId]
+  );
+  return parseFloat(rows[0]?.total_paid) || 0;
+}
+
+async function updatePaymentStatus(citationId, status) {
+  await pool.execute(
+    'UPDATE citations SET payment_status = ?, updated_at = NOW() WHERE citation_id = ?',
+    [status, citationId]
+  );
+}
+
+async function findPayment(paymentId, citationId) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM citation_payments WHERE payment_id = ? AND citation_id = ?',
+    [paymentId, citationId]
+  );
+  return rows[0] || null;
+}
+
+async function updatePaymentFields(paymentId, citationId, fields, values) {
+  await pool.execute(
+    `UPDATE citation_payments SET ${fields.join(', ')} WHERE payment_id = ? AND citation_id = ?`,
+    [...values, paymentId, citationId]
+  );
+}
+
+module.exports = {
+  listCitations,
+  parseViolations,
+  createCitation,
+  parseDate,
+  generateTicketNumber,
+  findById,
+  insertPayment,
+  getTotalPaid,
+  updatePaymentStatus,
+  findPayment,
+  updatePaymentFields,
+};

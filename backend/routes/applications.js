@@ -10,7 +10,6 @@ const { generatePermitNumber, generatePermitNumberForRenewal } = require('../uti
 const applicationsService = require('../modules/permits/applicationsService');
 const { paginated, fail } = require('../utils/apiResponse');
 const { requirePermission } = require('../middleware/auth');
-const { recordLedgerEntry } = require('../utils/paymentLedger');
 const { assertPermitTransition } = require('../utils/stateMachines');
 const { startApprovalChain, approveCurrentStep, rejectCurrentStep } = require('../utils/approvalEngine');
 
@@ -1533,162 +1532,33 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
 // Restricted to SuperAdmin, Admin, and Application Creator roles
 router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Application Creator'), async (req, res) => {
   try {
-    console.log('[Payment] Recording payment for application:', req.params.id);
-    console.log('[Payment] User:', req.user);
-    console.log('[Payment] Body:', req.body);
-    
-    const applicationId = req.params.id;
-    const { official_receipt_no, payment_date, address, amount } = req.body;
-
-    // Validate required fields
-    if (!official_receipt_no || !payment_date || !amount) {
-      console.log('[Payment] Missing required fields');
-      return res.status(400).json({ 
-        error: 'Missing required fields: official_receipt_no, payment_date, amount' 
-      });
-    }
-
-    // Validate amount is a positive number
-    const amountNum = parseFloat(amount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      console.log('[Payment] Invalid amount:', amount);
-      return res.status(400).json({ 
-        error: 'Amount must be a positive number' 
-      });
-    }
-
-    // Check if application exists
-    const [apps] = await pool.execute(
-      'SELECT * FROM applications WHERE application_id = ?',
-      [applicationId]
+    const created = await applicationsService.recordPayment(
+      req.params.id,
+      req.body,
+      req.user.user_id
     );
-
-    if (apps.length === 0) {
-      console.log('[Payment] Application not found:', applicationId);
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Check if application is approved or paid
-    if (apps[0].status !== 'Approved' && apps[0].status !== 'Paid') {
-      console.log('[Payment] Application not approved:', apps[0].status);
-      return res.status(400).json({ 
-        error: 'Payment can only be recorded for approved or paid applications' 
-      });
-    }
-
-    // Convert amount to decimal for database
-    const decimalAmount = parseFloat(amount).toFixed(2);
-
-    // Insert payment record
-    console.log('[Payment] Inserting payment record...');
-    const payment_id = generateId(ID_PREFIXES.PAYMENT);
-    console.log('[Payment] Generated payment_id:', payment_id);
-    
-    const [result] = await pool.execute(
-      `INSERT INTO payments 
-       (payment_id, application_id, official_receipt_no, payment_date, address, amount, recorded_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [payment_id, applicationId, official_receipt_no, payment_date, address || null, decimalAmount, req.user.user_id]
-    );
-
-    console.log('[Payment] Payment recorded successfully with ID:', payment_id);
 
     try {
-      await recordLedgerEntry({
-        module: 'permits',
-        referenceType: 'application',
-        referenceId: applicationId,
-        entityId: apps[0].entity_id || null,
-        amount: decimalAmount,
-        paymentDate: payment_date,
-        receiptNo: official_receipt_no,
-        recordedBy: req.user.user_id,
-        sourceTable: 'payments',
-        sourceId: payment_id,
-      });
-    } catch (ledgerErr) {
-      console.error('[Payment] Ledger write failed (non-fatal):', ledgerErr.message);
-    }
-
-    // Check total payments vs total amount due
-    const [assessmentRecord] = await pool.execute(
-      'SELECT total_amount_due FROM assessment_records WHERE application_id = ?',
-      [applicationId]
-    );
-
-    if (assessmentRecord.length > 0) {
-      const totalAmountDue = parseFloat(assessmentRecord[0].total_amount_due) || 0;
-      
-      // Get total payments
-      const [payments] = await pool.execute(
-        'SELECT SUM(amount) as total_paid FROM payments WHERE application_id = ?',
-        [applicationId]
-      );
-
-      const totalPaid = parseFloat(payments[0]?.total_paid) || 0;
-
-      console.log(`[Payment] Total amount due: ₱${totalAmountDue}, Total paid: ₱${totalPaid}`);
-
-      // If fully paid, update application status to "Paid"
-      if (totalPaid >= totalAmountDue && totalAmountDue > 0) {
-        console.log(`[Payment] Application ${applicationId} is fully paid. Updating status to "Paid"`);
-        assertPermitTransition(apps[0].status, 'Paid');
-        await pool.execute(
-          'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
-          ['Paid', applicationId]
-        );
-      }
-    }
-
-    // Log action with error handling
-    try {
-      // Get application number and entity name for payment logging
-      const [paymentAppInfo] = await pool.execute(
-        `SELECT a.application_number, e.entity_name 
-         FROM applications a 
-         LEFT JOIN entities e ON a.entity_id = e.entity_id 
-         WHERE a.application_id = ?`,
-        [applicationId]
-      );
-      const paymentAppNumber = paymentAppInfo.length > 0 ? paymentAppInfo[0].application_number : applicationId;
-      const paymentEntityName = paymentAppInfo.length > 0 ? paymentAppInfo[0].entity_name : 'Unknown';
-
       await logAction(
         req.user.user_id,
         'RECORD_PAYMENT',
-        `Recorded payment for application #${paymentAppNumber} (${paymentEntityName}): Receipt #${official_receipt_no}, Amount: ₱${decimalAmount}`,
-        applicationId
+        `Recorded payment for application #${created.application_number} (${created.entity_name}): Receipt #${created.official_receipt_no}, Amount: ₱${created.amount}`,
+        created.application_id
       );
     } catch (logError) {
       console.warn('[Payment] Warning: Could not log action:', logError);
-      // Don't fail the payment if logging fails
     }
 
-    // Return the actual generated payment_id instead of result.insertId
-    // because VARCHAR(64) PRIMARY KEY doesn't use AUTO_INCREMENT
-    res.json({ 
+    res.json({
       message: 'Payment recorded successfully',
-      payment_id: payment_id
+      payment_id: created.payment_id,
+      marked_paid: created.marked_paid,
     });
   } catch (error) {
     console.error('[Payment] Record payment error:', error);
-    console.error('[Payment] Error code:', error.code);
-    console.error('[Payment] Error message:', error.message);
-    
-    if (error.code === 'ER_DUP_ENTRY') {
-      console.log('[Payment] Duplicate entry error for receipt number');
-      return res.status(400).json({ 
-        error: 'This official receipt number has already been recorded for this application' 
-      });
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
     }
-    
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      console.log('[Payment] Foreign key constraint error - application or user not found');
-      return res.status(400).json({ 
-        error: 'Foreign key constraint error. Please verify the application and user IDs.' 
-      });
-    }
-    
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });

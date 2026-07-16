@@ -91,8 +91,60 @@ async function findById(applicationId) {
   return rows[0] || null;
 }
 
+async function insertPayment({
+  paymentId,
+  applicationId,
+  officialReceiptNo,
+  paymentDate,
+  address,
+  amount,
+  recordedByUserId,
+}) {
+  await pool.execute(
+    `INSERT INTO payments
+      (payment_id, application_id, official_receipt_no, payment_date, address, amount, recorded_by_user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      paymentId,
+      applicationId,
+      officialReceiptNo,
+      paymentDate,
+      address || null,
+      amount,
+      recordedByUserId,
+    ]
+  );
+}
+
+async function getAssessmentTotalDue(applicationId) {
+  const [rows] = await pool.execute(
+    'SELECT total_amount_due FROM assessment_records WHERE application_id = ?',
+    [applicationId]
+  );
+  return rows[0] ? parseFloat(rows[0].total_amount_due) || 0 : null;
+}
+
+async function getTotalPaid(applicationId) {
+  const [rows] = await pool.execute(
+    'SELECT SUM(amount) AS total_paid FROM payments WHERE application_id = ?',
+    [applicationId]
+  );
+  return parseFloat(rows[0]?.total_paid) || 0;
+}
+
+async function updateStatus(applicationId, status) {
+  await pool.execute(
+    'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+    [status, applicationId]
+  );
+}
+
 module.exports = {
   countApplications,
   listApplications,
   findById,
+  insertPayment,
+  getAssessmentTotalDue,
+  getTotalPaid,
+  updateStatus,
 };

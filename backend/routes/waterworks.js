@@ -4,10 +4,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const { assertReadingTransition } = require('../utils/stateMachines');
-const { recordLedgerEntry } = require('../utils/paymentLedger');
 const {
   BILLING_MODELS,
-  calculateBillAmounts,
   getRateTiersForSupply,
   getSupplyBillingConfig,
 } = require('../utils/waterworksBilling');
@@ -82,6 +80,8 @@ async function resolveAccountConsumerFields(body) {
 }
 
 const waterworksAccounts = require('../modules/waterworks/accountsService');
+const waterworksBilling = require('../modules/waterworks/billingService');
+const { getAccountOutstandingBalance } = waterworksBilling;
 
 const ACCOUNT_SELECT = waterworksAccounts.ACCOUNT_SELECT;
 const ACCOUNT_FROM = waterworksAccounts.ACCOUNT_FROM;
@@ -430,71 +430,6 @@ async function userCanAccessSupply(userId, supplyId, userRoles) {
     [supplyId, userId]
   );
   return rows.length > 0;
-}
-
-async function getBillingSurchargeSettings(connection) {
-  const [rows] = await connection.query(`
-    SELECT setting_key, setting_value
-    FROM system_settings
-    WHERE setting_key IN ('ww_billing_surcharge_enabled', 'ww_billing_surcharge_percentage')
-  `);
-
-  const map = {};
-  rows.forEach((row) => {
-    map[row.setting_key] = row.setting_value;
-  });
-
-  const enabled = map.ww_billing_surcharge_enabled !== 'false';
-  const parsedPercentage = parseFloat(map.ww_billing_surcharge_percentage);
-  const percentage = Number.isFinite(parsedPercentage)
-    ? Math.max(0, Math.min(100, parsedPercentage))
-    : 10;
-
-  return { enabled, percentage, rate: percentage / 100 };
-}
-
-async function getAccountOutstandingBalance(connection, accountId) {
-  const [accounts] = await connection.query(
-    'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
-    [accountId]
-  );
-  const openingDues = parseFloat(accounts[0]?.unpaid_dues) || 0;
-
-  const [rows] = await connection.query(`
-    SELECT b.bill_id, b.total_due, COALESCE(SUM(p.amount_paid), 0) AS total_paid
-    FROM ww_bills b
-    LEFT JOIN ww_payments p ON p.bill_id = b.bill_id
-    WHERE b.account_id = ? AND b.status IN ('unpaid', 'partial')
-    GROUP BY b.bill_id, b.total_due
-  `, [accountId]);
-
-  let billBalance = 0;
-  for (const row of rows) {
-    billBalance += parseFloat(row.total_due) - parseFloat(row.total_paid);
-  }
-
-  return Math.max(0, parseFloat((billBalance + openingDues).toFixed(2)));
-}
-
-async function updateBillStatus(connection, billId) {
-  const [bills] = await connection.query(
-    'SELECT total_due FROM ww_bills WHERE bill_id = ?',
-    [billId]
-  );
-  if (!bills.length) return;
-
-  const [payments] = await connection.query(
-    'SELECT COALESCE(SUM(amount_paid), 0) AS total FROM ww_payments WHERE bill_id = ?',
-    [billId]
-  );
-
-  const totalPaid = parseFloat(payments[0].total) || 0;
-  const totalDue = parseFloat(bills[0].total_due) || 0;
-  let status = 'unpaid';
-  if (totalPaid >= totalDue) status = 'paid';
-  else if (totalPaid > 0) status = 'partial';
-
-  await connection.query('UPDATE ww_bills SET status = ? WHERE bill_id = ?', [status, billId]);
 }
 
 // ==================== RATE TIERS ====================
@@ -1445,173 +1380,31 @@ async function createMeterReading({
 
 router.post('/bills/generate', authorize(...WW_MANAGER_ROLES), async (req, res) => {
   try {
-    const { billing_month, billing_year, supply_id, account_ids } = req.body;
-    const month = parseInt(billing_month);
-    const year = parseInt(billing_year);
-
-    if (!month || !year) {
-      return res.status(400).json({ error: 'billing_month and billing_year are required' });
-    }
-
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      const surchargeSettings = await getBillingSurchargeSettings(connection);
-
-      let accountFilter = `AND r.reading_period_month = ? AND r.reading_period_year = ? AND r.status = 'verified'`;
-      const params = [month, year];
-
-      if (supply_id) {
-        accountFilter += ' AND a.supply_id = ?';
-        params.push(supply_id);
-      }
-
-      let accountIdsClause = '';
-      if (Array.isArray(account_ids) && account_ids.length) {
-        accountIdsClause = ` AND a.account_id IN (${account_ids.map(() => '?').join(',')})`;
-        params.push(...account_ids);
-      }
-
-      const [readings] = await connection.query(
-        `SELECT r.*, a.account_id, a.supply_id, s.rate_per_cubic_meter, s.minimum_charge, s.billing_model
-         FROM ww_meter_readings r
-         JOIN ww_consumer_accounts a ON a.account_id = r.account_id
-         JOIN ww_water_supplies s ON s.supply_id = a.supply_id
-         WHERE 1=1 ${accountFilter}${accountIdsClause}
-           AND NOT EXISTS (
-             SELECT 1 FROM ww_bills b
-             WHERE b.account_id = a.account_id AND b.billing_month = ? AND b.billing_year = ?
-           )`,
-        [...params, month, year]
-      );
-
-      const generated = [];
-
-      for (const reading of readings) {
-        const previousBalance = await getAccountOutstandingBalance(connection, reading.account_id);
-        const rate = parseFloat(reading.rate_per_cubic_meter) || 0;
-        const minimumCharge = parseFloat(reading.minimum_charge) || 100.60;
-        const consumption = parseFloat(reading.consumption) || 0;
-        const tiers = await getRateTiersForSupply(connection, reading.supply_id);
-
-        const { amountDue, surchargeAmount, totalDue, tierBreakdown, effectiveRate } = calculateBillAmounts({
-          consumption,
-          rate,
-          minimumCharge,
-          previousBalance,
-          surchargeSettings,
-          tiers,
-          billingModel: reading.billing_model || 'progressive',
-        });
-
-        const billId = generateId(ID_PREFIXES.WW_BILL);
-        await connection.query(
-          `INSERT INTO ww_bills
-            (bill_id, account_id, reading_id, billing_month, billing_year,
-             previous_reading, current_reading, consumption, rate_applied,
-             amount_due, tier_breakdown, previous_balance, surcharge_amount, total_due, status, generated_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?)`,
-          [
-            billId,
-            reading.account_id,
-            reading.reading_id,
-            month,
-            year,
-            reading.previous_reading,
-            reading.current_reading,
-            consumption,
-            effectiveRate,
-            amountDue,
-            tierBreakdown.length ? JSON.stringify(tierBreakdown) : null,
-            previousBalance,
-            surchargeAmount,
-            totalDue,
-            req.user.user_id,
-          ]
-        );
-
-        generated.push({ bill_id: billId, account_id: reading.account_id, total_due: totalDue });
-
-        const [acctRows] = await connection.query(
-          'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
-          [reading.account_id]
-        );
-        if (parseFloat(acctRows[0]?.unpaid_dues) > 0) {
-          await connection.query(
-            'UPDATE ww_consumer_accounts SET unpaid_dues = 0 WHERE account_id = ?',
-            [reading.account_id]
-          );
-        }
-      }
-
-      await connection.commit();
-      await logAction(req.user.user_id, 'GENERATE_WW_BILLS', `Generated ${generated.length} bills for ${month}/${year}`, null);
-
-      res.status(201).json({
-        data: generated,
-        message: `Generated ${generated.length} bill(s)`,
-      });
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
+    const { generated, month, year } = await waterworksBilling.generateBills(
+      req.body,
+      req.user.user_id
+    );
+    await logAction(
+      req.user.user_id,
+      'GENERATE_WW_BILLS',
+      `Generated ${generated.length} bills for ${month}/${year}`,
+      null
+    );
+    res.status(201).json({
+      data: generated,
+      message: `Generated ${generated.length} bill(s)`,
+    });
   } catch (error) {
     console.error('Generate bills error:', error);
+    if (error.status) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: 'Failed to generate bills' });
   }
 });
 
 router.get('/bills', authorize(...WW_MANAGER_ROLES), async (req, res) => {
   try {
-    const { supply_id, billing_month, billing_year, status } = req.query;
-    const { page, limit, offset } = parsePagination(req.query);
-
-    let where = 'WHERE 1=1';
-    const params = [];
-
-    if (supply_id) {
-      where += ' AND a.supply_id = ?';
-      params.push(supply_id);
-    }
-    if (billing_month) {
-      where += ' AND b.billing_month = ?';
-      params.push(parseInt(billing_month));
-    }
-    if (billing_year) {
-      where += ' AND b.billing_year = ?';
-      params.push(parseInt(billing_year));
-    }
-    if (status) {
-      where += ' AND b.status = ?';
-      params.push(status);
-    }
-
-    const [countRows] = await pool.execute(
-      `SELECT COUNT(*) AS total FROM ww_bills b
-       JOIN ww_consumer_accounts a ON a.account_id = b.account_id ${where}`,
-      params
-    );
-    const total = countRows[0]?.total || 0;
-
-    const [rows] = await pool.execute(
-      `SELECT b.*, a.account_number, a.consumer_name, a.supply_id, s.supply_name,
-        COALESCE((SELECT SUM(amount_paid) FROM ww_payments p WHERE p.bill_id = b.bill_id), 0) AS total_paid
-       FROM ww_bills b
-       JOIN ww_consumer_accounts a ON a.account_id = b.account_id
-       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
-       ${where}
-       ORDER BY b.billing_year DESC, b.billing_month DESC, a.account_number ASC
-       LIMIT ${offset}, ${limit}`,
-      params
-    );
-
-    res.json({
-      data: rows,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    const result = await waterworksBilling.listBills(req.query);
+    res.json(result);
   } catch (error) {
     console.error('Get bills error:', error);
     res.status(500).json({ error: 'Failed to fetch bills' });
@@ -1681,54 +1474,8 @@ router.get('/accounts/:id/billing', async (req, res) => {
 
 router.get('/payments', authorize(...WW_MANAGER_ROLES), async (req, res) => {
   try {
-    const { supply_id, date_from, date_to, account_id } = req.query;
-    const { page, limit, offset } = parsePagination(req.query);
-
-    let where = 'WHERE 1=1';
-    const params = [];
-
-    if (supply_id) {
-      where += ' AND a.supply_id = ?';
-      params.push(supply_id);
-    }
-    if (account_id) {
-      where += ' AND p.account_id = ?';
-      params.push(account_id);
-    }
-    if (date_from) {
-      where += ' AND p.payment_date >= ?';
-      params.push(date_from);
-    }
-    if (date_to) {
-      where += ' AND p.payment_date <= ?';
-      params.push(date_to);
-    }
-
-    const [countRows] = await pool.execute(
-      `SELECT COUNT(*) AS total FROM ww_payments p
-       JOIN ww_consumer_accounts a ON a.account_id = p.account_id ${where}`,
-      params
-    );
-    const total = countRows[0]?.total || 0;
-
-    const [rows] = await pool.execute(
-      `SELECT p.*, a.account_number, a.consumer_name, s.supply_name, u.full_name AS recorded_by_name,
-              b.billing_month, b.billing_year
-       FROM ww_payments p
-       JOIN ww_consumer_accounts a ON a.account_id = p.account_id
-       JOIN ww_water_supplies s ON s.supply_id = a.supply_id
-       LEFT JOIN users u ON u.user_id = p.recorded_by
-       LEFT JOIN ww_bills b ON b.bill_id = p.bill_id
-       ${where}
-       ORDER BY p.payment_date DESC, p.created_at DESC
-       LIMIT ${offset}, ${limit}`,
-      params
-    );
-
-    res.json({
-      data: rows,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    const result = await waterworksBilling.listPayments(req.query);
+    res.json(result);
   } catch (error) {
     console.error('Get payments error:', error);
     res.status(500).json({ error: 'Failed to fetch payments' });
@@ -1737,95 +1484,24 @@ router.get('/payments', authorize(...WW_MANAGER_ROLES), async (req, res) => {
 
 router.post('/accounts/:id/payments', authorize(...WW_MANAGER_ROLES), async (req, res) => {
   try {
-    const accountId = req.params.id;
-    const { amount_paid, bill_id, payment_date, or_number, payment_method, notes } = req.body;
-
-    const amount = parseFloat(amount_paid);
-    if (Number.isNaN(amount) || amount <= 0) {
-      return res.status(400).json({ error: 'Valid amount_paid is required' });
-    }
-
-    const [accounts] = await pool.execute(
-      'SELECT account_id, entity_id FROM ww_consumer_accounts WHERE account_id = ?',
-      [accountId]
+    const created = await waterworksBilling.recordPayment(
+      req.params.id,
+      req.body,
+      req.user.user_id
     );
-    if (!accounts.length) return res.status(404).json({ error: 'Account not found' });
-
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      const paymentId = generateId(ID_PREFIXES.WW_PAYMENT);
-      const finalDate = parseDate(payment_date) || new Date().toISOString().split('T')[0];
-
-      await connection.query(
-        `INSERT INTO ww_payments
-          (payment_id, account_id, bill_id, payment_date, amount_paid, or_number, payment_method, recorded_by, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          paymentId,
-          accountId,
-          bill_id || null,
-          finalDate,
-          amount,
-          or_number || null,
-          payment_method || 'cash',
-          req.user.user_id,
-          notes || null,
-        ]
-      );
-
-      if (bill_id) {
-        await updateBillStatus(connection, bill_id);
-      } else {
-        const [acctRows] = await connection.query(
-          'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
-          [accountId]
-        );
-        const openingDues = parseFloat(acctRows[0]?.unpaid_dues) || 0;
-        if (openingDues > 0) {
-          await connection.query(
-            'UPDATE ww_consumer_accounts SET unpaid_dues = GREATEST(0, unpaid_dues - ?) WHERE account_id = ?',
-            [Math.min(amount, openingDues), accountId]
-          );
-        }
-      }
-
-      try {
-        await recordLedgerEntry({
-          module: 'waterworks',
-          referenceType: bill_id ? 'bill' : 'account',
-          referenceId: bill_id || accountId,
-          entityId: accounts[0].entity_id || null,
-          amount,
-          paymentDate: finalDate,
-          receiptNo: or_number || null,
-          method: payment_method || 'cash',
-          recordedBy: req.user.user_id,
-          sourceTable: 'ww_payments',
-          sourceId: paymentId,
-          notes: notes || null,
-          connection,
-        });
-      } catch (ledgerErr) {
-        console.error('[WW Payment] Ledger write failed (non-fatal):', ledgerErr.message);
-      }
-
-      await connection.commit();
-      await logAction(req.user.user_id, 'RECORD_WW_PAYMENT', `Recorded payment for account ${accountId}`, paymentId);
-
-      res.status(201).json({
-        data: { payment_id: paymentId },
-        message: 'Payment recorded successfully',
-      });
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
+    await logAction(
+      req.user.user_id,
+      'RECORD_WW_PAYMENT',
+      `Recorded payment for account ${created.account_id}`,
+      created.payment_id
+    );
+    res.status(201).json({
+      data: { payment_id: created.payment_id },
+      message: 'Payment recorded successfully',
+    });
   } catch (error) {
     console.error('Record payment error:', error);
+    if (error.status) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: 'Failed to record payment' });
   }
 });

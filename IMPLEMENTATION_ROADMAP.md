@@ -254,7 +254,7 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 ### Phase 4 — Harden & Deepen (ongoing after Phase 3 MVP)
 
 **Goal:** Turn Phase 1–3 MVPs into production-hardened depth without new greenfield domains.  
-**Status:** In progress 2026-07-16 (P4-1…P4-7 done; UAT pending)
+**Status:** Implemented 2026-07-16 (engineering complete; UAT deferred)
 
 | ID | Work item | Priority | Status |
 |----|-----------|----------|--------|
@@ -265,7 +265,7 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 | P4-5 | Continue domain extracts (citations, rentals, markets) | Medium | Done |
 | P4-6 | Durable job queue (Redis/BullMQ) when scale requires | Medium | Done (DB-backed; Redis-ready API) |
 | P4-7 | Portal OTP auth + online payment intake | Medium | Done (OTP + payment intent MVP) |
-| P4-8 | Stakeholder UAT sign-off for portal/integrations | Medium | Pending (ops/product) |
+| P4-8 | Stakeholder UAT sign-off for portal/integrations | Medium | Skipped (deferred) |
 
 **Deliverables**
 
@@ -285,7 +285,7 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 - [x] Attachments available on ≥3 modules (permits, citations, rentals)
 - [x] CI runs `npm test` on push/PR
 - [x] Remaining fat domains extracted (citations/rentals/markets list paths)
-- [ ] Stakeholder UAT signed for portal/integrations *(ops/product)*
+- [~] Stakeholder UAT signed for portal/integrations — **skipped / deferred by product request**
 
 **Dependencies:** Phase 3 MVP complete
 
@@ -294,6 +294,99 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 - Enable durable queue: `JOB_QUEUE_DURABLE=true` (survives API restarts; Redis/BullMQ can replace store later)
 - Portal OTP debug code returned when `PORTAL_OTP_DEBUG=true` or non-production
 - Migration: `database/migrations/add_phase4_durable_queue_portal.sql`
+
+---
+
+### Phase 5 — Operational Continuity (post–Phase 4)
+
+**Goal:** Wire MVP features into staff day-to-day ops and keep thinning fat modules.  
+**Status:** Implemented 2026-07-16 (MVP)
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P5-1 | Admin UI to review/confirm portal payment intents | High | Done |
+| P5-2 | Extract waterworks bills/payments list into module layer | High | Done |
+| P5-3 | Extract citation create into citations service | Medium | Done |
+| P5-4 | Notify staff roles when a portal payment intent is submitted | Medium | Done |
+
+**Deliverables**
+
+- `/admin/portal-payments` + `/api/portal-payments`
+- `modules/waterworks/billingRepository.js` for bills/payments lists
+- Citation create via `citationsService.create`
+- In-app notifications to Admin/Approver on portal payment intents
+
+**Exit criteria**
+
+- [x] Cashiers/admins can confirm or cancel citizen payment intents
+- [x] Waterworks bills & payments lists use module layer
+- [x] Citation create uses service/repository
+- [x] Staff notified on new portal payment intents
+
+**Dependencies:** Phase 4 engineering complete (UAT optional)
+
+---
+
+### Phase 6 — Money Integrity & Portal Confirm (post–Phase 5)
+
+**Goal:** Make cashier portal confirm a real payment (payments + ledger + Paid), not a status-only flip; keep API contracts current.  
+**Status:** Implemented 2026-07-16 (MVP)
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P6-1 | Portal confirm dual-writes `payments` + ledger and may mark application Paid | High | Done |
+| P6-2 | Shared `recordPayment` in permits applications service | High | Done |
+| P6-3 | OpenAPI + unit tests for portal payment validation / staff confirm API | High | Done |
+| P6-4 | `treasuryPush` integration event on portal confirm | Medium | Done |
+| P6-5 | Link `portal_payment_intents.payment_id` via migration | Medium | Done |
+
+**Deliverables**
+
+- `modules/permits/applicationsService.recordPayment` used by staff + portal confirm
+- Confirm requires OR#, creates payment, ledger row, optional Paid transition, treasury stub event
+- OpenAPI paths for portal OTP/payments and `/portal-payments/*`
+- Migration: `database/migrations/add_phase6_portal_payment_link.sql`
+
+**Exit criteria**
+
+- [x] Confirming a portal intent creates a `payments` row and ledger entry
+- [x] Staff and portal payment paths share one service
+- [x] OpenAPI documents portal payment staff APIs
+- [x] Confirm emits a treasury integration event (stub adapter)
+
+**Dependencies:** Phase 5 MVP complete
+
+**Notes**
+
+- Confirm only works when the application is `Approved` or `Paid` (same rule as staff payment)
+- Treasury adapter remains a logged stub until a real gateway is configured
+
+---
+
+### Phase 7 — Domain Money Extracts (post–Phase 6)
+
+**Goal:** Move remaining money write-paths out of fat routes into waterworks/citations modules.  
+**Status:** Implemented 2026-07-16 (MVP)
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P7-1 | Extract WW bill generate + account payment into billing module | High | Done |
+| P7-2 | Extract citation payment create/update into citations module | High | Done |
+| P7-3 | OpenAPI + unit tests for citation payment helpers | Medium | Done |
+
+**Deliverables**
+
+- `billingService.generateBills` / `recordPayment` (+ shared outstanding-balance helpers)
+- `citationsService.recordPayment` / `updatePayment` with ledger dual-write
+- OpenAPI paths for WW bill generate, WW payments, citation payments
+
+**Exit criteria**
+
+- [x] WW bill generate and payment POST use module layer
+- [x] Citation payment POST/PUT use module layer
+- [x] Pure validation helpers covered by unit tests
+
+**Dependencies:** Phase 6 MVP complete
 
 ---
 
@@ -306,6 +399,9 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 | Phase 2 | 2–4 months | 3–5 months |
 | Phase 3 | 3–6 months | 4–8 months |
 | Phase 4 (deepen) | Ongoing slices | After Phase 3 MVP |
+| Phase 5 (ops continuity) | Short slices | After Phase 4 engineering |
+| Phase 6 (money integrity) | Short slices | After Phase 5 |
+| Phase 7 (domain money extracts) | Short slices | After Phase 6 |
 | **All phases** | — | **~6–12 months** (+ deepen) |
 
 **Recommended first ship:** Phase 0 + Phase 1 (~1–2 months) for maximum risk reduction.
@@ -317,7 +413,10 @@ flowchart LR
   P2[Phase 2 Modular UX]
   P3[Phase 3 Enterprise]
   P4[Phase 4 Harden]
-  P0 --> P1 --> P2 --> P3 --> P4
+  P5[Phase 5 Ops Continuity]
+  P6[Phase 6 Money Integrity]
+  P7[Phase 7 Domain Money]
+  P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7
 ```
 
 ---
@@ -414,9 +513,9 @@ flowchart LR
 
 ## 12. Next Action
 
-1. Continue **Phase 4** deepen items (remaining domain extracts, durable queue, portal OTP).
-2. Run stakeholder UAT on portal + integrations; sign off exit criteria.
-3. Prefer vertical slices: extract one domain module at a time (citations → rentals → markets).
+1. Continue deepen slices after Phase 7: rentals/lease payment writes into rentals module; thin applications mutations next.
+2. Stakeholder UAT on portal + integrations remains optional / deferred.
+3. Prefer vertical money slices over greenfield domains.
 
 ---
 
