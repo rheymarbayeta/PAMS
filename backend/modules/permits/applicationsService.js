@@ -69,10 +69,16 @@ function buildListFilters(user, query) {
 
 async function listForUser(user, query = {}) {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 20));
+  const limit = Math.min(5000, Math.max(1, parseInt(query.limit, 10) || 20));
   const offset = (page - 1) * limit;
 
-  const { whereClause, params } = buildListFilters(user, query);
+  // Accept legacy query aliases used by older frontend pages
+  const normalizedQuery = {
+    ...query,
+    permit_type: query.permit_type || query.permitType || query.permitCategory,
+  };
+
+  const { whereClause, params } = buildListFilters(user, normalizedQuery);
   const total = await repo.countApplications({ whereClause, params });
   const data = await repo.listApplications({ whereClause, params, limit, offset });
 

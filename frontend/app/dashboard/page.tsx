@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
+import { unwrapApplicationsList } from '@/utils/applicationsApi';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
@@ -211,8 +212,8 @@ export default function DashboardPage() {
 
   const fetchAllPermittedDates = async () => {
     try {
-      const response = await api.get('/api/applications?limit=1000');
-      const allApps = response.data;
+      const response = await api.get('/api/applications', { params: { limit: 5000 } });
+      const allApps = unwrapApplicationsList(response.data);
       const dateMap = new Map<string, {type: string; app: any}[]>();
 
       const addToMap = (dateKey: string, type: string, app: any) => {

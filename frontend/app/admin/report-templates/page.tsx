@@ -6,6 +6,7 @@ import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showConfirm } from '@/utils/modal';
+import { unwrapApplicationsList } from '@/utils/applicationsApi';
 import AceEditor from 'react-ace';
 import 'ace-builds/src-noconflict/mode-html';
 import 'ace-builds/src-noconflict/theme-github';
@@ -97,10 +98,11 @@ export default function ReportTemplatesPage() {
 
   async function loadApplications() {
     try {
-      const response = await api.get('/api/applications?limit=50');
-      setApplications(response.data.applications || []);
-      if (response.data.applications?.length > 0) {
-        setSelectedAppId(response.data.applications[0].application_id);
+      const response = await api.get('/api/applications', { params: { limit: 50 } });
+      const apps = unwrapApplicationsList(response.data);
+      setApplications(apps);
+      if (apps.length > 0) {
+        setSelectedAppId(apps[0].application_id);
       }
     } catch (err) {
       console.error('Failed to load applications:', err);

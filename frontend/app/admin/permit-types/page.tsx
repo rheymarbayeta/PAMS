@@ -6,6 +6,7 @@ import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
+import { unwrapApplicationsList } from '@/utils/applicationsApi';
 
 interface PermitType {
   permit_type_id: number;
@@ -104,8 +105,10 @@ export default function PermitTypesPage() {
   const fetchApplicationsByPermitType = async (permitTypeName: string) => {
     try {
       setApplicationsLoading(true);
-      const response = await api.get(`/api/applications?permitType=${encodeURIComponent(permitTypeName)}`);
-      setApplications(response.data);
+      const response = await api.get('/api/applications', {
+        params: { permit_type: permitTypeName, limit: 500 },
+      });
+      setApplications(unwrapApplicationsList(response.data));
     } catch (error) {
       console.error('Error fetching applications:', error);
       setApplications([]);

@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { unwrapApplicationsList } from '@/utils/applicationsApi';
 
 interface Application {
   application_id: number;
@@ -144,9 +145,13 @@ export default function ReportsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const params = selectedCategory ? `?permitCategory=${encodeURIComponent(selectedCategory)}` : '';
-      const response = await api.get(`/api/applications${params}`);
-      const apps = response.data;
+      const response = await api.get('/api/applications', {
+        params: {
+          limit: 5000,
+          ...(selectedCategory ? { permit_type: selectedCategory } : {}),
+        },
+      });
+      const apps = unwrapApplicationsList(response.data);
       setApplications(apps);
 
       // Fetch financial summary
