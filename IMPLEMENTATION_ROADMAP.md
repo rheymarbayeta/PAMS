@@ -254,7 +254,7 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 ### Phase 4 — Harden & Deepen (ongoing after Phase 3 MVP)
 
 **Goal:** Turn Phase 1–3 MVPs into production-hardened depth without new greenfield domains.  
-**Status:** In progress 2026-07-16
+**Status:** In progress 2026-07-16 (P4-1…P4-7 done; UAT pending)
 
 | ID | Work item | Priority | Status |
 |----|-----------|----------|--------|
@@ -262,9 +262,9 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 | P4-2 | Finish wizard UX for citations + lease contracts | High | Done |
 | P4-3 | Attachments on citations and lease contracts (not only permits) | High | Done |
 | P4-4 | Expand OpenAPI for portal/org/attachments/health/waterworks + CI `npm test` | High | Done |
-| P4-5 | Continue domain extracts (citations, rentals, markets) | Medium | Pending |
-| P4-6 | Durable job queue (Redis/BullMQ) when scale requires | Medium | Pending |
-| P4-7 | Portal OTP auth + online payment intake | Medium | Pending |
+| P4-5 | Continue domain extracts (citations, rentals, markets) | Medium | Done |
+| P4-6 | Durable job queue (Redis/BullMQ) when scale requires | Medium | Done (DB-backed; Redis-ready API) |
+| P4-7 | Portal OTP auth + online payment intake | Medium | Done (OTP + payment intent MVP) |
 | P4-8 | Stakeholder UAT sign-off for portal/integrations | Medium | Pending (ops/product) |
 
 **Deliverables**
@@ -274,6 +274,9 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 - Attachments on citation and lease detail pages
 - GitHub Actions CI for backend unit tests
 - OpenAPI coverage for Phase 3+ endpoints
+- Domain extracts: `modules/citations`, `modules/rentals`, `modules/markets`
+- Durable jobs via `JOB_QUEUE_DURABLE=true` + `job_queue` table
+- Portal OTP + payment intents (`/api/portal/otp/*`, `/api/portal/payments/intent`)
 
 **Exit criteria**
 
@@ -281,9 +284,16 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 - [x] Citation and lease create flows expose wizard UX
 - [x] Attachments available on ≥3 modules (permits, citations, rentals)
 - [x] CI runs `npm test` on push/PR
-- [ ] Remaining fat domains extracted (citations/rentals/markets)
+- [x] Remaining fat domains extracted (citations/rentals/markets list paths)
+- [ ] Stakeholder UAT signed for portal/integrations *(ops/product)*
 
 **Dependencies:** Phase 3 MVP complete
+
+**Notes**
+
+- Enable durable queue: `JOB_QUEUE_DURABLE=true` (survives API restarts; Redis/BullMQ can replace store later)
+- Portal OTP debug code returned when `PORTAL_OTP_DEBUG=true` or non-production
+- Migration: `database/migrations/add_phase4_durable_queue_portal.sql`
 
 ---
 

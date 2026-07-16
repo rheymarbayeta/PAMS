@@ -46,6 +46,7 @@ const integrationsRoutes = require('./routes/integrations');
 const anomaliesRoutes = require('./routes/anomalies');
 const { getDetailedHealth } = require('./utils/healthCheck');
 const { startScheduler } = require('./utils/reportScheduler');
+const { recoverDurableJobs } = require('./utils/jobQueue');
 const path = require('path');
 const fs = require('fs');
 
@@ -327,6 +328,7 @@ async function startServer() {
       if (process.env.DISABLE_SCHEDULER !== 'true') {
         startScheduler(Number(process.env.SCHEDULER_INTERVAL_MS) || 5 * 60 * 1000);
       }
+      recoverDurableJobs().catch(() => {});
     });
   } catch (error) {
     logger.error('Failed to start server', error);

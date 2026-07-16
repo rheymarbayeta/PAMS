@@ -15,7 +15,10 @@ interface TrackResult {
   issued_at: string | null;
   validity_date: string | null;
   public_message: string;
+  payment_eligible?: boolean;
 }
+
+const apiBase = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function PortalTrackPage() {
   const { t } = useI18n();
@@ -23,6 +26,15 @@ export default function PortalTrackPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<TrackResult | null>(null);
+
+  const [destination, setDestination] = useState('');
+  const [challengeId, setChallengeId] = useState('');
+  const [otp, setOtp] = useState('');
+  const [debugOtp, setDebugOtp] = useState('');
+  const [sessionToken, setSessionToken] = useState('');
+  const [amount, setAmount] = useState('');
+  const [payerName, setPayerName] = useState('');
+  const [intentMsg, setIntentMsg] = useState('');
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,11 +44,13 @@ export default function PortalTrackPage() {
     setLoading(true);
     setError('');
     setResult(null);
+    setSessionToken('');
+    setChallengeId('');
+    setIntentMsg('');
 
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const res = await fetch(
-        `${base}/api/portal/track?application_number=${encodeURIComponent(number)}`
+        `${apiBase()}/api/portal/track?application_number=${encodeURIComponent(number)}`
       );
       const json = await res.json();
       if (!res.ok) {
@@ -48,6 +62,77 @@ export default function PortalTrackPage() {
       setError('Unable to reach the server. Please try again later.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const requestOtp = async () => {
+    setError('');
+    setIntentMsg('');
+    try {
+      const res = await fetch(`${apiBase()}/api/portal/otp/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          application_number: applicationNumber.trim(),
+          channel: 'sms',
+          destination: destination || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'OTP request failed');
+        return;
+      }
+      setChallengeId(json.challenge_id);
+      setDebugOtp(json.debug_otp || '');
+      setIntentMsg(json.message || 'OTP sent');
+    } catch {
+      setError('OTP request failed');
+    }
+  };
+
+  const verifyOtp = async () => {
+    setError('');
+    try {
+      const res = await fetch(`${apiBase()}/api/portal/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: challengeId, otp }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'OTP verify failed');
+        return;
+      }
+      setSessionToken(json.session_token);
+      setIntentMsg('Verified. You can submit a payment intent.');
+    } catch {
+      setError('OTP verify failed');
+    }
+  };
+
+  const submitIntent = async () => {
+    setError('');
+    try {
+      const res = await fetch(`${apiBase()}/api/portal/payments/intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Portal-Session': sessionToken,
+        },
+        body: JSON.stringify({
+          amount: parseFloat(amount),
+          payer_name: payerName || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'Payment intent failed');
+        return;
+      }
+      setIntentMsg(`${json.message} (ref: ${json.intent_id})`);
+    } catch {
+      setError('Payment intent failed');
     }
   };
 
@@ -70,7 +155,9 @@ export default function PortalTrackPage() {
 
       <main className="flex-1 max-w-lg mx-auto w-full px-4 py-10">
         <h1 className="text-xl font-bold text-slate-800 mb-1">{t('portal_track')}</h1>
-        <p className="text-sm text-slate-500 mb-6">Enter your application number to view its current status.</p>
+        <p className="text-sm text-slate-500 mb-6">
+          Enter your application number to view status, verify via OTP, and submit a payment intent.
+        </p>
 
         <form onSubmit={handleSearch} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
           <div>
@@ -126,22 +213,89 @@ export default function PortalTrackPage() {
                   {result.submitted_at ? new Date(result.submitted_at).toLocaleDateString() : '—'}
                 </dd>
               </div>
-              {result.issued_at && (
-                <div>
-                  <dt className="text-slate-500">Issued</dt>
-                  <dd className="text-slate-800">{new Date(result.issued_at).toLocaleDateString()}</dd>
-                </div>
-              )}
-              {result.validity_date && (
-                <div>
-                  <dt className="text-slate-500">Valid Until</dt>
-                  <dd className="text-slate-800">{new Date(result.validity_date).toLocaleDateString()}</dd>
-                </div>
-              )}
             </dl>
             <p className="text-sm text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
               {result.public_message}
             </p>
+
+            {result.payment_eligible && (
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <h3 className="text-sm font-semibold text-slate-800">Verify & payment intent</h3>
+                {!sessionToken && (
+                  <>
+                    <input
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      placeholder="Mobile number (optional if on file)"
+                      value={destination}
+                      onChange={(e) => setDestination(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={requestOtp}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 hover:bg-slate-50"
+                    >
+                      Request OTP
+                    </button>
+                    {challengeId && (
+                      <>
+                        {debugOtp && (
+                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                            Debug OTP: {debugOtp}
+                          </p>
+                        )}
+                        <input
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                          placeholder="Enter 6-digit OTP"
+                          value={otp}
+                          onChange={(e) => setOtp(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={verifyOtp}
+                          className="w-full px-3 py-2 text-sm rounded-lg text-white"
+                          style={{ backgroundColor: 'var(--primary, #0f766e)' }}
+                        >
+                          Verify OTP
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+                {sessionToken && (
+                  <>
+                    <input
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      placeholder="Payer name"
+                      value={payerName}
+                      onChange={(e) => setPayerName(e.target.value)}
+                    />
+                    <input
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      placeholder="Amount (₱)"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={submitIntent}
+                      className="w-full px-3 py-2 text-sm rounded-lg text-white"
+                      style={{ backgroundColor: 'var(--primary, #0f766e)' }}
+                    >
+                      Submit payment intent
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {intentMsg && (
+          <div className="mt-4 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm">
+            {intentMsg}
           </div>
         )}
 

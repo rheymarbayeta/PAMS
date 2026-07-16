@@ -5,6 +5,7 @@ const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const etracsService = require('../utils/etracsService');
 const { recordLedgerEntry } = require('../utils/paymentLedger');
+const citationsService = require('../modules/citations/citationsService');
 
 const router = express.Router();
 
@@ -32,90 +33,8 @@ function generateTicketNumber() {
 // Get all citations (with filters)
 router.get('/', async (req, res) => {
   try {
-    const { status, dateFrom, dateTo, plateNumber, driverName, enforcerId, page = 1, limit = 10 } = req.query;
-
-    // Parse pagination
-    const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(10000, Math.max(1, parseInt(limit) || 10));
-    const offset = (pageNum - 1) * limitNum;
-
-    // Build base query
-    let whereSQL = '';
-    const params = [];
-
-    if (status && status !== 'all') {
-      whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.payment_status = ?';
-      params.push(status);
-    }
-    if (plateNumber && plateNumber.trim()) {
-      whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.plate_number LIKE ?';
-      params.push(`%${plateNumber.trim()}%`);
-    }
-    if (driverName && driverName.trim()) {
-      whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.driver_name LIKE ?';
-      params.push(`%${driverName.trim()}%`);
-    }
-    if (dateFrom) {
-      whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.violation_date >= ?';
-      params.push(dateFrom);
-    }
-    if (dateTo) {
-      whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.violation_date <= ?';
-      params.push(dateTo);
-    }
-    if (enforcerId) {
-      whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.enforcer_id = ?';
-      params.push(enforcerId);
-    }
-
-    // Count total
-    const countSQL = `SELECT COUNT(*) as total FROM citations c${whereSQL}`;
-    const [countRows] = await pool.execute(countSQL, params);
-    const total = countRows[0]?.total || 0;
-
-    // Select with pagination - use LIMIT and OFFSET as values not placeholders
-    const selectSQL = `
-      SELECT c.citation_id, c.ticket_number, c.driver_name, c.plate_number,
-             c.violation_date, c.fine_amount, c.is_completed,
-             c.violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name,
-             COALESCE(c.enforcer_name, e.full_name) as enforcer_name,
-             c.driver_address, c.violation_location, c.violation_time,
-             COALESCE(cp.total_paid, 0) as total_paid,
-             CASE
-               WHEN COALESCE(cp.total_paid, 0) <= 0 THEN
-                 CASE WHEN c.payment_status = 'Paid' THEN 'Pending' ELSE c.payment_status END
-               WHEN COALESCE(cp.total_paid, 0) >= c.fine_amount THEN 'Paid'
-               ELSE 'Partially Paid'
-             END as payment_status,
-             cr.receipt_number
-      FROM citations c
-      LEFT JOIN users u ON c.issued_by_user_id = u.user_id
-      LEFT JOIN enforcers e ON c.enforcer_id = e.enforcer_id
-      LEFT JOIN (SELECT citation_id, SUM(amount_paid) as total_paid FROM citation_payments GROUP BY citation_id) cp ON cp.citation_id = c.citation_id
-      LEFT JOIN (SELECT citation_id, MAX(receipt_number) as receipt_number FROM citation_payments GROUP BY citation_id) cr ON cr.citation_id = c.citation_id${whereSQL}
-      ORDER BY c.created_at DESC
-      LIMIT ${limitNum} OFFSET ${offset}
-    `;
-
-    const [rows] = await pool.execute(selectSQL, params);
-
-    // Parse violations JSON for each citation
-    const parsedRows = rows.map(row => {
-      if (row.violations && typeof row.violations === 'string') {
-        try {
-          row.violations = JSON.parse(row.violations);
-        } catch (e) {
-          console.warn('Could not parse violations:', e);
-          row.violations = [];
-        }
-      }
-      return row;
-    });
-
-    return res.json({
-      data: parsedRows || [],
-      pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
-    });
+    const result = await citationsService.listForUser(req.query);
+    return res.json(result);
   } catch (error) {
     console.error('Get citations error:', error);
     return res.status(500).json({ error: 'Failed to fetch citations' });

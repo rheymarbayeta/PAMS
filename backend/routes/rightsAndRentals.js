@@ -11,6 +11,7 @@ const {
   normalizeLegacyAccountInput,
 } = require('../utils/leaseContractBalances');
 const { recordLedgerEntry } = require('../utils/paymentLedger');
+const rentalsService = require('../modules/rentals/rentalsService');
 
 const router = express.Router();
 
@@ -622,57 +623,8 @@ router.delete('/units/:id', async (req, res) => {
 // Get all lease contracts
 router.get('/lease-contracts', async (req, res) => {
   try {
-    const connection = await pool.getConnection();
-    try {
-      const [contracts] = await connection.query(`
-        SELECT 
-          lc.id,
-          lc.lessee_id,
-          l.name as lessee_name,
-          l.contact_number,
-          lc.property_id,
-          p.property_name,
-          p.property_code,
-          lc.contract_effective_date,
-          lc.contract_termination_date,
-          lc.principal_amount,
-          lc.monthly_rights_amount,
-          lc.monthly_rental_amount,
-          lc.downpayment,
-          lc.status,
-          lc.created_at
-        FROM lease_contracts lc
-        JOIN lessees l ON lc.lessee_id = l.id
-        JOIN properties p ON lc.property_id = p.id
-        ORDER BY lc.contract_effective_date DESC
-      `);
-
-      // Fetch units for each contract
-      const contractsWithUnits = await Promise.all(
-        contracts.map(async (contract) => {
-          const [units] = await connection.query(`
-            SELECT 
-              pu.id,
-              pu.stall_number,
-              pu.floor_level,
-              pu.unit_description,
-              pu.area_sqm,
-              pu.status
-            FROM lease_contract_units lcu
-            JOIN property_units pu ON lcu.property_unit_id = pu.id
-            WHERE lcu.lease_contract_id = ?
-          `, [contract.id]);
-          return {
-            ...contract,
-            property_units: units
-          };
-        })
-      );
-
-      res.json(contractsWithUnits);
-    } finally {
-      connection.release();
-    }
+    const contractsWithUnits = await rentalsService.listLeaseContracts();
+    res.json(contractsWithUnits);
   } catch (error) {
     console.error('Get lease contracts error:', error);
     res.status(500).json({ error: 'Internal server error' });

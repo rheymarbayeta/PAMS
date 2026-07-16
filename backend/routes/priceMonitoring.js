@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId } = require('../utils/idGenerator');
+const marketsService = require('../modules/markets/marketsService');
 
 const router = express.Router();
 router.use(authenticate);
@@ -352,9 +353,7 @@ router.delete('/commodities/:id', authorize('SuperAdmin', 'Admin'), async (req, 
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/markets', async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      'SELECT * FROM pm_markets ORDER BY market_name'
-    );
+    const rows = await marketsService.listMarkets();
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -412,23 +411,7 @@ router.delete('/markets/:id', authorize('SuperAdmin', 'Admin'), async (req, res)
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/records', async (req, res) => {
   try {
-    const { commodity_id, market_id, date_from, date_to, limit = 100 } = req.query;
-    let sql = `SELECT pr.*, com.commodity_name, com.unit, cat.category_name,
-                 mkt.market_name, u.full_name as recorder_name
-               FROM pm_price_records pr
-               JOIN pm_commodities com ON com.commodity_id = pr.commodity_id
-               JOIN pm_commodity_categories cat ON cat.category_id = com.category_id
-               JOIN pm_markets mkt ON mkt.market_id = pr.market_id
-               LEFT JOIN users u ON u.user_id = pr.recorder_id`;
-    const params = [];
-    const where = [];
-    if (commodity_id) { where.push('pr.commodity_id = ?'); params.push(commodity_id); }
-    if (market_id) { where.push('pr.market_id = ?'); params.push(market_id); }
-    if (date_from) { where.push('pr.recorded_date >= ?'); params.push(date_from); }
-    if (date_to) { where.push('pr.recorded_date <= ?'); params.push(date_to); }
-    if (where.length) sql += ' WHERE ' + where.join(' AND ');
-    sql += ` ORDER BY pr.recorded_date DESC, pr.created_at DESC LIMIT ${parseInt(limit)}`;
-    const [rows] = await pool.execute(sql, params);
+    const rows = await marketsService.listRecords(req.query);
     res.json(rows);
   } catch (err) {
     console.error(err);

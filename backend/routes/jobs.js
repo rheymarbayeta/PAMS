@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const { createJob, getJob } = require('../utils/jobQueue');
+const { createJob, getJob, getJobAsync } = require('../utils/jobQueue');
 const { requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
@@ -41,7 +41,7 @@ router.post('/', requirePermission('applications', 'view_reports', 'reports'), a
  * GET /api/jobs/:id — poll job status / result
  */
 router.get('/:id', requirePermission('applications', 'view_reports', 'reports'), async (req, res) => {
-  const job = getJob(req.params.id);
+  const job = (await getJobAsync(req.params.id)) || getJob(req.params.id);
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
   }
