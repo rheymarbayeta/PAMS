@@ -3,6 +3,40 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * One-time legacy migrations that must not re-run once the schema is already
+ * on hash-based VARCHAR primary keys (partial apply leaves the DB past the
+ * intermediate columns these scripts expect).
+ */
+const LEGACY_HASH_ID_MIGRATIONS = new Set([
+  'convert_ids_to_hash.sql',
+  'migrate_current_data_to_hash.sql',
+]);
+
+/**
+ * Returns true when users.user_id is already a VARCHAR hash ID.
+ */
+async function schemaAlreadyUsesHashIds(connection) {
+  const [cols] = await connection.query(
+    `SELECT DATA_TYPE AS data_type
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME IN ('users', 'Users')
+       AND COLUMN_NAME = 'user_id'
+     LIMIT 1`
+  );
+  if (!cols.length) return false;
+  return String(cols[0].data_type || '').toLowerCase().includes('varchar');
+}
+
+function markMigrationComplete(connection, file) {
+  const migrationId = file.replace(/[^a-zA-Z0-9]/g, '-');
+  return connection.execute(
+    'INSERT INTO migrations (migration_id, migration_file) VALUES (?, ?)',
+    [migrationId, file]
+  );
+}
+
+/**
  * Run pending migrations
  * Migrations are stored in database/migrations/*.sql files
  * Each run migration is tracked in a migrations table
@@ -32,6 +66,8 @@ async function runMigrations() {
       return;
     }
 
+    const hashIdsAlreadyApplied = await schemaAlreadyUsesHashIds(connection);
+
     const migrationFiles = fs.readdirSync(migrationsDir)
       .filter(file => file.endsWith('.sql'))
       .sort();
@@ -44,17 +80,22 @@ async function runMigrations() {
 
       if (existing.length === 0) {
         console.log(`\n📦 Running migration: ${file}`);
+
+        // Skip obsolete hash-conversion script when IDs are already VARCHAR
+        if (LEGACY_HASH_ID_MIGRATIONS.has(file) && hashIdsAlreadyApplied) {
+          console.log(`   ℹ️  Schema already uses hash IDs — marking ${file} complete without re-running`);
+          await markMigrationComplete(connection, file);
+          console.log(`✅ Migration marked complete (skipped): ${file}`);
+          continue;
+        }
+
         const filePath = path.join(migrationsDir, file);
         const sql = fs.readFileSync(filePath, 'utf8');
 
         // Skip migrations with stored procedures - they require special handling
         if (sql.includes('CREATE PROCEDURE') || sql.includes('DELIMITER')) {
           console.log(`   ℹ️  Skipping migration file - contains stored procedures not yet supported`);
-          const migrationId = file.replace(/[^a-zA-Z0-9]/g, '-');
-          await connection.execute(
-            'INSERT INTO migrations (migration_id, migration_file) VALUES (?, ?)',
-            [migrationId, file]
-          );
+          await markMigrationComplete(connection, file);
           console.log(`✅ Migration marked complete (skipped): ${file}`);
           continue;
         }
@@ -102,13 +143,7 @@ async function runMigrations() {
             // execute() uses prepared statements which don't support these MySQL session-level commands
             await connection.query(statement);
           } catch (error) {
-            // Allow safe errors that indicate the operation is already complete or not needed:
-            // - "already exists" - column/table/index already exists
-            // - "Duplicate" - duplicate key/constraint
-            // - "ER_DUP_" - duplicate errors
-            // - "ER_CANT_DROP_FIELD_OR_KEY" - index/constraint doesn't exist (idempotent)
-            // - "check that column/key exists" - trying to drop non-existent index
-            // - Foreign key constraint errors - may be due to complex schema state
+            // Allow safe errors that indicate the operation is already complete or not needed
             const errorMsg = error.message || '';
             const errorCode = error.code || '';
             
@@ -119,9 +154,15 @@ async function runMigrations() {
                 errorMsg.includes('check that column/key exists') ||
                 errorMsg.includes('Referencing column') ||
                 errorMsg.includes('incompatible') ||
+                errorMsg.includes('Unknown column') ||
+                // MySQL often lacks MariaDB-style IF EXISTS / IF NOT EXISTS in DDL
+                (errorCode === 'ER_PARSE_ERROR' && /IF\s+(NOT\s+)?EXISTS/i.test(`${errorMsg} ${error.sql || ''}`)) ||
                 errorCode === 'ER_CANT_DROP_FIELD_OR_KEY' ||
                 errorCode === 'ER_CANT_DROP_COLUMN' ||
-                errorCode === 'ER_FK_INCOMPATIBLE_COLUMNS') {
+                errorCode === 'ER_FK_INCOMPATIBLE_COLUMNS' ||
+                errorCode === 'ER_BAD_FIELD_ERROR' ||
+                // Legacy INT→hash scripts against already-converted VARCHAR IDs
+                errorCode === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD') {
               console.log(`   ⚠️  ${error.message}`);
               continue;
             }
@@ -129,11 +170,7 @@ async function runMigrations() {
           }
         }
 
-        const migrationId = file.replace(/[^a-zA-Z0-9]/g, '-');
-        await connection.execute(
-          'INSERT INTO migrations (migration_id, migration_file) VALUES (?, ?)',
-          [migrationId, file]
-        );
+        await markMigrationComplete(connection, file);
         console.log(`✅ Migration completed: ${file}`);
       }
     }

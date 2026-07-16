@@ -7,6 +7,8 @@ require('dotenv').config();
 const pool = require('./config/database');
 const { setSocketIO } = require('./utils/notificationService');
 const { runMigrations } = require('./utils/migrationRunner');
+const { verifyToken, loadUserWithRoles } = require('./middleware/auth');
+const logger = require('./utils/logger');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -31,6 +33,10 @@ const quantityFeeRoutes = require('./routes/quantityFees');
 const rightsAndRentalsRoutes = require('./routes/rightsAndRentals');
 const priceMonitoringRoutes = require('./routes/priceMonitoring');
 const waterworksRoutes = require('./routes/waterworks');
+const tasksRoutes = require('./routes/tasks');
+const jobsRoutes = require('./routes/jobs');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -140,7 +146,25 @@ app.use('/api/price-monitoring', priceMonitoringRoutes);
 console.log('  ✓ /api/price-monitoring');
 app.use('/api/waterworks', waterworksRoutes);
 console.log('  ✓ /api/waterworks');
+app.use('/api/tasks', tasksRoutes);
+console.log('  ✓ /api/tasks');
+app.use('/api/jobs', jobsRoutes);
+console.log('  ✓ /api/jobs');
 console.log('✅ All routes registered');
+
+// API v1 aliases (same handlers — Phase 1)
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/applications', applicationRoutes);
+app.use('/api/v1/tasks', tasksRoutes);
+app.use('/api/v1/jobs', jobsRoutes);
+
+app.get('/api/v1/openapi.yaml', (req, res) => {
+  try {
+    res.type('text/yaml').send(fs.readFileSync(path.join(__dirname, 'openapi-v1.yaml'), 'utf8'));
+  } catch (err) {
+    res.status(404).json({ error: 'OpenAPI spec not found' });
+  }
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -153,51 +177,54 @@ const onlineUsers = new Map();
 // Make onlineUsers available to routes
 app.set('onlineUsers', onlineUsers);
 
-// Socket.io connection handling
-io.use((socket, next) => {
-  // Simple authentication - in production, verify JWT token
-  const token = socket.handshake.auth.token;
-  if (token) {
-    // Verify token and attach user info
-    // For now, we'll trust the client sends valid user_id
+// Socket.io: verify JWT and derive userId from token (never trust client userId)
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) {
+      return next(new Error('Authentication error'));
+    }
+
+    const decoded = verifyToken(token);
+    const user = await loadUserWithRoles(decoded.userId);
+    if (!user) {
+      return next(new Error('Authentication error'));
+    }
+
+    socket.data.userId = user.user_id;
+    socket.data.user = user;
     next();
-  } else {
+  } catch (err) {
+    logger.debug('Socket auth failed', { error: err.message });
     next(new Error('Authentication error'));
   }
 });
 
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  const userId = socket.handshake.auth.userId;
+  const userId = socket.data.userId;
+  logger.debug('Socket connected', { socketId: socket.id, userId });
 
   if (userId) {
-    // Join user's personal room
     socket.join(`user_${userId}`);
-    
-    // Track user as online
+
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());
     }
     onlineUsers.get(userId).add(socket.id);
-    console.log(`User ${userId} is now online (${onlineUsers.get(userId).size} connections)`);
-    
-    // Broadcast online users update to all connected clients
+
     io.emit('online_users_updated', Array.from(onlineUsers.keys()));
   }
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-    
+    logger.debug('Socket disconnected', { socketId: socket.id, userId });
+
     if (userId && onlineUsers.has(userId)) {
       onlineUsers.get(userId).delete(socket.id);
-      
-      // If no more connections for this user, remove them from online list
+
       if (onlineUsers.get(userId).size === 0) {
         onlineUsers.delete(userId);
-        console.log(`User ${userId} is now offline`);
       }
-      
-      // Broadcast online users update to all connected clients
+
       io.emit('online_users_updated', Array.from(onlineUsers.keys()));
     }
   });
@@ -218,23 +245,45 @@ const PORT = process.env.PORT || 5000;
 
 // Start server with migrations
 async function startServer() {
+  const isProduction = process.env.NODE_ENV === 'production';
+
   try {
-    console.log('🔄 Checking and running pending migrations...');
-    // Only run new migrations - skip problematic legacy ones
+    logger.info('Running pending migrations...');
     try {
       await runMigrations();
-      console.log('✅ Migrations completed');
+      logger.info('Migrations completed');
     } catch (migrationError) {
-      console.warn('⚠️  Migration warning:', migrationError.message);
-      console.log('⏭️  Continuing with server startup despite migration issues');
+      if (isProduction) {
+        logger.error('Migration failed — refusing to start in production', migrationError);
+        process.exit(1);
+      }
+      logger.warn('Migration warning (continuing in non-production)', {
+        error: migrationError.message,
+      });
     }
-    
+
+    if (!process.env.JWT_SECRET) {
+      logger.error('JWT_SECRET is not set — refusing to start');
+      process.exit(1);
+    }
+
+    if (
+      process.env.JWT_SECRET.includes('change_in_production') ||
+      process.env.JWT_SECRET.length < 32
+    ) {
+      logger.warn(
+        'JWT_SECRET is weak or still using a placeholder. Generate a strong secret (32+ chars) and update .env / compose.'
+      );
+    }
+
     server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info('Server started', {
+        port: PORT,
+        env: process.env.NODE_ENV || 'development',
+      });
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    logger.error('Failed to start server', error);
     process.exit(1);
   }
 }

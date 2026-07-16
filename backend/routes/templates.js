@@ -110,7 +110,7 @@ router.get('/:id', async (req, res) => {
  * Upload a new template
  */
 router.post('/upload', 
-    authorize(['SuperAdmin', 'Admin']),
+    authorize('SuperAdmin', 'Admin'),
     uploadTemplate.single('template'),
     handleUploadError,
     async (req, res) => {
@@ -192,7 +192,7 @@ router.post('/upload',
  * Update template metadata (not the file)
  */
 router.put('/:id', 
-    authorize(['SuperAdmin', 'Admin']),
+    authorize('SuperAdmin', 'Admin'),
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -240,7 +240,7 @@ router.put('/:id',
  * Set a template as the default for its permit type
  */
 router.put('/:id/set-default', 
-    authorize(['SuperAdmin', 'Admin']),
+    authorize('SuperAdmin', 'Admin'),
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -320,7 +320,7 @@ router.get('/:id/download', async (req, res) => {
  * Delete a template
  */
 router.delete('/:id', 
-    authorize(['SuperAdmin', 'Admin']),
+    authorize('SuperAdmin', 'Admin'),
     async (req, res) => {
         try {
             const { id } = req.params;

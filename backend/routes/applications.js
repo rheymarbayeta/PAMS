@@ -7,6 +7,9 @@ const { generatePermitPDF, generateAssessmentReportPDF, generateAssessmentReport
 const { generateApplicationNumber } = require('../utils/applicationNumberGenerator');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const { generatePermitNumber, generatePermitNumberForRenewal } = require('../utils/permitNumberGenerator');
+const applicationsService = require('../modules/permits/applicationsService');
+const { paginated, fail } = require('../utils/apiResponse');
+const { requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -86,81 +89,14 @@ router.get('/:id/assessment', async (req, res, next) => {
 // All routes require authentication
 router.use(authenticate);
 
-// Get all applications (filtered by role)
-router.get('/', async (req, res) => {
+// Get all applications (filtered by role, paginated) — permits service/repository pilot
+router.get('/', requirePermission('applications', 'create_applications', 'assess_fees', 'approve_applications'), async (req, res) => {
   try {
-    let query = `
-      SELECT 
-        a.application_id,
-        a.application_number,
-        a.permit_number,
-        a.entity_id,
-        a.creator_id,
-        a.assessor_id,
-        a.approver_id,
-        a.permit_type,
-        CASE 
-          WHEN a.permit_type LIKE '% - %' THEN TRIM(SUBSTRING_INDEX(a.permit_type, ' - ', 1))
-          ELSE a.permit_type
-        END as permit_type_name,
-        CASE 
-          WHEN a.permit_type LIKE '% - %' THEN TRIM(SUBSTRING_INDEX(a.permit_type, ' - ', -1))
-          ELSE ''
-        END as attribute_name,
-        a.status,
-        a.created_at,
-        a.updated_at,
-        a.issued_at as permit_date,
-        COALESCE(e.entity_name, 'Unknown Entity') as entity_name,
-        TRIM(CONCAT_WS(', ',
-          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Street/Sitio' LIMIT 1)), ''),
-          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Barangay' LIMIT 1)), ''),
-          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Municipality' LIMIT 1)), ''),
-          NULLIF(TRIM((SELECT ap.param_value FROM application_parameters ap WHERE ap.application_id = a.application_id AND ap.param_name = 'Province' LIMIT 1)), '')
-        )) as entity_address,
-        COALESCE(
-          (SELECT ap.param_value FROM application_parameters ap
-           WHERE ap.application_id = a.application_id AND ap.param_name = 'Location' LIMIT 1),
-          e.address
-        ) as location,
-        COALESCE(u1.full_name, 'Unknown User') as creator_name,
-        u2.full_name as assessor_name,
-        u3.full_name as approver_name
-      FROM applications a
-      LEFT JOIN entities e ON a.entity_id = e.entity_id
-      LEFT JOIN users u1 ON a.creator_id = u1.user_id
-      LEFT JOIN users u2 ON a.assessor_id = u2.user_id
-      LEFT JOIN users u3 ON a.approver_id = u3.user_id
-    `;
-
-    const conditions = [];
-    const params = [];
-
-    // Role-based filtering
-    const roleName = req.user.role_name;
-    if (roleName === 'Application Creator') {
-      conditions.push('a.creator_id = ?');
-      params.push(req.user.user_id);
-    } else if (roleName === 'Assessor') {
-      conditions.push('(a.status = ? OR a.assessor_id = ?)');
-      params.push('Pending', req.user.user_id);
-    } else if (roleName === 'Approver') {
-      conditions.push('(a.status = ? OR a.approver_id = ?)');
-      params.push('Pending Approval', req.user.user_id);
-    }
-    // SuperAdmin, Admin, Viewer can see all
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ' ORDER BY a.created_at DESC';
-
-    const [applications] = await pool.execute(query, params);
-    res.json(applications);
+    const result = await applicationsService.listForUser(req.user, req.query);
+    return paginated(res, result.data, result.pagination);
   } catch (error) {
     console.error('Get applications error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return fail(res, 500, 'Internal server error');
   }
 });
 

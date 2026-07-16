@@ -239,7 +239,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create new citation
-router.post('/', async (req, res) => {
+router.post('/', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager', 'Assessor'), async (req, res) => {
   try {
     const {
       ticketNumber,
@@ -370,7 +370,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update citation
-router.put('/:id', async (req, res) => {
+router.put('/:id', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager', 'Assessor'), async (req, res) => {
   try {
     const citationId = req.params.id;
     const {
@@ -620,7 +620,7 @@ router.delete('/:id', authorize('Admin', 'SuperAdmin', 'Citation Manager'), asyn
 });
 
 // Record citation payment
-router.post('/:id/payment', async (req, res) => {
+router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager'), async (req, res) => {
   try {
     const citationId = req.params.id;
     const { amountPaid, paymentMethod, receiptNumber, notes, paymentDate } = req.body;
@@ -675,7 +675,7 @@ router.post('/:id/payment', async (req, res) => {
 });
 
 // Update an existing payment record (receipt number, amount, payment date)
-router.put('/:id/payment/:paymentId', async (req, res) => {
+router.put('/:id/payment/:paymentId', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager'), async (req, res) => {
   try {
     const { id: citationId, paymentId } = req.params;
     const { receiptNumber, amountPaid, paymentDate } = req.body;
@@ -826,7 +826,7 @@ router.get('/etracs/verify-driver', async (req, res) => {
 });
 
 // Link a citation to an eTracs entity
-router.post('/:id/link-etracs-entity', async (req, res) => {
+router.post('/:id/link-etracs-entity', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 'Citation Manager'), async (req, res) => {
   try {
     const citationId = req.params.id;
     const { etracs_objid } = req.body;

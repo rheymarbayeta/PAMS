@@ -11,15 +11,17 @@ services:
     environment:
       DB_HOST: 192.168.11.26
       DB_PORT: 3310
-      DB_USER: ${DB_USER:-root}
-      DB_PASSWORD: ${DB_PASSWORD:-dalaguete1000}
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_NAME: ${DB_NAME:-pams_db}
-      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       PORT: 5000
       NODE_ENV: ${NODE_ENV:-production}
       FRONTEND_URL: http://192.168.11.17:6070
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://192.168.11.17:8081,http://192.168.11.17:8082}
+      ETRACS_BASE_URL: ${ETRACS_BASE_URL:-}
+      ETRACS_API_KEY: ${ETRACS_API_KEY:-}
     ports:
       - "5040:5000"
     volumes:

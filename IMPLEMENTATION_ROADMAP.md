@@ -1,0 +1,371 @@
+# PAMS Enterprise Transformation — Implementation Process
+
+**System:** Permit Assessment & Management System (PAMS)  
+**Document type:** Phased implementation roadmap  
+**Based on:** Full-system architecture assessment  
+**Last updated:** 2026-07-16
+
+---
+
+## 1. Purpose
+
+This document defines how PAMS will be transformed from a feature-rich municipal modular monolith into a scalable, maintainable, enterprise-grade platform—without disrupting day-to-day operations.
+
+It covers:
+
+- Implementation principles
+- Phase goals, scope, deliverables, and exit criteria
+- Priority order and dependencies
+- Roles, review, and release process
+- Success metrics
+
+---
+
+## 2. Current State (Summary)
+
+PAMS today includes:
+
+| Domain | Status |
+|--------|--------|
+| Permits / Applications | Core workflow (assess → approve → pay → issue → release) |
+| Citations & Enforcers | Operational + ETRACS |
+| Rights & Rentals | Lessees, properties, leases, payments |
+| Waterworks | Accounts, readings, billing, rates + mobile meter reader |
+| Price Monitoring | Commodities, markets, alerts, analysis |
+| Platform | Users, roles, settings, chat, notifications, reports |
+
+**Primary constraints to address:**
+
+- Fat route/page modules (2k+ LOC files)
+- Permissions UI not enforced end-to-end
+- Security gaps (Socket JWT, secrets, over-broad authorize)
+- Unpaginated heavy lists (especially applications)
+- Near-zero automated tests
+- Schema/docs drift vs live migrations
+
+---
+
+## 3. Guiding Principles
+
+1. **Stabilize before redesign** — fix security and performance first.
+2. **Modular monolith first** — extract microservices only when justified.
+3. **API-first** — contracts before UI rewrites.
+4. **Permission-driven access** — role checkboxes must match runtime behavior.
+5. **Small, reviewable PRs** — prefer incremental merges over big-bang rewrites.
+6. **No downtime for core ops** — feature flags / backward-compatible APIs where possible.
+7. **Test what money touches** — billing, assessments, payments, lease balances.
+
+---
+
+## 4. Target Architecture
+
+### 4.1 Feature modules
+
+```
+platform/        auth, users, roles, settings, audit, notifications, chat, entities
+permits/         applications, fees, rules, templates, permit reports
+citations/       citations, enforcers, citation payments
+rentals/         lessees, properties, leases, rental payments/reports
+waterworks/      supplies, accounts, readings, billing, rates (+ mobile API)
+markets/         price monitoring
+integrations/    ETRACS, future GIS/ERP/treasury
+```
+
+### 4.2 Backend layering (per module)
+
+```
+routes/controllers  →  services (domain rules)  →  repositories (SQL)
+```
+
+### 4.3 Shared platform services
+
+- Authentication & authorization
+- Audit logging
+- Notifications / task inbox
+- Document generation (async jobs)
+- Entity master data
+- Unified payment ledger (Phase 2+)
+
+---
+
+## 5. Phased Implementation
+
+### Phase 0 — Stabilize (1–2 weeks calendar)
+
+**Goal:** Reduce production risk with minimal UX change.  
+**Status:** Implemented 2026-07-16
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P0-1 | Verify JWT on Socket.IO; never trust client `userId` | Critical | Done |
+| P0-2 | Remove hardcoded ETRACS API key/URL; rotate secrets; fix compose defaults | Critical | Done |
+| P0-3 | Fix authorize gaps (citations writes, price records, reportTemplates/templates bugs) | Critical | Done |
+| P0-4 | Paginate applications list; replace correlated subqueries with JOINs; add indexes | Critical | Done |
+| P0-5 | Structured logging; reduce noisy `console.log` in auth/hot paths | High | Done |
+| P0-6 | Fail loudly on migration errors in production; document true schema | Critical | Done |
+
+**Deliverables**
+
+- Hardened auth for HTTP + sockets
+- Secrets only via environment
+- Paginated applications API + UI
+- Migration reliability notes (`database/PHASE0_SCHEMA_NOTES.md`)
+
+**Exit criteria**
+
+- [x] Socket connections reject invalid/missing JWT
+- [x] No secrets committed or hardcoded in source
+- [x] Critical write endpoints role-gated
+- [x] Applications list stable under realistic data volume
+- [x] Production deploy does not ignore failed migrations
+
+**Dependencies:** None (start immediately)
+
+---
+
+### Phase 1 — Platform Foundation (1–2 months calendar)
+
+**Goal:** Enterprise control plane without rewriting every domain.  
+**Status:** Implemented 2026-07-16 (MVP)
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P1-1 | Enforce permission-based RBAC end-to-end (API + Layout + ProtectedRoute) | Critical | Done |
+| P1-2 | Split **permits** into routes → services → repositories (pilot) | Critical | Done |
+| P1-3 | OpenAPI `/api/v1` contracts; standard pagination & error envelopes | High | Done |
+| P1-4 | Shared UI primitives; protect all routes under Layout (payment, quantity-fee, etc.) | High | Done |
+| P1-5 | Notification center + **My Work** task inbox MVP | High | Done |
+| P1-6 | Job queue for PDF/Puppeteer generation | High | Done |
+| P1-7 | Automated tests: auth, assessment, waterworks billing, lease balances | High | Done |
+| P1-8 | Remove username hard-gates (e.g. Solar); use roles/feature flags | High | Done |
+
+**Deliverables**
+
+- Working `hasPermission` / API permission checks
+- Permits module refactored as reference architecture (`backend/modules/permits/`)
+- OpenAPI draft (`backend/openapi-v1.yaml`) + `npm test` suite
+- Async document jobs (`/api/jobs`)
+- Task inbox MVP (`/tasks`, `/api/tasks`)
+
+**Exit criteria**
+
+- [x] Changing role permissions changes UI nav **and** API access
+- [x] PDF generation can run via async job queue (non-blocking enqueue)
+- [x] Automated tests runnable via `npm test` in backend
+- [x] Core flows (payment, quantity-fee, solar) behind ProtectedRoute + Layout
+
+**Dependencies:** Phase 0 complete
+
+**Notes**
+
+- Assign `solar_designer` permission (or Solar Designer role) instead of hard-coded usernames.
+- Existing users keep role-name behavior via default permission maps when DB `permissions` is empty.
+- Job queue is in-process (not Redis); suitable for Phase 1, upgrade later if needed.
+
+---
+
+### Phase 2 — Modularization & UX (3–5 months calendar)
+
+**Goal:** Maintainable modules and simpler workflows.
+
+| ID | Work item | Priority |
+|----|-----------|----------|
+| P2-1 | Extract remaining domains into feature packages + nav feature registry | High |
+| P2-2 | Split mega-pages (citations, price-monitoring, applications/new, etc.) | High |
+| P2-3 | Wizard UX for application, lease contract, citation | High |
+| P2-4 | Single Reports Hub (filters, export PDF/Excel) | High |
+| P2-5 | Unified payment ledger (design + migrate module-by-module) | High |
+| P2-6 | Entity master consolidation with ETRACS | High |
+| P2-7 | Explicit state machines (permits, waterworks reading→bill) | High |
+| P2-8 | Audit log admin UI + export | High |
+| P2-9 | Meter reader offline sync | High |
+| P2-10 | Design system tokens / consistent forms-tables-dialogs | Medium |
+
+**Deliverables**
+
+- Feature-module registry (routes, nav, permissions, migrations)
+- Refactored top heavy pages
+- Reports hub
+- Payment & entity consolidation plan executed for at least 2 domains
+- Offline-capable meter reader
+
+**Exit criteria**
+
+- [ ] New module can be registered without editing core Layout/server wiring heavily
+- [ ] Top 5 largest pages reduced and modularized
+- [ ] Cross-module payment reconciliation reportable
+- [ ] Meter readings can be captured offline and synced
+
+**Dependencies:** Phase 1 complete (especially RBAC + API contracts)
+
+---
+
+### Phase 3 — Enterprise Depth (4–8 months calendar)
+
+**Goal:** Future-ready municipal platform.
+
+| ID | Work item | Priority |
+|----|-----------|----------|
+| P3-1 | Org units / multi-office or barangay data scoping | Medium |
+| P3-2 | Configurable approval chains & SLA escalations | Medium |
+| P3-3 | Document management (attachments for citations, leases, IDs) | Medium |
+| P3-4 | Scheduled reports + BI (Metabase/Power BI on read replica) | Medium–Low |
+| P3-5 | Citizen/self-service portal MVP | Medium |
+| P3-6 | Integration hub (SMS, treasury, GIS) | Medium |
+| P3-7 | Optional extract: Document Worker + Integration Service | Low |
+| P3-8 | AI-assisted anomalies / assisted assessment (optional) | Low |
+| P3-9 | Localization (Filipino/Cebuano) if required | Low |
+| P3-10 | Deep system health monitoring (DB, queue, ETRACS, disk) | Medium |
+
+**Deliverables**
+
+- Multi-office ready access model
+- Portal + integrations as prioritized by LGU
+- Analytics without OLTP contention
+- Optional AI features on clean APIs
+
+**Exit criteria**
+
+- [ ] Data can be scoped by office/org unit
+- [ ] External integrations use managed APIs/events
+- [ ] Reporting load isolated from transactional DB (or accepted equivalent)
+- [ ] Stakeholder UAT signed for portal/integrations in scope
+
+**Dependencies:** Phase 2 data/model foundations (entity, payments, modules)
+
+---
+
+## 6. Timeline Overview
+
+| Phase | Agent-led coding effort | Realistic calendar (with review/UAT) |
+|-------|-------------------------|--------------------------------------|
+| Phase 0 | 3–8 focused days | 1–2 weeks |
+| Phase 1 | 3–6 weeks | 1–2 months |
+| Phase 2 | 2–4 months | 3–5 months |
+| Phase 3 | 3–6 months | 4–8 months |
+| **All phases** | — | **~6–12 months** |
+
+**Recommended first ship:** Phase 0 + Phase 1 (~1–2 months) for maximum risk reduction.
+
+```mermaid
+flowchart LR
+  P0[Phase 0 Stabilize]
+  P1[Phase 1 Platform]
+  P2[Phase 2 Modular UX]
+  P3[Phase 3 Enterprise]
+  P0 --> P1 --> P2 --> P3
+```
+
+---
+
+## 7. Implementation Process (How work gets done)
+
+### 7.1 Branching & PRs
+
+1. Create a phase branch: `phase-0/stabilize`, `phase-1/platform`, etc.
+2. Implement work items on short-lived feature branches.
+3. Open PRs with:
+   - Summary of why
+   - Test plan checklist
+   - Risk / rollback notes
+4. Prefer vertical slices (API + UI + tests) over backend-only dumps.
+
+### 7.2 Definition of Done (per work item)
+
+- [ ] Code complete and lint-clean
+- [ ] Auth/permission behavior verified
+- [ ] Backward compatible or migration path documented
+- [ ] Tests added for money/workflow logic where applicable
+- [ ] Docs updated (API / admin notes)
+- [ ] Reviewed and merged
+- [ ] Verified on staging with realistic data
+
+### 7.3 Environments
+
+| Environment | Purpose |
+|-------------|---------|
+| Local / Docker Compose | Development |
+| Staging | UAT, migration dry-runs |
+| Production | Controlled releases after staging sign-off |
+
+### 7.4 Release cadence
+
+- **Phase 0–1:** weekly or bi-weekly releases
+- **Phase 2–3:** bi-weekly releases with feature flags for large UX changes
+
+### 7.5 Rollback
+
+- Database migrations must be forward-safe or have documented rollback SQL
+- Feature flags for nav/permission and new hubs
+- Keep previous Docker image tags deployable
+
+---
+
+## 8. Roles & Responsibilities
+
+| Role | Responsibility |
+|------|----------------|
+| Product / LGU owner | Prioritize Phase 3 scope; accept UAT |
+| Implementer (AI + developer) | Execute work items, PRs, technical design |
+| Reviewer | Code review, security check, merge |
+| Ops | Secrets, deploy, backups, monitoring |
+| End users (assessors, WW, R&R, traffic) | UAT on workflows |
+
+---
+
+## 9. Risk Register
+
+| Risk | Mitigation |
+|------|------------|
+| Big-bang rewrite breaks production | Phased delivery; modular monolith; feature flags |
+| RBAC changes lock out users | Map current role-name behavior → permissions before cutover; SuperAdmin bypass retained carefully |
+| Payment/entity unification data loss | Dual-write then migrate; reconciliation reports |
+| PDF/queue complexity | Phase 1 job queue behind same API contract |
+| Scope creep in Phase 3 | Treat Phase 3 as optional backlog; lock Phase 0–1 |
+
+---
+
+## 10. Out of Scope (Initially)
+
+- Full microservices rewrite of every module
+- Multi-tenant SaaS (unless product direction changes)
+- Replacing ETRACS
+- Visual redesign unrelated to usability/accessibility
+- AI features before clean APIs and data quality
+
+---
+
+## 11. Success Metrics
+
+| Metric | Target |
+|--------|--------|
+| Critical security findings (Phase 0 list) | 0 open |
+| Applications list p95 latency | Measurable improvement vs baseline |
+| Permission config → runtime enforcement | 100% of nav + mutating APIs |
+| Automated test coverage on billing/assessment | Meaningful suite in CI |
+| Mean time to add a new module | Reduced (registry-based) |
+| Production incidents from deploys | No increase during transformation |
+
+---
+
+## 12. Next Action
+
+1. Approve this roadmap.
+2. Start **Phase 0** in Agent mode on a dedicated branch.
+3. After Phase 0 exit criteria pass, begin **Phase 1** RBAC + permits pilot.
+
+---
+
+## Appendix A — Priority Legend
+
+- **Critical:** Security, data integrity, or severe scale blockers
+- **High:** Strong ROI for maintainability/operations
+- **Medium:** Enterprise depth; schedule after foundation
+- **Low:** Nice-to-have / future readiness
+
+## Appendix B — Related Docs
+
+- `PAMS_DOCUMENTATION.md` — original system docs (partially outdated)
+- `ETRACS_INTEGRATION.md` — ETRACS integration
+- `DOCKER_DEPLOYMENT.md` — deployment
+- `API.md` — external/ETRACS-oriented API notes

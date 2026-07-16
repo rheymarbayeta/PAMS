@@ -4,13 +4,14 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import api from '@/services/api';
 
 interface User {
-  user_id: number;
+  user_id: number | string;
   username: string;
   full_name: string;
-  role_id: number;
+  role_id: number | string;
   role_name: string;
-  roles: string[]; // Multiple roles support
-  role_names: string[]; // Alias for roles
+  roles: string[];
+  role_names?: string[];
+  permissions?: string[];
 }
 
 interface AuthContextType {
@@ -20,7 +21,8 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   loading: boolean;
-  hasRole: (role: string | string[]) => boolean; // Helper function to check roles
+  hasRole: (role: string | string[]) => boolean;
+  hasPermission: (permission: string | string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,14 +33,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored token and user
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
 
     if (storedToken && storedUser) {
       setToken(storedToken);
       setUser(JSON.parse(storedUser));
-      // Verify token is still valid
       verifyToken();
     } else {
       setLoading(false);
@@ -51,16 +51,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(response.data);
       localStorage.setItem('user', JSON.stringify(response.data));
     } catch (error: any) {
-      // Only logout if it's an auth error (401/403)
       if (error.response?.status === 401 || error.response?.status === 403) {
-        // Token invalid, clear storage
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setToken(null);
         setUser(null);
       }
-      // For other errors (network, 500, etc), keep the user logged in
-      // as they might have a valid token that just can't be verified right now
     } finally {
       setLoading(false);
     }
@@ -70,7 +66,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await api.post('/api/auth/login', { username, password });
       const { token: newToken, user: newUser } = response.data;
-      
+
       setToken(newToken);
       setUser(newUser);
       localStorage.setItem('token', newToken);
@@ -88,14 +84,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     window.location.href = '/login';
   };
 
-  // Helper function to check if user has any of the specified roles
   const hasRole = (role: string | string[]): boolean => {
     if (!user) return false;
     const userRoles = user.roles || [user.role_name];
     if (Array.isArray(role)) {
-      return role.some(r => userRoles.includes(r));
+      return role.some((r) => userRoles.includes(r));
     }
     return userRoles.includes(role);
+  };
+
+  const hasPermission = (permission: string | string[]): boolean => {
+    if (!user) return false;
+    if (hasRole('SuperAdmin')) return true;
+    const perms = user.permissions || [];
+    if (perms.includes('all')) return true;
+    if (Array.isArray(permission)) {
+      return permission.some((p) => perms.includes(p));
+    }
+    return perms.includes(permission);
   };
 
   return (
@@ -108,6 +114,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isAuthenticated: !!user && !!token,
         loading,
         hasRole,
+        hasPermission,
       }}
     >
       {children}
@@ -122,4 +129,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

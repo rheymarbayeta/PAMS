@@ -29,8 +29,13 @@ const ROLE_PERMISSIONS_MAP: Record<string, { label: string; permissions: string[
   },
   'Admin': {
     label: 'Administrator',
-    permissions: ['permits', 'applications', 'entities', 'citations', 'reports', 'users', 'settings', 'enforcers'],
+    permissions: ['permits', 'applications', 'entities', 'citations', 'reports', 'users', 'settings', 'enforcers', 'chat', 'price_monitoring', 'tasks_view', 'solar_designer'],
     description: 'Full administrative access',
+  },
+  'Solar Designer': {
+    label: 'Solar Designer',
+    permissions: ['dashboard_view', 'solar_designer'],
+    description: 'Access solar PV design calculator',
   },
   'Rights and Rentals Manager': {
     label: 'Rights and Rentals Manager',
@@ -95,9 +100,15 @@ const AVAILABLE_PERMISSIONS: Permission[] = [
   { permission_id: 'waterworks_reports', permission_name: 'Waterworks Reports', category: 'Waterworks', description: 'View waterworks collection reports' },
   { permission_id: 'waterworks_mobile_read', permission_name: 'Mobile Meter Reading', category: 'Waterworks', description: 'Submit meter readings from mobile app' },
   { permission_id: 'view_reports', permission_name: 'View Reports', category: 'Reports', description: 'View system reports' },
+  { permission_id: 'reports', permission_name: 'Manage Reports', category: 'Reports', description: 'Manage report templates and generation' },
+  { permission_id: 'permits', permission_name: 'Permit Setup', category: 'Admin', description: 'Configure permit types, fees, and rules' },
   { permission_id: 'users', permission_name: 'Manage Users', category: 'Admin', description: 'View and manage user accounts' },
   { permission_id: 'settings', permission_name: 'Manage Settings', category: 'Admin', description: 'Configure system settings' },
   { permission_id: 'enforcers', permission_name: 'Manage Enforcers', category: 'Admin', description: 'Manage enforcer staff' },
+  { permission_id: 'chat', permission_name: 'Internal Chat', category: 'Collaboration', description: 'Use internal messaging' },
+  { permission_id: 'price_monitoring', permission_name: 'Price Monitoring', category: 'Markets', description: 'Access price monitoring module' },
+  { permission_id: 'tasks_view', permission_name: 'My Work Inbox', category: 'Dashboard', description: 'View aggregated task inbox' },
+  { permission_id: 'solar_designer', permission_name: 'Solar Designer', category: 'Tools', description: 'Access solar design calculator' },
 ];
 
 export default function RolePermissionsPage() {

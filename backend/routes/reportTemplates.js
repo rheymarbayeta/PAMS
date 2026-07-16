@@ -111,7 +111,7 @@ router.get('/:reportType/variables', authenticate, async (req, res) => {
  * POST /api/report-templates
  * Create a new template
  */
-router.post('/', authorize('Admin', 'SuperAdmin'), async (req, res) => {
+router.post('/', authenticate, authorize('Admin', 'SuperAdmin'), async (req, res) => {
   try {
     const { reportType, templateHtml, description } = req.body;
 
@@ -155,7 +155,7 @@ router.post('/', authorize('Admin', 'SuperAdmin'), async (req, res) => {
  * PUT /api/report-templates/:id
  * Update an existing template
  */
-router.put('/:id', authorize('Admin', 'SuperAdmin'), async (req, res) => {
+router.put('/:id', authenticate, authorize('Admin', 'SuperAdmin'), async (req, res) => {
   try {
     const { id } = req.params;
     const { templateHtml, description } = req.body;
@@ -204,7 +204,7 @@ router.put('/:id', authorize('Admin', 'SuperAdmin'), async (req, res) => {
  * POST /api/report-templates/:id/set-default
  * Set template as default for its report type
  */
-router.post('/:id/set-default', authorize('Admin', 'SuperAdmin'), async (req, res) => {
+router.post('/:id/set-default', authenticate, authorize('Admin', 'SuperAdmin'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -367,7 +367,7 @@ router.post('/:id/preview', authenticate, async (req, res) => {
  * DELETE /api/report-templates/:id
  * Delete a template
  */
-router.delete('/:id', authorize('Admin', 'SuperAdmin'), async (req, res) => {
+router.delete('/:id', authenticate, authorize('Admin', 'SuperAdmin'), async (req, res) => {
   try {
     const { id } = req.params;
 

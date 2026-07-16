@@ -4,14 +4,25 @@ const { URL } = require('url');
 
 /**
  * eTracs API Service
- * Integrates PAMS with the eTracs external API for entity management
- * 
- * Base URL: http://192.168.11.17:9050/api
- * Production API Key: etracs_live_4f8d9c2a1e6b3f7a9d2c5e8b1a4f7d9c
+ * Integrates PAMS with the eTracs external API for entity management.
+ *
+ * Configure via environment:
+ *   ETRACS_BASE_URL  (e.g. http://192.168.11.17:9050/api)
+ *   ETRACS_API_KEY   (required — no hardcoded fallback)
  */
 
-const ETRACS_BASE_URL = 'http://192.168.11.17:9050/api';
-const ETRACS_API_KEY = process.env.ETRACS_API_KEY || 'etracs_live_4f8d9c2a1e6b3f7a9d2c5e8b1a4f7d9c';
+const ETRACS_BASE_URL = process.env.ETRACS_BASE_URL || '';
+const ETRACS_API_KEY = process.env.ETRACS_API_KEY || '';
+
+function assertEtracsConfigured() {
+  if (!ETRACS_BASE_URL || !ETRACS_API_KEY) {
+    const err = new Error(
+      'ETRACS is not configured. Set ETRACS_BASE_URL and ETRACS_API_KEY in the environment.'
+    );
+    err.code = 'ETRACS_NOT_CONFIGURED';
+    throw err;
+  }
+}
 
 /**
  * Makes an HTTP request to the eTracs API
@@ -22,6 +33,12 @@ const ETRACS_API_KEY = process.env.ETRACS_API_KEY || 'etracs_live_4f8d9c2a1e6b3f
  */
 async function makeEtracsRequest(endpoint, method = 'GET', data = null) {
   return new Promise((resolve, reject) => {
+    try {
+      assertEtracsConfigured();
+    } catch (err) {
+      return reject(err);
+    }
+
     const url = new URL(ETRACS_BASE_URL + endpoint);
     const isHttps = url.protocol === 'https:';
     const client = isHttps ? https : http;

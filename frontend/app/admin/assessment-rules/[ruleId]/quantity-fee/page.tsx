@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Layout from '@/components/Layout';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import api from '@/services/api';
 
 interface QuantityFeeConfig {
@@ -131,15 +132,18 @@ export default function QuantityFeeConfigPage() {
 
   if (loading) {
     return (
+      <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
       <Layout>
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-gray-500">Loading...</div>
         </div>
       </Layout>
+      </ProtectedRoute>
     );
   }
 
   return (
+    <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin']}>
     <Layout>
       <div className="px-4 py-6 sm:px-0 max-w-4xl mx-auto">
         <div className="mb-6">
@@ -357,5 +361,6 @@ export default function QuantityFeeConfigPage() {
         </form>
       </div>
     </Layout>
+    </ProtectedRoute>
   );
 }

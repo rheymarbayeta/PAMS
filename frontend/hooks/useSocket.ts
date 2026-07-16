@@ -10,10 +10,10 @@ export const useSocket = () => {
     if (!user || !token) return;
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    // userId is derived server-side from the JWT — do not send a client-supplied userId
     const socket = io(apiUrl, {
       auth: {
         token,
-        userId: user.user_id,
       },
     });
 

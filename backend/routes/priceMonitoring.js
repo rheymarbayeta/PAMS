@@ -436,7 +436,7 @@ router.get('/records', async (req, res) => {
   }
 });
 
-router.post('/records', async (req, res) => {
+router.post('/records', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
   try {
     const { commodity_id, market_id, price, recorded_date, notes, source } = req.body;
     if (!commodity_id || !market_id || price === undefined || !recorded_date)
@@ -972,7 +972,7 @@ router.get('/analysis/summary/global', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PRICE MONITORING REPORT (AI-powered document data)
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/report', async (req, res) => {
+router.post('/report', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
   try {
     const { commodity_ids = [], market_ids = [], date_from, date_to } = req.body;
     if (!commodity_ids.length) return res.status(400).json({ error: 'At least one commodity_id is required' });

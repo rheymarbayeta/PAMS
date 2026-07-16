@@ -13,10 +13,7 @@ router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    console.log('[LOGIN] Login attempt:', { username, passwordProvided: !!password });
-
     if (!username || !password) {
-      console.log('[LOGIN] Missing username or password');
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
@@ -25,28 +22,20 @@ router.post('/login', async (req, res) => {
       [username]
     );
 
-    console.log('[LOGIN] User query result:', { userFound: users.length > 0, userId: users[0]?.user_id });
-
     if (users.length === 0) {
-      console.log('[LOGIN] User not found:', username);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const user = users[0];
-    console.log('[LOGIN] Comparing password...');
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    console.log('[LOGIN] Password comparison result:', isValidPassword);
 
     if (!isValidPassword) {
-      console.log('[LOGIN] Invalid password for user:', username);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    console.log('[LOGIN] Password valid, generating token...');
-
     // Get all roles for the user from the junction table
     let [userRoles] = await pool.execute(
-      `SELECT r.role_id, r.role_name 
+      `SELECT r.role_id, r.role_name, r.permissions
        FROM user_roles ur 
        INNER JOIN roles r ON ur.role_id = r.role_id 
        WHERE ur.user_id = ?`,
@@ -56,10 +45,15 @@ router.post('/login', async (req, res) => {
     // Fallback to single role if no roles in junction table
     if (userRoles.length === 0) {
       const [roles] = await pool.execute(
-        'SELECT role_id, role_name FROM roles WHERE role_id = ?',
+        'SELECT role_id, role_name, permissions FROM roles WHERE role_id = ?',
         [user.role_id]
       );
       userRoles = roles;
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error('[LOGIN] JWT_SECRET is not configured');
+      return res.status(500).json({ error: 'Server authentication is not configured' });
     }
 
     const token = jwt.sign(
@@ -70,11 +64,11 @@ router.post('/login', async (req, res) => {
 
     await logAction(user.user_id, 'LOGIN', `User '${username}' logged in`);
 
-    console.log('[LOGIN] Login successful for user:', username);
-
-    // Return all roles
+    // Return all roles + effective permissions
     const roles = userRoles.map(r => r.role_name);
     const role_ids = userRoles.map(r => r.role_id);
+    const { resolvePermissionsForRoles } = require('../config/permissions');
+    const permissions = resolvePermissionsForRoles(userRoles);
 
     res.json({
       token,
@@ -83,14 +77,14 @@ router.post('/login', async (req, res) => {
         username: user.username,
         full_name: user.full_name,
         role_id: user.role_id,
-        role_name: roles[0] || null,  // Primary role for backward compatibility
-        roles: roles,                  // All roles
-        role_ids: role_ids             // All role IDs
+        role_name: roles[0] || null,
+        roles: roles,
+        role_ids: role_ids,
+        permissions,
       }
     });
   } catch (error) {
-    console.error('[LOGIN] Login error:', error);
-    console.error('[LOGIN] Error stack:', error.stack);
+    console.error('[LOGIN] Login error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -98,35 +92,15 @@ router.post('/login', async (req, res) => {
 // Get current user
 router.get('/me', authenticate, async (req, res) => {
   try {
-    // Get all roles for the user from the junction table
-    let [userRoles] = await pool.execute(
-      `SELECT r.role_id, r.role_name 
-       FROM user_roles ur 
-       INNER JOIN roles r ON ur.role_id = r.role_id 
-       WHERE ur.user_id = ?`,
-      [req.user.user_id]
-    );
-    
-    // Fallback to single role if no roles in junction table
-    if (userRoles.length === 0) {
-      const [roles] = await pool.execute(
-        'SELECT role_id, role_name FROM roles WHERE role_id = ?',
-        [req.user.role_id]
-      );
-      userRoles = roles;
-    }
-
-    const roles = userRoles.map(r => r.role_name);
-    const role_ids = userRoles.map(r => r.role_id);
-
     res.json({
       user_id: req.user.user_id,
       username: req.user.username,
       full_name: req.user.full_name,
       role_id: req.user.role_id,
-      role_name: roles[0] || null,
-      roles: roles,
-      role_ids: role_ids
+      role_name: req.user.role_name || (req.user.roles && req.user.roles[0]) || null,
+      roles: req.user.roles || [],
+      role_ids: req.user.role_ids || [],
+      permissions: req.user.permissions || [],
     });
   } catch (error) {
     console.error('Get me error:', error);

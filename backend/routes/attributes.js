@@ -6,15 +6,8 @@ const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 
 const router = express.Router();
 
-// Test route (before auth to verify route is registered)
-router.get('/test', (req, res) => {
-  console.log('[Attributes] Test route hit');
-  res.json({ message: 'Attributes route is working', path: req.path });
-});
-
 // All routes require authentication
 router.use((req, res, next) => {
-  console.log(`[Attributes] ${req.method} ${req.path} - Authenticating...`);
   authenticate(req, res, next);
 });
 

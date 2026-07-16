@@ -13,6 +13,9 @@ interface LayoutProps {
 }
 
 const navIcons: Record<string, JSX.Element> = {
+  '/tasks': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+  ),
   '/dashboard': (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
   ),
@@ -73,7 +76,7 @@ const navIcons: Record<string, JSX.Element> = {
 };
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, logout, hasRole } = useAuth();
+  const { user, logout, hasRole, hasPermission } = useAuth();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -92,6 +95,8 @@ export default function Layout({ children }: LayoutProps) {
     if (!user) return false;
     return hasRole(roles);
   };
+
+  const can = (permission: string | string[]) => hasPermission(permission);
 
   const displayRoles = user?.roles && user.roles.length > 0 
     ? user.roles.join(', ') 
@@ -122,26 +127,81 @@ export default function Layout({ children }: LayoutProps) {
     return () => { document.body.style.overflow = 'unset'; };
   }, [sidebarOpen]);
 
-  const isWaterworksOnly = canAccess(['Waterworks Manager']) && !canAccess(['SuperAdmin', 'Admin']);
-  const isSolarDesignerUser = user?.username?.toLowerCase() === 'rheymar';
+  const isWaterworksOnly =
+    can('waterworks_view') &&
+    !can(['applications', 'entities', 'citations', 'settings', 'users']) &&
+    !canAccess(['SuperAdmin', 'Admin']);
+  const isRrOnly =
+    can('rights_rentals_view') &&
+    !can(['applications', 'entities', 'citations', 'waterworks_view']) &&
+    !canAccess(['SuperAdmin', 'Admin']);
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', show: true },
-    { href: '/applications', label: 'Applications', show: !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
-    { href: '/admin/entities', label: 'Entities', show: !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
-    { href: '/citations', label: 'Citations', show: canAccess(['SuperAdmin', 'Admin', 'Traffic Officer', 'Assessor']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
-    { href: '/admin/rights-and-rentals', label: 'Rights & Rentals', show: canAccess(['SuperAdmin', 'Admin', 'Rights and Rentals Manager']) && !isWaterworksOnly },
-    { href: '/admin/waterworks', label: 'Waterworks', show: canAccess(['SuperAdmin', 'Admin', 'Waterworks Manager']) },
-    { href: '/chat', label: 'Chat', show: canAccess(['SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
-    { href: '/price-monitoring', label: 'Price Monitoring', show: canAccess(['SuperAdmin', 'Admin', 'Assessor']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) },
+    { href: '/tasks', label: 'My Work', show: can(['tasks_view', 'applications', 'waterworks_view', 'dashboard_view']) },
+    { href: '/applications', label: 'Applications', show: can('applications') && !isWaterworksOnly && !isRrOnly },
+    { href: '/admin/entities', label: 'Entities', show: can('entities') && !isWaterworksOnly && !isRrOnly },
+    {
+      href: '/citations',
+      label: 'Citations',
+      show: can(['citations', 'view_citations', 'create_citations']) && !isWaterworksOnly && !isRrOnly,
+    },
+    {
+      href: '/admin/rights-and-rentals',
+      label: 'Rights & Rentals',
+      show: can('rights_rentals_view') && !isWaterworksOnly,
+    },
+    { href: '/admin/waterworks', label: 'Waterworks', show: can('waterworks_view') },
+    {
+      href: '/chat',
+      label: 'Chat',
+      show: can('chat') && !isWaterworksOnly && !isRrOnly,
+    },
+    {
+      href: '/price-monitoring',
+      label: 'Price Monitoring',
+      show: can('price_monitoring') && !isWaterworksOnly && !isRrOnly,
+    },
+    {
+      href: '/solar',
+      label: 'Solar Designer',
+      show: can('solar_designer'),
+    },
   ];
 
-  const adminLinks: { href: string; label: string; activePaths?: string[] }[] = [
-    { href: '/admin/permit-types', label: 'Permit Setup', activePaths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees', '/admin/quantity-fees'] },
-    { href: '/admin/enforcers', label: 'Enforcers' },
-    { href: '/admin/users', label: 'Users' },
-    { href: '/reports', label: 'Reports', activePaths: ['/reports', '/admin/reports', '/admin/templates', '/admin/report-templates'] },
-    { href: '/admin/settings', label: 'Settings', activePaths: ['/admin/settings'] },
+  const showAdmin =
+    canAccess(['SuperAdmin', 'Admin']) ||
+    can(['permits', 'users', 'settings', 'enforcers', 'reports', 'view_reports']);
+
+  const adminLinks: { href: string; label: string; activePaths?: string[]; show?: boolean }[] = [
+    {
+      href: '/admin/permit-types',
+      label: 'Permit Setup',
+      activePaths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees', '/admin/quantity-fees'],
+      show: can(['permits', 'settings']) || canAccess(['SuperAdmin', 'Admin']),
+    },
+    {
+      href: '/admin/enforcers',
+      label: 'Enforcers',
+      show: can('enforcers') || canAccess(['SuperAdmin', 'Admin']),
+    },
+    {
+      href: '/admin/users',
+      label: 'Users',
+      show: can('users') || canAccess(['SuperAdmin', 'Admin']),
+    },
+    {
+      href: '/reports',
+      label: 'Reports',
+      activePaths: ['/reports', '/admin/reports', '/admin/templates', '/admin/report-templates'],
+      show: can(['reports', 'view_reports']) || canAccess(['SuperAdmin', 'Admin']),
+    },
+    {
+      href: '/admin/settings',
+      label: 'Settings',
+      activePaths: ['/admin/settings'],
+      show: can('settings') || canAccess(['SuperAdmin', 'Admin']),
+    },
   ];
 
   // Page groups: show SubNav tabs when on any page in a group
@@ -247,13 +307,13 @@ export default function Layout({ children }: LayoutProps) {
           </Link>
         ))}
 
-        {canAccess(['SuperAdmin', 'Admin']) && !canAccess(['Rights and Rentals Manager', 'Waterworks Manager']) && (
+        {showAdmin && !isWaterworksOnly && !isRrOnly && (
           <>
             <div className="pt-4">
               <p className={`px-3 mb-2 text-xs font-semibold uppercase tracking-wider ${!mobile ? 'hidden lg:block' : ''}`} style={{ color: 'var(--sidebar-section)' }}>Admin</p>
               <div className={`border-t mb-2 ${!mobile ? 'lg:hidden' : 'hidden'}`} style={{ borderColor: 'var(--sidebar-border)' }}></div>
             </div>
-            {adminLinks.map((link) => (
+            {adminLinks.filter((link) => link.show !== false).map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -370,7 +430,7 @@ export default function Layout({ children }: LayoutProps) {
                     <p className="text-sm font-medium text-slate-900 truncate">{user?.full_name}</p>
                     <p className="text-xs text-slate-500 truncate">{displayRoles}</p>
                   </div>
-                  {isSolarDesignerUser && (
+                  {can('solar_designer') && (
                     <Link
                       href="/solar"
                       onClick={() => setShowUserMenu(false)}

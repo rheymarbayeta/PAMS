@@ -34,9 +34,12 @@ export default function ApplicationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [permitTypeFilter, setPermitTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchInput, setSearchInput] = useState<string>('');
   const [permitTypes, setPermitTypes] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
+  const [totalRecords, setTotalRecords] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('grid');
 
   useEffect(() => {
@@ -46,10 +49,9 @@ export default function ApplicationsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, permitTypeFilter, searchTerm]);
+  }, [statusFilter, permitTypeFilter, searchTerm, recordsPerPage]);
 
   useEffect(() => {
-    fetchApplications();
     fetchPermitTypes();
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -64,10 +66,41 @@ export default function ApplicationsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    fetchApplications();
+  }, [currentPage, recordsPerPage, statusFilter, permitTypeFilter, searchTerm]);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const fetchApplications = async () => {
     try {
-      const response = await api.get('/api/applications');
-      setApplications(response.data);
+      setLoading(true);
+      const response = await api.get('/api/applications', {
+        params: {
+          page: currentPage,
+          limit: recordsPerPage,
+          status: statusFilter,
+          permit_type: permitTypeFilter,
+          search: searchTerm || undefined,
+        },
+      });
+      const payload = response.data;
+      if (Array.isArray(payload)) {
+        // Backward compatibility if API returns a raw array
+        setApplications(payload);
+        setTotalRecords(payload.length);
+        setTotalPages(1);
+      } else {
+        setApplications(payload.data || []);
+        setTotalRecords(payload.pagination?.total ?? 0);
+        setTotalPages(payload.pagination?.totalPages ?? 1);
+      }
     } catch (error) {
       console.error('Error fetching applications:', error);
     } finally {
@@ -106,28 +139,7 @@ export default function ApplicationsPage() {
     );
   };
 
-  const filteredApplications = (statusFilter === 'all'
-    ? applications
-    : statusFilter === 'Issued'
-      ? applications.filter(app => ['Issued', 'Released'].includes(app.status))
-      : applications.filter(app => app.status === statusFilter))
-    .filter(app => permitTypeFilter === 'all' || app.permit_type_name === permitTypeFilter)
-    .filter(app =>
-      (app.application_number?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-      app.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.permit_type_name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredApplications.length / recordsPerPage);
-  const startIndex = (currentPage - 1) * recordsPerPage;
-  const endIndex = startIndex + recordsPerPage;
-  const paginatedApplications = filteredApplications.slice(startIndex, endIndex);
-
-  // Ensure current page doesn't exceed total pages
-  if (currentPage > totalPages && totalPages > 0) {
-    setCurrentPage(1);
-  }
+  const paginatedApplications = applications;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -215,8 +227,8 @@ export default function ApplicationsPage() {
                   Applications
                 </h1>
                 <p className="text-xs sm:text-sm text-slate-500">
-                  {filteredApplications.length} {filteredApplications.length === 1 ? 'application' : 'applications'}
-                  {filteredApplications.length > recordsPerPage && ` - Page ${currentPage} of ${totalPages}`}
+                  {totalRecords} {totalRecords === 1 ? 'application' : 'applications'}
+                  {totalPages > 1 && ` - Page ${currentPage} of ${totalPages}`}
                 </p>
               </div>
             </div>
@@ -235,8 +247,8 @@ export default function ApplicationsPage() {
                 <input
                   type="text"
                   placeholder="Search applications..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 pl-10 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all duration-200 outline-none"
                   aria-label="Search applications"
                 />
@@ -317,12 +329,12 @@ export default function ApplicationsPage() {
             </div>
 
           {/* Pagination and records info - BEFORE records list */}
-          {filteredApplications.length > 0 && (
+          {totalRecords > 0 && (
             <div className="flex flex-col gap-4 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
               {/* Records per page selector */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="text-sm text-slate-600">
-                  Showing <span className="font-semibold">{Math.min(recordsPerPage, filteredApplications.length)}</span> records per page out of <span className="font-semibold">{filteredApplications.length}</span> total
+                  Showing <span className="font-semibold">{paginatedApplications.length}</span> records on this page out of <span className="font-semibold">{totalRecords}</span> total
                 </div>
                 <div className="flex items-center gap-3">
                   <label htmlFor="records-per-page-selector" className="text-sm font-medium text-slate-700">
@@ -353,7 +365,7 @@ export default function ApplicationsPage() {
           )}
 
           {/* Applications List */}
-          {filteredApplications.length === 0 ? (
+          {paginatedApplications.length === 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="text-center py-12 sm:py-16">
                 <div className="mx-auto h-12 w-12 sm:h-16 sm:w-16 rounded-full bg-slate-100 flex items-center justify-center mb-3 sm:mb-4">
