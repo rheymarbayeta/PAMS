@@ -304,7 +304,7 @@ export default function ViewLeaseContractPage() {
   return (
     <ProtectedRoute allowedRoles={['SuperAdmin', 'Admin', 'Assessor', 'Rights and Rentals Manager']}>
       <Layout>
-        <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        <div className="px-4 py-8 sm:px-6 lg:px-8 w-full max-w-[1600px] mx-auto">
           {/* Header */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-6">
@@ -328,287 +328,9 @@ export default function ViewLeaseContractPage() {
                 {contract.status.charAt(0).toUpperCase() + contract.status.slice(1)}
               </span>
             </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="space-y-6">
-            {/* Lessee Information */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <svg className="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-                </svg>
-                Lessee Information
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-sm text-gray-600">Name</p>
-                  <p className="text-lg font-medium text-gray-900">{contract.lessee_name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Email</p>
-                  <p className="text-lg font-medium text-gray-900">{contract.lessee_email || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Contact Number</p>
-                  <p className="text-lg font-medium text-gray-900">{contract.lessee_contact || 'N/A'}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Property Information */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <svg className="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                </svg>
-                Property Information
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-sm text-gray-600">Property Name</p>
-                  <p className="text-lg font-medium text-gray-900">{contract.property_name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Property Code</p>
-                  <p className="text-lg font-medium text-gray-900">{contract.property_code}</p>
-                </div>
-                <div className="md:col-span-2">
-                  <p className="text-sm text-gray-600">Address</p>
-                  <p className="text-lg font-medium text-gray-900">{contract.property_address}</p>
-                </div>
-                <div className="md:col-span-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm text-gray-600">Units / Stalls</p>
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={openAddUnitModal}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Add Unit
-                      </button>
-                    )}
-                  </div>
-                  {contract.property_units && contract.property_units.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {contract.property_units.map(unit => (
-                        <span
-                          key={unit.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-800"
-                        >
-                          <Link
-                            href={`/admin/rights-and-rentals/property/${contract.property_id}/units/${unit.id}`}
-                            className="hover:text-indigo-900"
-                          >
-                            {unit.stall_number}
-                            {unit.floor_level ? ` (${unit.floor_level})` : ''}
-                            {unit.unit_description ? ` – ${unit.unit_description}` : ''}
-                          </Link>
-                          {canEdit && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveUnit(unit)}
-                              className="ml-1 p-0.5 text-indigo-400 hover:text-red-600 rounded"
-                              title="Remove unit"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">No units assigned yet.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Contract Details */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Contract Details
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-sm text-gray-600">Effective Date</p>
-                  <p className="text-lg font-medium text-gray-900">
-                    {formatDate(contract.contract_effective_date)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Termination Date</p>
-                  <p className="text-lg font-medium text-gray-900">
-                    {contract.contract_termination_date ? formatDate(contract.contract_termination_date) : 'Not Set'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Financial Information */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <svg className="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8.16 2.751A.75.75 0 019 2h2a.75.75 0 01.84.75v.008a49.488 49.488 0 0113.456 2.752.75.75 0 01-.575 1.415A47.999 47.999 0 0010.5 6.5c-1.579 0-3.119-.068-4.604-.198a.75.75 0 01-.575-1.415A49.5 49.5 0 018.16 2.751z" />
-                  <path d="M5 6.75c-1.592 0-2.75 1.158-2.75 2.75v7.5c0 1.592 1.158 2.75 2.75 2.75h10c1.592 0 2.75-1.158 2.75-2.75v-7.5c0-1.592-1.158-2.75-2.75-2.75H5z" />
-                </svg>
-                Financial Information
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-indigo-50 rounded-lg p-4">
-                  <p className="text-sm text-indigo-700 font-medium">Principal Amount</p>
-                  <p className="text-2xl font-bold text-indigo-900 mt-1">
-                    {formatCurrency(contract.principal_amount)}
-                  </p>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <p className="text-sm text-green-700 font-medium">Downpayment</p>
-                  <p className="text-2xl font-bold text-green-900 mt-1">
-                    {formatCurrency(contract.downpayment)}
-                  </p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <p className="text-sm text-blue-700 font-medium">Monthly Rights Amount</p>
-                  <p className="text-2xl font-bold text-blue-900 mt-1">
-                    {formatCurrency(contract.monthly_rights_amount)}
-                  </p>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-4">
-                  <p className="text-sm text-purple-700 font-medium">Monthly Rental Amount</p>
-                  <p className="text-2xl font-bold text-purple-900 mt-1">
-                    {formatCurrency(contract.monthly_rental_amount)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {contract.is_legacy_account && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Legacy Account Opening Balances</h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  Pre-system totals from prior records. Only new payments recorded here adjust these figures.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white rounded-lg p-4 border border-amber-100">
-                    <p className="text-sm text-gray-600">Total Paid Rights (opening)</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">
-                      {formatCurrency(contract.opening_rights_paid ?? 0)}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 border border-amber-100">
-                    <p className="text-sm text-gray-600">Outstanding Rights Balance (opening)</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">
-                      {formatCurrency(contract.opening_rights_balance ?? 0)}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 border border-amber-100">
-                    <p className="text-sm text-gray-600">Total Paid Rentals (opening)</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">
-                      {formatCurrency(contract.opening_rental_paid ?? 0)}
-                    </p>
-                  </div>
-                  {contract.opening_balance_notes && (
-                    <div className="bg-white rounded-lg p-4 border border-amber-100 md:col-span-2">
-                      <p className="text-sm text-gray-600">Notes / Source</p>
-                      <p className="text-sm font-medium text-gray-900 mt-1">{contract.opening_balance_notes}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Outstanding Balance */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Outstanding Balance
-                  </h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Previous or other unpaid rental balance carried into billing statements.
-                  </p>
-                </div>
-                {canEdit && (
-                  <button
-                    onClick={openOutstandingModal}
-                    className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    {(contract.outstanding_rental_balance ?? 0) > 0 ? 'Edit' : 'Add'} Balance
-                  </button>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
-                  <p className="text-sm text-amber-800 font-medium">Outstanding Rental Balance</p>
-                  <p className="text-2xl font-bold text-amber-900 mt-1">
-                    {formatCurrency(contract.outstanding_rental_balance ?? 0)}
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
-                  <p className="text-sm text-gray-600 font-medium">Notes / Source</p>
-                  <p className="text-base text-gray-900 mt-1">
-                    {contract.outstanding_balance_notes?.trim() || 'No notes provided'}
-                  </p>
-                </div>
-              </div>
-              {(contract.outstanding_rental_balance ?? 0) > 0 && (
-                <p className="text-xs text-gray-500 mt-4">
-                  This amount is included in the BALANCE line on billing statements and may be subject to the configured late payment surcharge when unpaid.
-                </p>
-              )}
-            </div>
-
-            {/* Payment Management */}
-            <LesseePaymentDetails
-              lesseeId={contract.lessee_id}
-              lesseeName={contract.lessee_name}
-              leaseContracts={[{
-                id: contract.id,
-                contract_id: contract.id,
-                contract_effective_date: contract.contract_effective_date,
-                contract_termination_date: contract.contract_termination_date || '',
-                principal_amount: contract.principal_amount,
-                monthly_rights_amount: contract.monthly_rights_amount,
-                monthly_rental_amount: contract.monthly_rental_amount,
-                downpayment: contract.downpayment,
-                contract_status: contract.status,
-                property_id: contract.property_id,
-                property_name: contract.property_name,
-                status: contract.status,
-              }]}
-              hideContractSelector
-              defaultContractId={contract.id}
-              canRecordPayment={canRecordPayment}
-            />
-
-            {/* Metadata */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Metadata</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-600">
-                <div>
-                  <p>Created: {formatDate(contract.created_at)}</p>
-                  <p>Updated: {formatDate(contract.updated_at)}</p>
-                </div>
-              </div>
-            </div>
 
             {/* Actions */}
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {canEdit && (
                 <>
                   <Link
@@ -646,6 +368,291 @@ export default function ViewLeaseContractPage() {
               >
                 Back
               </Link>
+            </div>
+          </div>
+
+          {/* Main Content: left contract info + right payment panel */}
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 items-start">
+            <div className="space-y-6">
+              {/* Lessee Information */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
+                  </svg>
+                  Lessee Information
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-sm text-gray-600">Name</p>
+                    <p className="text-lg font-medium text-gray-900">{contract.lessee_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="text-lg font-medium text-gray-900">{contract.lessee_email || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Contact Number</p>
+                    <p className="text-lg font-medium text-gray-900">{contract.lessee_contact || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Property Information */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                  </svg>
+                  Property Information
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-sm text-gray-600">Property Name</p>
+                    <p className="text-lg font-medium text-gray-900">{contract.property_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Property Code</p>
+                    <p className="text-lg font-medium text-gray-900">{contract.property_code}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600">Address</p>
+                    <p className="text-lg font-medium text-gray-900">{contract.property_address}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-600">Units / Stalls</p>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={openAddUnitModal}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Add Unit
+                        </button>
+                      )}
+                    </div>
+                    {contract.property_units && contract.property_units.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {contract.property_units.map(unit => (
+                          <span
+                            key={unit.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-800"
+                          >
+                            <Link
+                              href={`/admin/rights-and-rentals/property/${contract.property_id}/units/${unit.id}`}
+                              className="hover:text-indigo-900"
+                            >
+                              {unit.stall_number}
+                              {unit.floor_level ? ` (${unit.floor_level})` : ''}
+                              {unit.unit_description ? ` – ${unit.unit_description}` : ''}
+                            </Link>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveUnit(unit)}
+                                className="ml-1 p-0.5 text-indigo-400 hover:text-red-600 rounded"
+                                title="Remove unit"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No units assigned yet.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Contract Details */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Contract Details
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-sm text-gray-600">Effective Date</p>
+                    <p className="text-lg font-medium text-gray-900">
+                      {formatDate(contract.contract_effective_date)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Termination Date</p>
+                    <p className="text-lg font-medium text-gray-900">
+                      {contract.contract_termination_date ? formatDate(contract.contract_termination_date) : 'Not Set'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Information */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M8.16 2.751A.75.75 0 019 2h2a.75.75 0 01.84.75v.008a49.488 49.488 0 0113.456 2.752.75.75 0 01-.575 1.415A47.999 47.999 0 0010.5 6.5c-1.579 0-3.119-.068-4.604-.198a.75.75 0 01-.575-1.415A49.5 49.5 0 018.16 2.751z" />
+                    <path d="M5 6.75c-1.592 0-2.75 1.158-2.75 2.75v7.5c0 1.592 1.158 2.75 2.75 2.75h10c1.592 0 2.75-1.158 2.75-2.75v-7.5c0-1.592-1.158-2.75-2.75-2.75H5z" />
+                  </svg>
+                  Financial Information
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-indigo-50 rounded-lg p-4">
+                    <p className="text-sm text-indigo-700 font-medium">Principal Amount</p>
+                    <p className="text-2xl font-bold text-indigo-900 mt-1">
+                      {formatCurrency(contract.principal_amount)}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <p className="text-sm text-green-700 font-medium">Downpayment</p>
+                    <p className="text-2xl font-bold text-green-900 mt-1">
+                      {formatCurrency(contract.downpayment)}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-sm text-blue-700 font-medium">Monthly Rights Amount</p>
+                    <p className="text-2xl font-bold text-blue-900 mt-1">
+                      {formatCurrency(contract.monthly_rights_amount)}
+                    </p>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <p className="text-sm text-purple-700 font-medium">Monthly Rental Amount</p>
+                    <p className="text-2xl font-bold text-purple-900 mt-1">
+                      {formatCurrency(contract.monthly_rental_amount)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {contract.is_legacy_account && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg shadow p-6">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-1">Legacy Account Opening Balances</h2>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Pre-system totals from prior records. Only new payments recorded here adjust these figures.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white rounded-lg p-4 border border-amber-100">
+                      <p className="text-sm text-gray-600">Total Paid Rights (opening)</p>
+                      <p className="text-xl font-bold text-gray-900 mt-1">
+                        {formatCurrency(contract.opening_rights_paid ?? 0)}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 border border-amber-100">
+                      <p className="text-sm text-gray-600">Outstanding Rights Balance (opening)</p>
+                      <p className="text-xl font-bold text-gray-900 mt-1">
+                        {formatCurrency(contract.opening_rights_balance ?? 0)}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 border border-amber-100">
+                      <p className="text-sm text-gray-600">Total Paid Rentals (opening)</p>
+                      <p className="text-xl font-bold text-gray-900 mt-1">
+                        {formatCurrency(contract.opening_rental_paid ?? 0)}
+                      </p>
+                    </div>
+                    {contract.opening_balance_notes && (
+                      <div className="bg-white rounded-lg p-4 border border-amber-100 md:col-span-2">
+                        <p className="text-sm text-gray-600">Notes / Source</p>
+                        <p className="text-sm font-medium text-gray-900 mt-1">{contract.opening_balance_notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Outstanding Balance */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Outstanding Balance
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Previous or other unpaid rental balance carried into billing statements.
+                    </p>
+                  </div>
+                  {canEdit && (
+                    <button
+                      onClick={openOutstandingModal}
+                      className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      {(contract.outstanding_rental_balance ?? 0) > 0 ? 'Edit' : 'Add'} Balance
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                    <p className="text-sm text-amber-800 font-medium">Outstanding Rental Balance</p>
+                    <p className="text-2xl font-bold text-amber-900 mt-1">
+                      {formatCurrency(contract.outstanding_rental_balance ?? 0)}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    <p className="text-sm text-gray-600 font-medium">Notes / Source</p>
+                    <p className="text-base text-gray-900 mt-1">
+                      {contract.outstanding_balance_notes?.trim() || 'No notes provided'}
+                    </p>
+                  </div>
+                </div>
+                {(contract.outstanding_rental_balance ?? 0) > 0 && (
+                  <p className="text-xs text-gray-500 mt-4">
+                    This amount is included in the BALANCE line on billing statements and may be subject to the configured late payment surcharge when unpaid.
+                  </p>
+                )}
+              </div>
+
+              {/* Metadata */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Metadata</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-600">
+                  <div>
+                    <p>Created: {formatDate(contract.created_at)}</p>
+                    <p>Updated: {formatDate(contract.updated_at)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right panel: Payment Management */}
+            <div>
+              <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+                <LesseePaymentDetails
+                  lesseeId={contract.lessee_id}
+                  lesseeName={contract.lessee_name}
+                  leaseContracts={[{
+                    id: contract.id,
+                    contract_id: contract.id,
+                    contract_effective_date: contract.contract_effective_date,
+                    contract_termination_date: contract.contract_termination_date || '',
+                    principal_amount: contract.principal_amount,
+                    monthly_rights_amount: contract.monthly_rights_amount,
+                    monthly_rental_amount: contract.monthly_rental_amount,
+                    downpayment: contract.downpayment,
+                    contract_status: contract.status,
+                    property_id: contract.property_id,
+                    property_name: contract.property_name,
+                    status: contract.status,
+                  }]}
+                  hideContractSelector
+                  defaultContractId={contract.id}
+                  canRecordPayment={canRecordPayment}
+                  layout="sidebar"
+                />
+              </div>
             </div>
           </div>
         </div>

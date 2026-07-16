@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
@@ -197,6 +198,11 @@ function formatTierRate(tier: RateTier, billingModel: BillingModel = 'progressiv
 }
 
 export default function WaterworksSuppliesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const editOpenedRef = useRef(false);
+  const returnToRef = useRef<string | null>(null);
+
   const [supplies, setSupplies] = useState<WaterSupply[]>([]);
   const [defaultTiers, setDefaultTiers] = useState<RateTier[]>(DEFAULT_RATE_TIERS);
   const [formTiers, setFormTiers] = useState<RateTier[]>(cloneTiers(DEFAULT_RATE_TIERS, 'progressive'));
@@ -314,6 +320,24 @@ export default function WaterworksSuppliesPage() {
     }
     setShowModal(true);
   };
+
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || editOpenedRef.current) return;
+    editOpenedRef.current = true;
+    returnToRef.current = searchParams.get('returnTo');
+
+    (async () => {
+      try {
+        const supply = await waterworksService.getSupply(editId);
+        await openEdit(supply);
+      } catch {
+        showAlert('Water supply not found', 'Error');
+      } finally {
+        router.replace('/admin/waterworks');
+      }
+    })();
+  }, [searchParams, router]);
 
   const handleBillingModelChange = (model: BillingModel) => {
     setBillingModel(model);
@@ -493,7 +517,13 @@ export default function WaterworksSuppliesPage() {
         await waterworksService.createSupply(payload);
       }
       setShowModal(false);
-      fetchSupplies();
+      const returnTo = returnToRef.current;
+      returnToRef.current = null;
+      if (returnTo && returnTo.startsWith('/admin/waterworks/')) {
+        router.push(returnTo);
+      } else {
+        fetchSupplies();
+      }
     } catch (e: any) {
       showAlert(e.response?.data?.error || 'Failed to save supply', 'Error');
     }
@@ -598,8 +628,22 @@ export default function WaterworksSuppliesPage() {
                 <tbody className="divide-y divide-gray-200">
                   {supplies.map((s) => (
                     <tr key={s.supply_id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-mono">{s.supply_code}</td>
-                      <td className="px-4 py-3 text-sm font-medium">{s.supply_name}</td>
+                      <td className="px-4 py-3 text-sm font-mono">
+                        <Link
+                          href={`/admin/waterworks/${s.supply_id}`}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {s.supply_code}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium">
+                        <Link
+                          href={`/admin/waterworks/${s.supply_id}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {s.supply_name}
+                        </Link>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{s.location || '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         <div>Read: {formatReadingSchedule(s)}</div>
@@ -615,6 +659,7 @@ export default function WaterworksSuppliesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm space-x-2">
+                        <Link href={`/admin/waterworks/${s.supply_id}`} className="text-emerald-700 hover:underline">View</Link>
                         <Link href={`/admin/waterworks/accounts?supply_id=${s.supply_id}`} className="text-blue-600 hover:underline">Accounts</Link>
                         <Link href={`/admin/waterworks/rate-computation?supply=${s.supply_id}`} className="text-amber-700 hover:underline">Rates</Link>
                         <button onClick={() => openReaders(s.supply_id)} className="text-indigo-600 hover:underline">Readers</button>
@@ -644,7 +689,10 @@ export default function WaterworksSuppliesPage() {
               type="button"
               aria-label="Close"
               className="absolute inset-0 bg-black/50"
-              onClick={() => setShowModal(false)}
+              onClick={() => {
+                returnToRef.current = null;
+                setShowModal(false);
+              }}
             />
             <div
               role="dialog"
@@ -656,7 +704,10 @@ export default function WaterworksSuppliesPage() {
                   <h2 className="text-lg font-bold">{editing ? 'Edit Supply' : 'New Water Supply'}</h2>
                   <button
                     type="button"
-                    onClick={() => setShowModal(false)}
+                    onClick={() => {
+                returnToRef.current = null;
+                setShowModal(false);
+              }}
                     className="text-2xl leading-none text-gray-400 hover:text-gray-600"
                     aria-label="Close"
                   >
@@ -965,7 +1016,15 @@ export default function WaterworksSuppliesPage() {
               </div>
               </div>
               <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-4 flex justify-end gap-2">
-                <button onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 border rounded-lg text-sm">Cancel</button>
+                <button
+                  onClick={() => {
+                    returnToRef.current = null;
+                    setShowModal(false);
+                  }}
+                  className="px-4 py-2 text-gray-600 border rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
                 <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Save</button>
               </div>
             </div>

@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import api from '@/services/api';
+import Pagination from '@/components/Pagination';
+
+const PAGE_SIZE = 5;
 
 interface PaymentRecord {
   id: number;
@@ -53,6 +56,7 @@ interface LesseePaymentDetailsProps {
   hideContractSelector?: boolean;
   defaultContractId?: number;
   canRecordPayment?: boolean;
+  layout?: 'default' | 'sidebar';
 }
 
 const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
@@ -62,7 +66,9 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
   hideContractSelector = false,
   defaultContractId,
   canRecordPayment = true,
+  layout = 'default',
 }) => {
+  const isSidebar = layout === 'sidebar';
   const [selectedContractId, setSelectedContractId] = useState<number | null>(() => {
     if (defaultContractId) return defaultContractId;
     return leaseContracts.length > 0 ? leaseContracts[0].id : null;
@@ -82,6 +88,8 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
   });
   const [submitting, setSubmitting] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [rightsPage, setRightsPage] = useState(1);
+  const [rentalPage, setRentalPage] = useState(1);
 
   // Fetch balance and payments when contract changes
   useEffect(() => {
@@ -97,6 +105,8 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
       // Fetch payments
       const paymentsRes = await api.get(`/api/rights-and-rentals/lease-contracts/${contractId}/payments`);
       setPayments(paymentsRes.data.payments || []);
+      setRightsPage(1);
+      setRentalPage(1);
       
       // Set balance from response
       if (paymentsRes.data.current_balance) {
@@ -169,12 +179,20 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
         or_number: '',
       });
       setShowPaymentForm(false);
+      setRightsPage(1);
+      setRentalPage(1);
       await fetchBalanceAndPayments(selectedContractId);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'An error occurred');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSortToggle = () => {
+    setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+    setRightsPage(1);
+    setRentalPage(1);
   };
 
   const selectedContract = leaseContracts.find((c) => c.id === selectedContractId);
@@ -188,9 +206,51 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
     return `${months[month - 1]} ${year}`;
   };
 
+  const sortPayments = (list: PaymentRecord[]) =>
+    [...list].sort((a, b) => {
+      const diff = new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime();
+      return sortOrder === 'desc' ? -diff : diff;
+    });
+
+  const rightsPayments = useMemo(
+    () => sortPayments(payments.filter((p) => p.payment_type === 'rights')),
+    [payments, sortOrder]
+  );
+
+  const rentalPayments = useMemo(
+    () => sortPayments(payments.filter((p) => p.payment_type === 'rental')),
+    [payments, sortOrder]
+  );
+
+  const rightsTotalPages = Math.max(1, Math.ceil(rightsPayments.length / PAGE_SIZE));
+  const rentalTotalPages = Math.max(1, Math.ceil(rentalPayments.length / PAGE_SIZE));
+
+  const paginatedRights = rightsPayments.slice(
+    (rightsPage - 1) * PAGE_SIZE,
+    rightsPage * PAGE_SIZE
+  );
+  const paginatedRentals = rentalPayments.slice(
+    (rentalPage - 1) * PAGE_SIZE,
+    rentalPage * PAGE_SIZE
+  );
+
+  const formGridClass = isSidebar
+    ? 'grid grid-cols-1 gap-4'
+    : 'grid grid-cols-1 md:grid-cols-2 gap-4';
+
   return (
-    <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Payment Management</h2>
+    <div
+      className={`bg-white rounded-lg shadow-md ${
+        isSidebar ? 'p-4 sm:p-5' : 'mt-8 p-6'
+      }`}
+    >
+      <h2
+        className={`font-bold text-gray-800 ${
+          isSidebar ? 'text-xl mb-4' : 'text-2xl mb-6'
+        }`}
+      >
+        Payment Management
+      </h2>
 
       {/* Contract Selection */}
       {!hideContractSelector && (
@@ -222,9 +282,9 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
       {selectedContract && (
         <>
           {/* Contract Summary */}
-          <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <div className={`mb-6 bg-blue-50 rounded-lg border border-blue-200 ${isSidebar ? 'p-3' : 'p-4'}`}>
             <h3 className="font-semibold text-gray-800 mb-3">Contract Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <div className={`grid gap-3 text-sm ${isSidebar ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div>
                 <span className="text-gray-600">Property:</span>
                 <p className="font-medium">{selectedContract.property_name}</p>
@@ -259,7 +319,9 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                 <div className="mb-6">
                   <button
                     onClick={() => setShowPaymentForm(!showPaymentForm)}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    className={`px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition ${
+                      isSidebar ? 'w-full sm:w-auto' : ''
+                    }`}
                   >
                     {showPaymentForm ? 'Cancel' : 'Record Payment'}
                   </button>
@@ -268,10 +330,10 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
 
               {/* Payment Form */}
               {canRecordPayment && showPaymentForm && (
-                <div className="mb-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
+                <div className={`mb-6 bg-gray-50 rounded-lg border border-gray-200 ${isSidebar ? 'p-4' : 'p-6'}`}>
                   <h3 className="text-lg font-semibold mb-4 text-gray-800">Record New Payment</h3>
                   <form onSubmit={handleSubmitPayment} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={formGridClass}>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Payment Date *
@@ -300,7 +362,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={formGridClass}>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Rights Payment Amount (₱)
@@ -333,7 +395,7 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex gap-3">
+                    <div className={`flex gap-3 ${isSidebar ? 'flex-col sm:flex-row' : ''}`}>
                       <button
                         type="submit"
                         disabled={submitting}
@@ -372,12 +434,12 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                     </span>
                   </div>
                 )}
-                <div className="flex items-center justify-between mb-4">
+                <div className={`flex mb-4 gap-3 ${isSidebar ? 'flex-col sm:flex-row sm:items-center sm:justify-between' : 'items-center justify-between'}`}>
                   <h3 className="text-lg font-semibold text-gray-800">Payment History</h3>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600">Sort by date:</span>
                     <button
-                      onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                      onClick={handleSortToggle}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors"
                     >
                       {sortOrder === 'desc' ? (
@@ -406,136 +468,142 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                 ) : (
                   <div className="space-y-6">
                     {/* Rights Payments */}
-                    {(() => {
-                      const rightsPayments = payments
-                        .filter(p => p.payment_type === 'rights')
-                        .sort((a, b) => {
-                          const diff = new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime();
-                          return sortOrder === 'desc' ? -diff : diff;
-                        });
-                      return (
-                        <div>
-                          <h4 className="text-sm font-semibold text-green-700 uppercase tracking-wide mb-2 flex items-center gap-2">
-                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>
-                            Rights Payments
-                            <span className="text-gray-400 font-normal normal-case tracking-normal">({rightsPayments.length} record{rightsPayments.length !== 1 ? 's' : ''})</span>
-                          </h4>
-                          {rightsPayments.length === 0 ? (
-                            <div className="text-center py-4 bg-green-50 rounded-lg text-gray-500 text-sm">
-                              No rights payments recorded yet
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="w-full border-collapse">
-                                <thead>
-                                  <tr className="bg-green-50 border border-green-200">
-                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
-                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
-                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
-                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Balance</th>
-                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
-                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
+                    <div>
+                      <h4 className="text-sm font-semibold text-green-700 uppercase tracking-wide mb-2 flex items-center gap-2">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>
+                        Rights Payments
+                        <span className="text-gray-400 font-normal normal-case tracking-normal">
+                          ({rightsPayments.length} record{rightsPayments.length !== 1 ? 's' : ''})
+                        </span>
+                      </h4>
+                      {rightsPayments.length === 0 ? (
+                        <div className="text-center py-4 bg-green-50 rounded-lg text-gray-500 text-sm">
+                          No rights payments recorded yet
+                        </div>
+                      ) : (
+                        <>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse min-w-[520px]">
+                              <thead>
+                                <tr className="bg-green-50 border border-green-200">
+                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
+                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
+                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Balance</th>
+                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {paginatedRights.map((payment) => (
+                                  <tr key={`rights-${payment.id}`} className="border border-gray-200 hover:bg-green-50/50">
+                                    <td className="px-3 py-2 text-sm text-gray-700">
+                                      {new Date(payment.payment_date).toLocaleDateString()}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-600">
+                                      {formatPeriod(payment.period_month, payment.period_year)}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
+                                      ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-sm text-gray-700">
+                                      ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                    <td className="px-3 py-2 text-right text-sm">
+                                      <Link
+                                        href={paymentDetailHref(payment)}
+                                        className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                      >
+                                        View
+                                      </Link>
+                                    </td>
                                   </tr>
-                                </thead>
-                                <tbody>
-                                  {rightsPayments.map((payment) => (
-                                    <tr key={`rights-${payment.id}`} className="border border-gray-200 hover:bg-green-50/50">
-                                      <td className="px-4 py-2 text-sm text-gray-700">
-                                        {new Date(payment.payment_date).toLocaleDateString()}
-                                      </td>
-                                      <td className="px-4 py-2 text-sm text-gray-600">
-                                        {formatPeriod(payment.period_month, payment.period_year)}
-                                      </td>
-                                      <td className="px-4 py-2 text-right text-sm font-medium text-gray-700">
-                                        ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td className="px-4 py-2 text-right text-sm text-gray-700">
-                                        ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td className="px-4 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
-                                      <td className="px-4 py-2 text-right text-sm">
-                                        <Link
-                                          href={paymentDetailHref(payment)}
-                                          className="text-indigo-600 hover:text-indigo-800 font-medium"
-                                        >
-                                          View
-                                        </Link>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          {rightsPayments.length > PAGE_SIZE && (
+                            <div className="mt-3">
+                              <Pagination
+                                currentPage={Math.min(rightsPage, rightsTotalPages)}
+                                totalPages={rightsTotalPages}
+                                onPageChange={setRightsPage}
+                              />
                             </div>
                           )}
-                        </div>
-                      );
-                    })()}
+                        </>
+                      )}
+                    </div>
 
                     {/* Rental Payments */}
-                    {(() => {
-                      const rentalPayments = payments
-                        .filter(p => p.payment_type === 'rental')
-                        .sort((a, b) => {
-                          const diff = new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime();
-                          return sortOrder === 'desc' ? -diff : diff;
-                        });
-                      return (
-                        <div>
-                          <h4 className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-2 flex items-center gap-2">
-                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                            Rental Payments
-                            <span className="text-gray-400 font-normal normal-case tracking-normal">({rentalPayments.length} record{rentalPayments.length !== 1 ? 's' : ''})</span>
-                          </h4>
-                          {rentalPayments.length === 0 ? (
-                            <div className="text-center py-4 bg-blue-50 rounded-lg text-gray-500 text-sm">
-                              No rental payments recorded yet
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="w-full border-collapse">
-                                <thead>
-                                  <tr className="bg-blue-50 border border-blue-200">
-                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
-                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
-                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
-                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Total Collected</th>
-                                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
-                                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-2 flex items-center gap-2">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                        Rental Payments
+                        <span className="text-gray-400 font-normal normal-case tracking-normal">
+                          ({rentalPayments.length} record{rentalPayments.length !== 1 ? 's' : ''})
+                        </span>
+                      </h4>
+                      {rentalPayments.length === 0 ? (
+                        <div className="text-center py-4 bg-blue-50 rounded-lg text-gray-500 text-sm">
+                          No rental payments recorded yet
+                        </div>
+                      ) : (
+                        <>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse min-w-[520px]">
+                              <thead>
+                                <tr className="bg-blue-50 border border-blue-200">
+                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
+                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
+                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Total Collected</th>
+                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {paginatedRentals.map((payment) => (
+                                  <tr key={`rental-${payment.id}`} className="border border-gray-200 hover:bg-blue-50/50">
+                                    <td className="px-3 py-2 text-sm text-gray-700">
+                                      {new Date(payment.payment_date).toLocaleDateString()}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-600">
+                                      {formatPeriod(payment.period_month, payment.period_year)}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
+                                      ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-sm text-gray-700">
+                                      ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                    <td className="px-3 py-2 text-right text-sm">
+                                      <Link
+                                        href={paymentDetailHref(payment)}
+                                        className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                      >
+                                        View
+                                      </Link>
+                                    </td>
                                   </tr>
-                                </thead>
-                                <tbody>
-                                  {rentalPayments.map((payment) => (
-                                    <tr key={`rental-${payment.id}`} className="border border-gray-200 hover:bg-blue-50/50">
-                                      <td className="px-4 py-2 text-sm text-gray-700">
-                                        {new Date(payment.payment_date).toLocaleDateString()}
-                                      </td>
-                                      <td className="px-4 py-2 text-sm text-gray-600">
-                                        {formatPeriod(payment.period_month, payment.period_year)}
-                                      </td>
-                                      <td className="px-4 py-2 text-right text-sm font-medium text-gray-700">
-                                        ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td className="px-4 py-2 text-right text-sm text-gray-700">
-                                        ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td className="px-4 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
-                                      <td className="px-4 py-2 text-right text-sm">
-                                        <Link
-                                          href={paymentDetailHref(payment)}
-                                          className="text-indigo-600 hover:text-indigo-800 font-medium"
-                                        >
-                                          View
-                                        </Link>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          {rentalPayments.length > PAGE_SIZE && (
+                            <div className="mt-3">
+                              <Pagination
+                                currentPage={Math.min(rentalPage, rentalTotalPages)}
+                                totalPages={rentalTotalPages}
+                                onPageChange={setRentalPage}
+                              />
                             </div>
                           )}
-                        </div>
-                      );
-                    })()}
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
