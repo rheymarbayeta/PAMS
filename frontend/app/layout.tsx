@@ -5,6 +5,7 @@ import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { LocaleProvider } from '@/i18n/LocaleProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -58,7 +59,9 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           <ToastProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <LocaleProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </LocaleProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

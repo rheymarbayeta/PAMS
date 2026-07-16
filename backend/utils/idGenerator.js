@@ -45,6 +45,13 @@ const ID_PREFIXES = {
   WW_RATE_STAFF: 'wwrcst',
   WW_RATE_OPEX: 'wwrcox',
   WW_RATE_ASSET: 'wwrcas',
+  ORG_UNIT: 'org',
+  APPROVAL_CHAIN: 'achain',
+  APPROVAL_CHAIN_STEP: 'acstep',
+  APPROVAL_STEP: 'astep',
+  ATTACHMENT: 'att',
+  SCHEDULE: 'sched',
+  INTEGRATION_EVENT: 'ievt',
 };
 
 /**

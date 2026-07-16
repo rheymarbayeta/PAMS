@@ -209,36 +209,45 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 
 ### Phase 3 — Enterprise Depth (4–8 months calendar)
 
-**Goal:** Future-ready municipal platform.
+**Goal:** Future-ready municipal platform.  
+**Status:** Implemented 2026-07-16 (MVP foundations)
 
-| ID | Work item | Priority |
-|----|-----------|----------|
-| P3-1 | Org units / multi-office or barangay data scoping | Medium |
-| P3-2 | Configurable approval chains & SLA escalations | Medium |
-| P3-3 | Document management (attachments for citations, leases, IDs) | Medium |
-| P3-4 | Scheduled reports + BI (Metabase/Power BI on read replica) | Medium–Low |
-| P3-5 | Citizen/self-service portal MVP | Medium |
-| P3-6 | Integration hub (SMS, treasury, GIS) | Medium |
-| P3-7 | Optional extract: Document Worker + Integration Service | Low |
-| P3-8 | AI-assisted anomalies / assisted assessment (optional) | Low |
-| P3-9 | Localization (Filipino/Cebuano) if required | Low |
-| P3-10 | Deep system health monitoring (DB, queue, ETRACS, disk) | Medium |
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P3-1 | Org units / multi-office or barangay data scoping | Medium | Done |
+| P3-2 | Configurable approval chains & SLA escalations | Medium | Done |
+| P3-3 | Document management (attachments for citations, leases, IDs) | Medium | Done |
+| P3-4 | Scheduled reports + BI (Metabase/Power BI on read replica) | Medium–Low | Done (scheduler MVP; BI external) |
+| P3-5 | Citizen/self-service portal MVP | Medium | Done |
+| P3-6 | Integration hub (SMS, treasury, GIS) | Medium | Done (stubs + event log) |
+| P3-7 | Optional extract: Document Worker + Integration Service | Low | Done (`npm run worker`) |
+| P3-8 | AI-assisted anomalies / assisted assessment (optional) | Low | Done (rule-based) |
+| P3-9 | Localization (Filipino/Cebuano) if required | Low | Done (foundation) |
+| P3-10 | Deep system health monitoring (DB, queue, ETRACS, disk) | Medium | Done |
 
 **Deliverables**
 
-- Multi-office ready access model
-- Portal + integrations as prioritized by LGU
-- Analytics without OLTP contention
-- Optional AI features on clean APIs
+- Multi-office ready access model (`org_units`, user assignment, applications list filter)
+- Portal + integrations as prioritized by LGU (`/portal`, `/api/integrations`)
+- Analytics without OLTP contention (scheduled report jobs; BI still external/read-replica)
+- Optional AI features on clean APIs (`/api/anomalies`)
 
 **Exit criteria**
 
-- [ ] Data can be scoped by office/org unit
-- [ ] External integrations use managed APIs/events
-- [ ] Reporting load isolated from transactional DB (or accepted equivalent)
-- [ ] Stakeholder UAT signed for portal/integrations in scope
+- [x] Data can be scoped by office/org unit
+- [x] External integrations use managed APIs/events
+- [x] Reporting load isolated from transactional DB (or accepted equivalent via async jobs)
+- [ ] Stakeholder UAT signed for portal/integrations in scope *(ops/product)*
 
 **Dependencies:** Phase 2 data/model foundations (entity, payments, modules)
+
+**Notes**
+
+- Migration: `database/migrations/add_phase3_enterprise.sql`
+- Admin UIs: Org Units, Approval Chains, Scheduled Reports, Integrations, Health, Anomalies
+- Citizen track: `/portal/track` → `GET /api/portal/track`
+- Worker: `backend/worker.js` (`npm run worker`) runs scheduler independently of API if desired
+- Set `SMS_ENABLED=true` to move SMS beyond stub logging
 
 ---
 

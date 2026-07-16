@@ -1,4 +1,5 @@
 const repo = require('./applicationsRepository');
+const { orgUnitFilterClause } = require('../../utils/orgScope');
 
 /**
  * Applications domain service (permits module — Phase 1 pilot).
@@ -7,7 +8,7 @@ const repo = require('./applicationsRepository');
 function buildListFilters(user, query) {
   const conditions = [];
   const params = [];
-  const { status, search, permit_type } = query;
+  const { status, search, permit_type, org_unit_id } = query;
 
   const roles = user.roles || [];
   const seesAll = roles.some((r) => ['SuperAdmin', 'Admin', 'Viewer'].includes(r));
@@ -61,6 +62,18 @@ function buildListFilters(user, query) {
       e.entity_name LIKE ?
     )`);
     params.push(term, term, term);
+  }
+
+  if (org_unit_id) {
+    conditions.push('a.org_unit_id = ?');
+    params.push(org_unit_id);
+  } else {
+    const orgFilter = orgUnitFilterClause(user, 'a.org_unit_id');
+    if (orgFilter.sql) {
+      // orgUnitFilterClause returns " AND (...)" — strip leading AND for conditions array
+      conditions.push(orgFilter.sql.replace(/^\s*AND\s+/i, ''));
+      params.push(...orgFilter.params);
+    }
   }
 
   const whereClause = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';

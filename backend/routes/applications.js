@@ -12,6 +12,7 @@ const { paginated, fail } = require('../utils/apiResponse');
 const { requirePermission } = require('../middleware/auth');
 const { recordLedgerEntry } = require('../utils/paymentLedger');
 const { assertPermitTransition } = require('../utils/stateMachines');
+const { startApprovalChain, approveCurrentStep, rejectCurrentStep } = require('../utils/approvalEngine');
 
 const router = express.Router();
 
@@ -1144,6 +1145,10 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     await connection.commit();
 
+    try {
+      await startApprovalChain(applicationId, app.permit_type_id || null);
+    } catch (_) { /* optional */ }
+
     console.log('\n========== SUBMIT ASSESSMENT LOGGING ==========');
     console.log('[SubmitAssessment] Step 1 - Input Parameters:');
     console.log('  - applicationId:', applicationId);
@@ -1211,6 +1216,19 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
 
     if (apps[0].status !== 'Pending Approval') {
       return res.status(400).json({ error: 'Application is not pending approval' });
+    }
+
+    const stepResult = await approveCurrentStep(applicationId, req.user.user_id);
+    if (stepResult.usedChain && !stepResult.done) {
+      await pool.execute(
+        'UPDATE applications SET approver_id = ? WHERE application_id = ?',
+        [req.user.user_id, applicationId]
+      );
+      return res.json({
+        message: 'Approval step recorded; awaiting next approver',
+        chain_complete: false,
+        step: stepResult.step?.role_name,
+      });
     }
 
     assertPermitTransition(apps[0].status, 'Approved');
@@ -1443,6 +1461,8 @@ router.put('/:id/reject', authorize('SuperAdmin', 'Admin', 'Approver'), async (r
     if (apps[0].status !== 'Pending Approval') {
       return res.status(400).json({ error: 'Application is not pending approval' });
     }
+
+    await rejectCurrentStep(applicationId, req.user.user_id, reason || null);
 
     // Update application
     await pool.execute(

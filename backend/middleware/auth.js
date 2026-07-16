@@ -6,6 +6,8 @@ const {
   userHasPermission,
 } = require('../config/permissions');
 
+const { attachOrgUnitsToUser } = require('../utils/orgScope');
+
 /**
  * Verify a JWT string and return decoded payload.
  * Throws on invalid/expired tokens.
@@ -52,6 +54,7 @@ async function loadUserWithRoles(userId) {
   user.role_ids = userRoles.map((r) => r.role_id);
   user.role_name = user.roles[0] || null;
   user.permissions = resolvePermissionsForRoles(userRoles);
+  await attachOrgUnitsToUser(user);
 
   return user;
 }

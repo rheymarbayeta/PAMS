@@ -32,6 +32,8 @@ const DEFAULT_PERMISSIONS = {
     'waterworks_payments',
     'waterworks_reports',
     'tasks_view',
+    'org_units_manage',
+    'integrations_manage',
   ],
   'Rights and Rentals Manager': [
     'dashboard_view',

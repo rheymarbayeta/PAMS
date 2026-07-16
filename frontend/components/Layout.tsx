@@ -8,6 +8,7 @@ import Image from 'next/image';
 import NotificationBell from './NotificationBell';
 import ChatNotification from './ChatNotification';
 import { resolveNavItems } from '@/config/moduleRegistry';
+import { LocaleSwitcher } from '@/i18n/LocaleProvider';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -370,6 +371,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
 
           <div className="flex items-center space-x-3">
+            <LocaleSwitcher className="hidden sm:inline-flex text-slate-600" />
             <NotificationBell />
 
             {/* User menu */}

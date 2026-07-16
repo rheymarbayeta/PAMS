@@ -37,6 +37,15 @@ const tasksRoutes = require('./routes/tasks');
 const jobsRoutes = require('./routes/jobs');
 const auditRoutes = require('./routes/audit');
 const paymentsLedgerRoutes = require('./routes/paymentsLedger');
+const orgUnitsRoutes = require('./routes/orgUnits');
+const approvalChainsRoutes = require('./routes/approvalChains');
+const attachmentsRoutes = require('./routes/attachments');
+const scheduledReportsRoutes = require('./routes/scheduledReports');
+const portalRoutes = require('./routes/portal');
+const integrationsRoutes = require('./routes/integrations');
+const anomaliesRoutes = require('./routes/anomalies');
+const { getDetailedHealth } = require('./utils/healthCheck');
+const { startScheduler } = require('./utils/reportScheduler');
 const path = require('path');
 const fs = require('fs');
 
@@ -156,6 +165,20 @@ app.use('/api/audit', auditRoutes);
 console.log('  ✓ /api/audit');
 app.use('/api/payments-ledger', paymentsLedgerRoutes);
 console.log('  ✓ /api/payments-ledger');
+app.use('/api/org-units', orgUnitsRoutes);
+console.log('  ✓ /api/org-units');
+app.use('/api/approval-chains', approvalChainsRoutes);
+console.log('  ✓ /api/approval-chains');
+app.use('/api/attachments', attachmentsRoutes);
+console.log('  ✓ /api/attachments');
+app.use('/api/scheduled-reports', scheduledReportsRoutes);
+console.log('  ✓ /api/scheduled-reports');
+app.use('/api/portal', portalRoutes);
+console.log('  ✓ /api/portal');
+app.use('/api/integrations', integrationsRoutes);
+console.log('  ✓ /api/integrations');
+app.use('/api/anomalies', anomaliesRoutes);
+console.log('  ✓ /api/anomalies');
 console.log('✅ All routes registered');
 
 // API v1 aliases (same handlers — Phase 1)
@@ -165,6 +188,8 @@ app.use('/api/v1/tasks', tasksRoutes);
 app.use('/api/v1/jobs', jobsRoutes);
 app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/payments-ledger', paymentsLedgerRoutes);
+app.use('/api/v1/portal', portalRoutes);
+app.use('/api/v1/org-units', orgUnitsRoutes);
 
 app.get('/api/v1/openapi.yaml', (req, res) => {
   try {
@@ -174,9 +199,19 @@ app.get('/api/v1/openapi.yaml', (req, res) => {
   }
 });
 
-// Health check
+// Health check (liveness) + detailed (auth optional for ops)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'PAMS API is running' });
+});
+
+app.get('/api/health/detailed', async (req, res) => {
+  try {
+    const detailed = await getDetailedHealth();
+    const code = detailed.status === 'error' ? 503 : 200;
+    res.status(code).json(detailed);
+  } catch (err) {
+    res.status(503).json({ status: 'error', error: err.message });
+  }
 });
 
 // Track online users: Map<userId, Set<socketId>>
@@ -289,6 +324,9 @@ async function startServer() {
         port: PORT,
         env: process.env.NODE_ENV || 'development',
       });
+      if (process.env.DISABLE_SCHEDULER !== 'true') {
+        startScheduler(Number(process.env.SCHEDULER_INTERVAL_MS) || 5 * 60 * 1000);
+      }
     });
   } catch (error) {
     logger.error('Failed to start server', error);

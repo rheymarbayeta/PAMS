@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
@@ -919,6 +920,14 @@ export default function ApplicationDetailPage() {
                     </div>
                   </>
                 )}
+              </div>
+
+              <div className="mt-4">
+                <AttachmentsPanel
+                  module="permits"
+                  referenceType="application"
+                  referenceId={String(params.id)}
+                />
               </div>
             </div>
 

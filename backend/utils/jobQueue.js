@@ -68,6 +68,14 @@ async function processJob(id) {
         base64: Buffer.from(buffer).toString('base64'),
         filename: `permit-${job.payload.applicationId}.pdf`,
       };
+    } else if (job.type === 'scheduled_report') {
+      result = {
+        reportType: job.payload.reportType,
+        scheduleId: job.payload.scheduleId,
+        generatedAt: new Date().toISOString(),
+        note: 'Scheduled report job accepted (export adapters plug in here)',
+        params: job.payload.params || {},
+      };
     } else {
       throw new Error(`Unknown job type: ${job.type}`);
     }
@@ -86,4 +94,14 @@ async function processJob(id) {
 module.exports = {
   createJob,
   getJob,
+  getQueueStats() {
+    const all = Array.from(jobs.values());
+    return {
+      total: all.length,
+      queued: all.filter((j) => j.status === 'queued').length,
+      running: all.filter((j) => j.status === 'running').length,
+      completed: all.filter((j) => j.status === 'completed').length,
+      failed: all.filter((j) => j.status === 'failed').length,
+    };
+  },
 };

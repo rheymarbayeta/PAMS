@@ -8,7 +8,7 @@ module.exports = {
     {
       id: 'platform',
       description: 'Auth, users, roles, settings, notifications, chat, audit, jobs, tasks',
-      routes: ['/api/auth', '/api/users', '/api/roles', '/api/settings', '/api/notifications', '/api/messages', '/api/tasks', '/api/jobs', '/api/audit', '/api/payments-ledger'],
+      routes: ['/api/auth', '/api/users', '/api/roles', '/api/settings', '/api/notifications', '/api/messages', '/api/tasks', '/api/jobs', '/api/audit', '/api/payments-ledger', '/api/org-units', '/api/approval-chains', '/api/attachments', '/api/scheduled-reports', '/api/integrations', '/api/anomalies', '/api/health'],
     },
     {
       id: 'permits',
@@ -41,10 +41,16 @@ module.exports = {
       code: 'modules/markets',
     },
     {
+      id: 'portal',
+      description: 'Citizen self-service portal',
+      routes: ['/api/portal'],
+      code: 'routes/portal',
+    },
+    {
       id: 'integrations',
-      description: 'ETRACS and external systems',
-      routes: [],
-      code: 'utils/etracsService',
+      description: 'ETRACS, SMS, treasury, GIS hub',
+      routes: ['/api/integrations'],
+      code: 'utils/integrationHub',
     },
   ],
 };
