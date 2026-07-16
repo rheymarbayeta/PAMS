@@ -35,6 +35,8 @@ const priceMonitoringRoutes = require('./routes/priceMonitoring');
 const waterworksRoutes = require('./routes/waterworks');
 const tasksRoutes = require('./routes/tasks');
 const jobsRoutes = require('./routes/jobs');
+const auditRoutes = require('./routes/audit');
+const paymentsLedgerRoutes = require('./routes/paymentsLedger');
 const path = require('path');
 const fs = require('fs');
 
@@ -150,6 +152,10 @@ app.use('/api/tasks', tasksRoutes);
 console.log('  ✓ /api/tasks');
 app.use('/api/jobs', jobsRoutes);
 console.log('  ✓ /api/jobs');
+app.use('/api/audit', auditRoutes);
+console.log('  ✓ /api/audit');
+app.use('/api/payments-ledger', paymentsLedgerRoutes);
+console.log('  ✓ /api/payments-ledger');
 console.log('✅ All routes registered');
 
 // API v1 aliases (same handlers — Phase 1)
@@ -157,6 +163,8 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/applications', applicationRoutes);
 app.use('/api/v1/tasks', tasksRoutes);
 app.use('/api/v1/jobs', jobsRoutes);
+app.use('/api/v1/audit', auditRoutes);
+app.use('/api/v1/payments-ledger', paymentsLedgerRoutes);
 
 app.get('/api/v1/openapi.yaml', (req, res) => {
   try {

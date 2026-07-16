@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { submitReading } from '../../src/api/waterworks';
+import { enqueueOfflineReading, syncOfflineReadings, listOfflineReadings } from '../../src/storage/offlineQueue';
 
 export default function ReadingScreen() {
   const { accountId, number, last } = useLocalSearchParams<{ accountId: string; number?: string; last?: string }>();
@@ -17,6 +18,15 @@ export default function ReadingScreen() {
 
   const consumption = currentReading ? Math.max(0, parseFloat(currentReading) - previousReading) : 0;
 
+  const payload = (current: number) => ({
+    account_id: accountId!,
+    current_reading: current,
+    notes: notes || undefined,
+    period_month: now.getMonth() + 1,
+    period_year: now.getFullYear(),
+    reading_date: now.toISOString().split('T')[0],
+  });
+
   const handleSubmit = async () => {
     const current = parseFloat(currentReading);
     if (Number.isNaN(current) || current < 0) {
@@ -29,19 +39,24 @@ export default function ReadingScreen() {
     }
     try {
       setLoading(true);
-      await submitReading({
-        account_id: accountId!,
-        current_reading: current,
-        notes: notes || undefined,
-        period_month: now.getMonth() + 1,
-        period_year: now.getFullYear(),
-        reading_date: now.toISOString().split('T')[0],
-      });
+      await submitReading(payload(current));
+      await syncOfflineReadings(submitReading);
       Alert.alert('Success', 'Reading submitted for verification', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
-      Alert.alert('Error', e.response?.data?.error || 'Failed to submit reading');
+      const offline = e?.message === 'Network Error' || !e?.response;
+      if (offline) {
+        await enqueueOfflineReading(payload(current));
+        const queued = await listOfflineReadings();
+        Alert.alert(
+          'Saved offline',
+          `No connection. Reading queued (${queued.length} pending). It will sync when you submit again online.`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else {
+        Alert.alert('Error', e.response?.data?.error || 'Failed to submit reading');
+      }
     } finally {
       setLoading(false);
     }

@@ -7,6 +7,50 @@ const etracsService = require('../utils/etracsService');
 
 const router = express.Router();
 
+async function getEntityRelatedModules(entityId) {
+  const related = {
+    citations_count: 0,
+    waterworks_accounts: [],
+    lease_contracts_count: 0,
+    ledger_total: 0,
+  };
+
+  try {
+    const [cite] = await pool.execute(
+      'SELECT COUNT(*) AS c FROM citations WHERE entity_id = ?',
+      [entityId]
+    );
+    related.citations_count = cite[0]?.c || 0;
+  } catch (_) { /* optional */ }
+
+  try {
+    const [ww] = await pool.execute(
+      `SELECT account_id, account_number, status, supply_id
+       FROM ww_consumer_accounts WHERE entity_id = ? LIMIT 50`,
+      [entityId]
+    );
+    related.waterworks_accounts = ww;
+  } catch (_) { /* optional */ }
+
+  try {
+    const [led] = await pool.execute(
+      'SELECT COALESCE(SUM(amount),0) AS total FROM payment_ledger WHERE entity_id = ?',
+      [entityId]
+    );
+    related.ledger_total = parseFloat(led[0]?.total || 0);
+  } catch (_) { /* optional until migration */ }
+
+  try {
+    const [leases] = await pool.execute(
+      'SELECT COUNT(*) AS c FROM lease_contracts WHERE entity_id = ?',
+      [entityId]
+    );
+    related.lease_contracts_count = leases[0]?.c || 0;
+  } catch (_) { /* schema may not link leases to entities yet */ }
+
+  return related;
+}
+
 // All routes require authentication
 router.use(authenticate);
 
@@ -97,7 +141,8 @@ router.get('/:id', async (req, res) => {
 
     res.json({
       ...entities[0],
-      applications: applicationsWithStatus
+      applications: applicationsWithStatus,
+      related: await getEntityRelatedModules(req.params.id),
     });
   } catch (error) {
     console.error('Get entity error:', error);

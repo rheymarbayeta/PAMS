@@ -10,6 +10,7 @@ const {
   getRentalRunningTotalStart,
   normalizeLegacyAccountInput,
 } = require('../utils/leaseContractBalances');
+const { recordLedgerEntry } = require('../utils/paymentLedger');
 
 const router = express.Router();
 
@@ -2282,9 +2283,43 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
 
         if (recordedRights) {
           await recalculateRightsPaymentBalances(connection, contract_id);
+          try {
+            await recordLedgerEntry({
+              module: 'rentals',
+              referenceType: 'lease_rights',
+              referenceId: String(contract_id),
+              amount: parseFloat(rights_amount),
+              paymentDate: payment_date,
+              receiptNo: or_number || null,
+              recordedBy: req.user.user_id,
+              sourceTable: 'payment_history_rights',
+              sourceId: String(contract_id),
+              notes: `Rights ${period_month}/${period_year}`,
+              connection,
+            });
+          } catch (ledgerErr) {
+            console.error('[RR Payment] Rights ledger write failed (non-fatal):', ledgerErr.message);
+          }
         }
         if (recordedRental) {
           await recalculateRentalPaymentBalances(connection, contract_id);
+          try {
+            await recordLedgerEntry({
+              module: 'rentals',
+              referenceType: 'lease_rental',
+              referenceId: String(contract_id),
+              amount: parseFloat(rental_amount),
+              paymentDate: payment_date,
+              receiptNo: or_number || null,
+              recordedBy: req.user.user_id,
+              sourceTable: 'payment_history_rental',
+              sourceId: String(contract_id),
+              notes: `Rental ${period_month}/${period_year}`,
+              connection,
+            });
+          } catch (ledgerErr) {
+            console.error('[RR Payment] Rental ledger write failed (non-fatal):', ledgerErr.message);
+          }
         }
 
         const [rightsPaid] = await connection.query(`

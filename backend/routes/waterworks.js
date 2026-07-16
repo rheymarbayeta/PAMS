@@ -3,6 +3,8 @@ const pool = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
+const { assertReadingTransition } = require('../utils/stateMachines');
+const { recordLedgerEntry } = require('../utils/paymentLedger');
 const {
   BILLING_MODELS,
   calculateBillAmounts,
@@ -1380,6 +1382,14 @@ router.put('/readings/:id/verify', authorize(...WW_MANAGER_ROLES), async (req, r
         return res.status(400).json({ error: 'Reading is not pending' });
       }
 
+      const nextStatus = action === 'reject' ? 'rejected' : 'verified';
+      try {
+        assertReadingTransition(reading.status, nextStatus);
+      } catch (transitionErr) {
+        await connection.rollback();
+        return res.status(400).json({ error: transitionErr.message });
+      }
+
       if (action === 'reject') {
         await connection.query(
           `UPDATE ww_meter_readings SET status = 'rejected', verified_by = ?, verified_at = NOW(), rejection_reason = ?
@@ -1833,7 +1843,7 @@ router.post('/accounts/:id/payments', authorize(...WW_MANAGER_ROLES), async (req
     }
 
     const [accounts] = await pool.execute(
-      'SELECT account_id FROM ww_consumer_accounts WHERE account_id = ?',
+      'SELECT account_id, entity_id FROM ww_consumer_accounts WHERE account_id = ?',
       [accountId]
     );
     if (!accounts.length) return res.status(404).json({ error: 'Account not found' });
@@ -1876,6 +1886,26 @@ router.post('/accounts/:id/payments', authorize(...WW_MANAGER_ROLES), async (req
             [Math.min(amount, openingDues), accountId]
           );
         }
+      }
+
+      try {
+        await recordLedgerEntry({
+          module: 'waterworks',
+          referenceType: bill_id ? 'bill' : 'account',
+          referenceId: bill_id || accountId,
+          entityId: accounts[0].entity_id || null,
+          amount,
+          paymentDate: finalDate,
+          receiptNo: or_number || null,
+          method: payment_method || 'cash',
+          recordedBy: req.user.user_id,
+          sourceTable: 'ww_payments',
+          sourceId: paymentId,
+          notes: notes || null,
+          connection,
+        });
+      } catch (ledgerErr) {
+        console.error('[WW Payment] Ledger write failed (non-fatal):', ledgerErr.message);
       }
 
       await connection.commit();

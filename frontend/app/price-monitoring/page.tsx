@@ -6,6 +6,8 @@ import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
+import { formatCurrency, formatMarketType } from '@/features/price-monitoring/formatters';
+import { TrendBadge, FormField, Modal, LoadingSpinner } from '@/features/price-monitoring/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Category { category_id: string; category_name: string; description: string; commodity_count: number; }
@@ -21,26 +23,6 @@ type Tab = 'overview' | 'commodities' | 'markets' | 'records' | 'alerts' | 'anal
 const MARKET_TYPES = ['public_market', 'supermarket', 'grocery', 'sari_sari', 'wet_market', 'other'];
 const SOURCE_TYPES = ['field_survey', 'market_report', 'official_bulletin', 'other'];
 const ALERT_TYPES = [{ value: 'above', label: 'Price Above Threshold' }, { value: 'below', label: 'Price Below Threshold' }, { value: 'change_pct', label: '% Change Threshold' }];
-
-function formatCurrency(v: number | string | undefined | null) {
-  const n = typeof v === 'string' ? parseFloat(v) : (v ?? 0);
-  if (isNaN(n)) return '₱0.00';
-  return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatMarketType(t: string) {
-  return t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function TrendBadge({ pct }: { pct: number }) {
-  if (pct === 0 || isNaN(pct)) return <span className="text-slate-400 text-xs">—</span>;
-  const up = pct > 0;
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
-    </span>
-  );
-}
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function PriceMonitoringPage() {
@@ -1577,42 +1559,5 @@ function AnalysisTab() {
   );
 }
 
-// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
+// ─── SHARED STYLES ────────────────────────────────────────────────────────────
 const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none';
-
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h2 className="font-semibold text-slate-800 text-lg">{title}</h2>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="px-6 py-5">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function LoadingSpinner({ label }: { label?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
-      <svg className="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-      </svg>
-      <span className="text-sm">{label || 'Loading...'}</span>
-    </div>
-  );
-}

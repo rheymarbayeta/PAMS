@@ -29,6 +29,12 @@ interface EntityDetail {
   phone: string | null;
   address: string | null;
   applications: Application[];
+  related?: {
+    citations_count?: number;
+    waterworks_accounts?: Array<{ account_id: string; account_number: string; status: string; supply_id?: string }>;
+    lease_contracts_count?: number;
+    ledger_total?: number;
+  };
 }
 
 export default function EntityDetailPage() {
@@ -254,7 +260,7 @@ export default function EntityDetailPage() {
                 </div>
               </div>
               <Link
-                href={`/applications/new?entity_id=${entity.entity_id}`}
+                href={`/applications/create?entity_id=${entity.entity_id}`}
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium hover:from-emerald-700 hover:to-emerald-800 focus:ring-4 focus:ring-emerald-200 transition-all duration-200 shadow-lg shadow-emerald-200"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -264,6 +270,47 @@ export default function EntityDetailPage() {
               </Link>
             </div>
           </div>
+
+          {/* Cross-module related */}
+          {entity.related && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-3">Related modules</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Citations</p>
+                  <p className="text-xl font-semibold text-slate-800">{entity.related.citations_count || 0}</p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Lease contracts</p>
+                  <p className="text-xl font-semibold text-slate-800">{entity.related.lease_contracts_count || 0}</p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Ledger total</p>
+                  <p className="text-xl font-semibold text-slate-800">
+                    ₱{(entity.related.ledger_total || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Waterworks accounts</p>
+                  <p className="text-xl font-semibold text-slate-800">{entity.related.waterworks_accounts?.length || 0}</p>
+                  {!!entity.related.waterworks_accounts?.length && (
+                    <ul className="mt-2 space-y-1">
+                      {entity.related.waterworks_accounts.slice(0, 3).map((a) => (
+                        <li key={a.account_id}>
+                          <Link
+                            href={`/admin/waterworks/accounts/${a.account_id}`}
+                            className="text-xs text-emerald-700 hover:underline"
+                          >
+                            {a.account_number || a.account_id}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

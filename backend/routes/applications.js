@@ -10,6 +10,8 @@ const { generatePermitNumber, generatePermitNumberForRenewal } = require('../uti
 const applicationsService = require('../modules/permits/applicationsService');
 const { paginated, fail } = require('../utils/apiResponse');
 const { requirePermission } = require('../middleware/auth');
+const { recordLedgerEntry } = require('../utils/paymentLedger');
+const { assertPermitTransition } = require('../utils/stateMachines');
 
 const router = express.Router();
 
@@ -1211,6 +1213,8 @@ router.put('/:id/approve', authorize('SuperAdmin', 'Admin', 'Approver'), async (
       return res.status(400).json({ error: 'Application is not pending approval' });
     }
 
+    assertPermitTransition(apps[0].status, 'Approved');
+
     // Update application
     await pool.execute(
       'UPDATE applications SET status = ?, approver_id = ? WHERE application_id = ?',
@@ -1569,6 +1573,23 @@ router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Application Creato
 
     console.log('[Payment] Payment recorded successfully with ID:', payment_id);
 
+    try {
+      await recordLedgerEntry({
+        module: 'permits',
+        referenceType: 'application',
+        referenceId: applicationId,
+        entityId: apps[0].entity_id || null,
+        amount: decimalAmount,
+        paymentDate: payment_date,
+        receiptNo: official_receipt_no,
+        recordedBy: req.user.user_id,
+        sourceTable: 'payments',
+        sourceId: payment_id,
+      });
+    } catch (ledgerErr) {
+      console.error('[Payment] Ledger write failed (non-fatal):', ledgerErr.message);
+    }
+
     // Check total payments vs total amount due
     const [assessmentRecord] = await pool.execute(
       'SELECT total_amount_due FROM assessment_records WHERE application_id = ?',
@@ -1591,6 +1612,7 @@ router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Application Creato
       // If fully paid, update application status to "Paid"
       if (totalPaid >= totalAmountDue && totalAmountDue > 0) {
         console.log(`[Payment] Application ${applicationId} is fully paid. Updating status to "Paid"`);
+        assertPermitTransition(apps[0].status, 'Paid');
         await pool.execute(
           'UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
           ['Paid', applicationId]
@@ -1702,6 +1724,8 @@ router.put('/:id/issue', authorize('SuperAdmin', 'Admin', 'Approver'), async (re
       return res.status(400).json({ error: 'Permit can only be issued for paid applications' });
     }
 
+    assertPermitTransition(apps[0].status, 'Issued');
+
     // Determine validity date based on validity_type
     let validityDate = apps[0].validity_date || null; // Preserve existing validity_date from creation (convert undefined to null)
     let validityMsg = 'No validity date set';
@@ -1810,6 +1834,8 @@ router.put('/:id/release', authorize('SuperAdmin', 'Admin', 'Approver'), async (
     if (apps[0].status !== 'Issued') {
       return res.status(400).json({ error: 'Permit can only be released for issued applications' });
     }
+
+    assertPermitTransition(apps[0].status, 'Released');
 
     // Update status to Released
     await pool.execute(

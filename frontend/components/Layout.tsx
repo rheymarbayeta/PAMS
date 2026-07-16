@@ -7,12 +7,22 @@ import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import NotificationBell from './NotificationBell';
 import ChatNotification from './ChatNotification';
+import { resolveNavItems } from '@/config/moduleRegistry';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 const navIcons: Record<string, JSX.Element> = {
+  '/admin/audit': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+  ),
+  '/reports/hub': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+  ),
+  '/admin/payments-ledger': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+  ),
   '/tasks': (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
   ),
@@ -136,73 +146,25 @@ export default function Layout({ children }: LayoutProps) {
     !can(['applications', 'entities', 'citations', 'waterworks_view']) &&
     !canAccess(['SuperAdmin', 'Admin']);
 
-  const navLinks = [
-    { href: '/dashboard', label: 'Dashboard', show: true },
-    { href: '/tasks', label: 'My Work', show: can(['tasks_view', 'applications', 'waterworks_view', 'dashboard_view']) },
-    { href: '/applications', label: 'Applications', show: can('applications') && !isWaterworksOnly && !isRrOnly },
-    { href: '/admin/entities', label: 'Entities', show: can('entities') && !isWaterworksOnly && !isRrOnly },
-    {
-      href: '/citations',
-      label: 'Citations',
-      show: can(['citations', 'view_citations', 'create_citations']) && !isWaterworksOnly && !isRrOnly,
-    },
-    {
-      href: '/admin/rights-and-rentals',
-      label: 'Rights & Rentals',
-      show: can('rights_rentals_view') && !isWaterworksOnly,
-    },
-    { href: '/admin/waterworks', label: 'Waterworks', show: can('waterworks_view') },
-    {
-      href: '/chat',
-      label: 'Chat',
-      show: can('chat') && !isWaterworksOnly && !isRrOnly,
-    },
-    {
-      href: '/price-monitoring',
-      label: 'Price Monitoring',
-      show: can('price_monitoring') && !isWaterworksOnly && !isRrOnly,
-    },
-    {
-      href: '/solar',
-      label: 'Solar Designer',
-      show: can('solar_designer'),
-    },
-  ];
+  const { main: navLinksRaw, admin: adminLinksRaw } = resolveNavItems(can, {
+    isWaterworksOnly,
+    isRrOnly,
+  });
 
-  const showAdmin =
-    canAccess(['SuperAdmin', 'Admin']) ||
-    can(['permits', 'users', 'settings', 'enforcers', 'reports', 'view_reports']);
+  const navLinks = navLinksRaw.map((item) => ({
+    href: item.href,
+    label: item.label,
+    show: true,
+  }));
 
-  const adminLinks: { href: string; label: string; activePaths?: string[]; show?: boolean }[] = [
-    {
-      href: '/admin/permit-types',
-      label: 'Permit Setup',
-      activePaths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees', '/admin/quantity-fees'],
-      show: can(['permits', 'settings']) || canAccess(['SuperAdmin', 'Admin']),
-    },
-    {
-      href: '/admin/enforcers',
-      label: 'Enforcers',
-      show: can('enforcers') || canAccess(['SuperAdmin', 'Admin']),
-    },
-    {
-      href: '/admin/users',
-      label: 'Users',
-      show: can('users') || canAccess(['SuperAdmin', 'Admin']),
-    },
-    {
-      href: '/reports',
-      label: 'Reports',
-      activePaths: ['/reports', '/admin/reports', '/admin/templates', '/admin/report-templates'],
-      show: can(['reports', 'view_reports']) || canAccess(['SuperAdmin', 'Admin']),
-    },
-    {
-      href: '/admin/settings',
-      label: 'Settings',
-      activePaths: ['/admin/settings'],
-      show: can('settings') || canAccess(['SuperAdmin', 'Admin']),
-    },
-  ];
+  const adminLinks = adminLinksRaw.map((item) => ({
+    href: item.href,
+    label: item.label,
+    activePaths: item.activePaths,
+    show: true,
+  }));
+
+  const showAdmin = adminLinks.length > 0;
 
   // Page groups: show SubNav tabs when on any page in a group
   const pageGroups = [
@@ -302,7 +264,7 @@ export default function Layout({ children }: LayoutProps) {
             onMouseEnter={e => { if (!isActive(link.href)) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--sidebar-hover)'; }}
             onMouseLeave={e => { if (!isActive(link.href)) (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
           >
-            <span className="flex-shrink-0">{navIcons[link.href]}</span>
+            <span className="flex-shrink-0">{navIcons[link.href] || navIcons['/dashboard']}</span>
             <span className={`ml-3 truncate ${!mobile ? 'hidden lg:block' : ''}`}>{link.label}</span>
           </Link>
         ))}
@@ -330,7 +292,7 @@ export default function Layout({ children }: LayoutProps) {
                 onMouseEnter={e => { if (!isLinkActive(link.href, link.activePaths)) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--sidebar-hover)'; }}
                 onMouseLeave={e => { if (!isLinkActive(link.href, link.activePaths)) (e.currentTarget as HTMLElement).style.backgroundColor = ''; }}
               >
-                <span className="flex-shrink-0">{navIcons[link.href]}</span>
+                <span className="flex-shrink-0">{navIcons[link.href] || navIcons['/dashboard']}</span>
                 <span className={`ml-3 truncate ${!mobile ? 'hidden lg:block' : ''}`}>{link.label}</span>
               </Link>
             ))}

@@ -234,7 +234,7 @@ export default function ApplicationsPage() {
             </div>
             {hasRole(['SuperAdmin', 'Admin', 'Application Creator']) && (
               <Link
-                href="/applications/new"
+                href="/applications/create"
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>

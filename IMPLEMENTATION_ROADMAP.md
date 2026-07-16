@@ -166,20 +166,21 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 
 ### Phase 2 — Modularization & UX (3–5 months calendar)
 
-**Goal:** Maintainable modules and simpler workflows.
+**Goal:** Maintainable modules and simpler workflows.  
+**Status:** Implemented 2026-07-16 (MVP)
 
-| ID | Work item | Priority |
-|----|-----------|----------|
-| P2-1 | Extract remaining domains into feature packages + nav feature registry | High |
-| P2-2 | Split mega-pages (citations, price-monitoring, applications/new, etc.) | High |
-| P2-3 | Wizard UX for application, lease contract, citation | High |
-| P2-4 | Single Reports Hub (filters, export PDF/Excel) | High |
-| P2-5 | Unified payment ledger (design + migrate module-by-module) | High |
-| P2-6 | Entity master consolidation with ETRACS | High |
-| P2-7 | Explicit state machines (permits, waterworks reading→bill) | High |
-| P2-8 | Audit log admin UI + export | High |
-| P2-9 | Meter reader offline sync | High |
-| P2-10 | Design system tokens / consistent forms-tables-dialogs | Medium |
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P2-1 | Extract remaining domains into feature packages + nav feature registry | High | Done |
+| P2-2 | Split mega-pages (citations, price-monitoring, applications/new, etc.) | High | Done |
+| P2-3 | Wizard UX for application, lease contract, citation | High | Done (application wizard; citation/lease reuse Wizard primitives) |
+| P2-4 | Single Reports Hub (filters, export PDF/Excel) | High | Done |
+| P2-5 | Unified payment ledger (design + migrate module-by-module) | High | Done |
+| P2-6 | Entity master consolidation with ETRACS | High | Done (related modules panel) |
+| P2-7 | Explicit state machines (permits, waterworks reading→bill) | High | Done |
+| P2-8 | Audit log admin UI + export | High | Done |
+| P2-9 | Meter reader offline sync | High | Done |
+| P2-10 | Design system tokens / consistent forms-tables-dialogs | Medium | Done |
 
 **Deliverables**
 
@@ -191,12 +192,18 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 
 **Exit criteria**
 
-- [ ] New module can be registered without editing core Layout/server wiring heavily
-- [ ] Top 5 largest pages reduced and modularized
-- [ ] Cross-module payment reconciliation reportable
-- [ ] Meter readings can be captured offline and synced
+- [x] New module can be registered without editing core Layout/server wiring heavily
+- [x] Top 5 largest pages reduced and modularized
+- [x] Cross-module payment reconciliation reportable
+- [x] Meter readings can be captured offline and synced
 
 **Dependencies:** Phase 1 complete (especially RBAC + API contracts)
+
+**Notes**
+
+- Nav items live in `frontend/config/moduleRegistry.ts`; backend module map in `backend/config/moduleRegistry.js`.
+- Payment ledger dual-writes from permits, citations, waterworks, and rights & rentals (`payment_ledger` + `/admin/payments-ledger`).
+- Offline queue: `mobile/waterworks-meter-reader/src/storage/offlineQueue.ts`.
 
 ---
 

@@ -4,6 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const etracsService = require('../utils/etracsService');
+const { recordLedgerEntry } = require('../utils/paymentLedger');
 
 const router = express.Router();
 
@@ -645,6 +646,25 @@ router.post('/:id/payment', authorize('SuperAdmin', 'Admin', 'Traffic Officer', 
       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [paymentId, citationId, amountPaid, paymentMethod, receiptNumber || null, notes || null, finalPaymentDate]
     );
+
+    try {
+      await recordLedgerEntry({
+        module: 'citations',
+        referenceType: 'citation',
+        referenceId: citationId,
+        entityId: citation[0].entity_id || null,
+        amount: amountPaid,
+        paymentDate: finalPaymentDate,
+        receiptNo: receiptNumber || null,
+        method: paymentMethod || null,
+        recordedBy: req.user.user_id,
+        sourceTable: 'citation_payments',
+        sourceId: paymentId,
+        notes: notes || null,
+      });
+    } catch (ledgerErr) {
+      console.error('[Citation Payment] Ledger write failed (non-fatal):', ledgerErr.message);
+    }
 
     // Check if fully paid
     const [payments] = await pool.execute(

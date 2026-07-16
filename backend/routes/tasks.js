@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
     if (userHasPermission(user, ['waterworks_manage', 'waterworks_view'])) {
       try {
         const [readings] = await pool.execute(
-          `SELECT r.reading_id, r.account_id, r.reading_date, r.reading_value, r.created_at,
+          `SELECT r.reading_id, r.account_id, r.reading_date, r.current_reading, r.created_at,
                   a.account_number, s.supply_name
            FROM ww_meter_readings r
            LEFT JOIN ww_consumer_accounts a ON a.account_id = r.account_id
