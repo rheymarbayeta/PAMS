@@ -242,12 +242,13 @@ export default function ApplicationDetailPage() {
         router.push(`/applications/${application?.application_id}/assess`);
       }
     } catch (error: any) {
-      // If not found (404), go to manual assess page
-      if (error.response?.status === 404) {
+      // 404 = no quantity config; also fall through to manual assess on transient server errors
+      // so Assess is never blocked by missing quantity-fee schema.
+      if (error.response?.status === 404 || error.response?.status === 500) {
         router.push(`/applications/${application?.application_id}/assess`);
-      } else {
-        showAlert('Error loading assessment configuration', 'Error');
+        return;
       }
+      showAlert('Error loading assessment configuration', 'Error');
     }
   };
 

@@ -39,6 +39,10 @@ router.get('/assessment-rules/:ruleId/quantity-fee', authorize('SuperAdmin', 'Ad
 
     res.json(config);
   } catch (error) {
+    // Missing table / schema drift → treat as "no quantity config" so Assess can continue
+    if (error.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(404).json({ message: 'No quantity fee configuration found for this rule' });
+    }
     console.error('Get quantity fee config error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
