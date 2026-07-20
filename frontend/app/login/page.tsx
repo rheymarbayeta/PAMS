@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { getHomePath } from '@/utils/homePath';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -10,12 +11,12 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const router = useRouter();
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    router.push('/dashboard');
+    router.push(getHomePath(user));
     return null;
   }
 
@@ -25,8 +26,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(username, password);
-      router.push('/dashboard');
+      const loggedInUser = await login(username, password);
+      router.push(getHomePath(loggedInUser));
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

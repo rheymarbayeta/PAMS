@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { getHomePath } from '@/utils/homePath';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -40,7 +41,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       }
 
       if (user && !isAllowed) {
-        router.push('/dashboard');
+        router.push(getHomePath(user));
       }
     }
   }, [isAuthenticated, loading, user, isAllowed, router]);

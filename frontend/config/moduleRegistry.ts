@@ -10,6 +10,8 @@ export type NavItem = {
   section: 'main' | 'admin';
   /** Permission(s) required (any match). Empty = always for authenticated users. */
   permissions?: string[];
+  /** Role(s) required (any match). When set, user must have at least one. */
+  roles?: string[];
   /** Hide when user only has these scoped modules */
   hideWhenOnly?: Array<'waterworks' | 'rentals'>;
   activePaths?: string[];
@@ -158,9 +160,16 @@ export function resolvePageGroup(pathname: string): PageGroup | undefined {
 
 export function resolveNavItems(
   hasPermission: (p: string | string[]) => boolean,
-  opts: { isWaterworksOnly: boolean; isRrOnly: boolean }
+  opts: {
+    isWaterworksOnly: boolean;
+    isRrOnly: boolean;
+    hasRole?: (role: string | string[]) => boolean;
+  }
 ): { main: NavItem[]; admin: NavItem[] } {
   const visible = (item: NavItem) => {
+    if (item.roles && item.roles.length > 0) {
+      if (!opts.hasRole || !opts.hasRole(item.roles)) return false;
+    }
     if (item.permissions && item.permissions.length > 0 && !hasPermission(item.permissions)) {
       return false;
     }

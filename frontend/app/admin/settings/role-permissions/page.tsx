@@ -80,7 +80,7 @@ const ROLE_PERMISSIONS_MAP: Record<string, { label: string; permissions: string[
 };
 
 const AVAILABLE_PERMISSIONS: Permission[] = [
-  { permission_id: 'dashboard_view', permission_name: 'View Dashboard', category: 'Dashboard', description: 'Access main dashboard' },
+  { permission_id: 'dashboard_view', permission_name: 'View Dashboard', category: 'Dashboard', description: 'Access main dashboard (section content still follows other permissions)' },
   { permission_id: 'applications', permission_name: 'Manage Applications', category: 'Applications', description: 'View and manage permit applications' },
   { permission_id: 'assess_fees', permission_name: 'Assess Fees', category: 'Applications', description: 'Calculate and assess fees for applications' },
   { permission_id: 'approve_applications', permission_name: 'Approve Applications', category: 'Applications', description: 'Approve applications' },

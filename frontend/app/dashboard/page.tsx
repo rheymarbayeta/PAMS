@@ -110,7 +110,7 @@ const donutColors = ['#0d9488', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6', '#ec
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, hasPermission } = useAuth();
   const [data, setData] = useState<FullStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [permitCategories, setPermitCategories] = useState<string[]>([]);
@@ -122,21 +122,20 @@ export default function DashboardPage() {
   const [calendarDayApps, setCalendarDayApps] = useState<{type: string; app: any}[]>([]);
 
   const userRoles: string[] = user?.roles || (user?.role_name ? [user.role_name] : []);
-  const isRRManager = userRoles.includes('Rights and Rentals Manager');
-  const isTrafficOfficer = userRoles.includes('Traffic Officer');
-  const isAssessor = userRoles.includes('Assessor');
-  const isApprover = userRoles.includes('Approver');
-  const isAppCreator = userRoles.includes('Application Creator');
-  const isAdmin = userRoles.some(r => r === 'SuperAdmin' || r === 'Admin');
 
-  // Show permit sections for admin-like roles and permit-related roles
-  const showPermits = isAdmin || isAssessor || isApprover || isAppCreator;
-  // Show citations for admin and traffic officer
-  const showCitations = isAdmin || isTrafficOfficer;
-  // Show R&R for admin and R&R manager
-  const showRR = isAdmin || isRRManager;
-  // Show cockfight calendar for admin and permit-related roles
-  const showCockfightCalendar = isAdmin || isAssessor || isApprover || isAppCreator;
+  // Section visibility follows permissions (not a fixed admin-only page)
+  const showPermits = hasPermission([
+    'applications',
+    'create_applications',
+    'assess_fees',
+    'approve_applications',
+  ]);
+  const showCitations = hasPermission(['citations', 'view_citations', 'create_citations']);
+  const showRR = hasPermission('rights_rentals_view');
+  const showWaterworks = hasPermission('waterworks_view');
+  const showSolar = hasPermission('solar_designer');
+  const showCockfightCalendar = showPermits;
+  const hasAnyModule = showPermits || showCitations || showRR || showWaterworks || showSolar;
 
   useEffect(() => {
     if (showPermits) fetchPermitCategories();
@@ -167,6 +166,24 @@ export default function DashboardPage() {
       setData(response.data);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      setData({
+        permits: { pending: 0, pendingApproval: 0, approved: 0, issued: 0, released: 0, total: 0, byCategory: [], monthlyTrend: [] },
+        citations: { total: 0, paid: 0, pending: 0, totalFines: 0, collectedFines: 0 },
+        recentApplications: [],
+        recentCitations: [],
+        expiringPermits: [],
+        entities: 0,
+        rightsAndRentals: {
+          totalContracts: 0,
+          activeContracts: 0,
+          expiredContracts: 0,
+          totalLessees: 0,
+          totalProperties: 0,
+          rightsCollected: 0,
+          rentalCollected: 0,
+          recentPayments: [],
+        },
+      });
     } finally {
       setLoading(false);
     }
@@ -322,7 +339,17 @@ export default function DashboardPage() {
   ];
 
   // Role label for header subtitle
-  const roleLabel = isRRManager ? 'Rights & Rentals' : isTrafficOfficer ? 'Traffic Enforcement' : isAssessor ? 'Assessment' : isApprover ? 'Permit Approval' : isAppCreator ? 'Application Management' : 'System Overview';
+  const roleLabel = (() => {
+    if (userRoles.includes('SuperAdmin') || userRoles.includes('Admin')) return 'System Overview';
+    if (userRoles.includes('Rights and Rentals Manager')) return 'Rights & Rentals';
+    if (userRoles.includes('Traffic Officer') || userRoles.includes('Citation Manager')) return 'Traffic Enforcement';
+    if (userRoles.includes('Assessor')) return 'Assessment';
+    if (userRoles.includes('Approver')) return 'Permit Approval';
+    if (userRoles.includes('Application Creator')) return 'Application Management';
+    if (userRoles.includes('Waterworks Manager') || userRoles.includes('Meter Reader')) return 'Waterworks';
+    if (userRoles.includes('Solar Designer')) return 'Solar Designer';
+    return userRoles[0] || 'Overview';
+  })();
 
   // ── Reusable section components ──
 
@@ -684,76 +711,76 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── RIGHTS & RENTALS MANAGER ── */}
-          {isRRManager && !isAdmin && <RightsAndRentalsSection />}
-
-          {/* ── TRAFFIC OFFICER ── */}
-          {isTrafficOfficer && !isAdmin && (
+          {showPermits && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white rounded-xl border border-slate-200 p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-red-50 flex items-center justify-center"><svg className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
-                    <div><p className="text-2xl font-bold text-slate-800">{data.citations.total}</p><p className="text-xs text-slate-500">Total Citations</p></div>
-                  </div>
-                </div>
-                <div className="bg-white rounded-xl border border-slate-200 p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center"><svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></div>
-                    <div><p className="text-2xl font-bold text-slate-800">{data.citations.paid}</p><p className="text-xs text-slate-500">Citations Paid</p></div>
-                  </div>
-                  <div className="mt-3"><div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${data.citations.total > 0 ? (data.citations.paid / data.citations.total) * 100 : 0}%` }}></div></div></div>
-                </div>
-                <div className="bg-white rounded-xl border border-slate-200 p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-sky-50 flex items-center justify-center"><svg className="h-5 w-5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
-                    <div><p className="text-2xl font-bold text-slate-800">{formatCurrency(data.citations.collectedFines)}</p><p className="text-xs text-slate-500">Fines Collected</p></div>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-2">of {formatCurrency(data.citations.totalFines)} total</p>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700">Recent Citations</h3>
-                  <Link href="/citations" className="text-xs font-medium text-teal-600 hover:text-teal-700">View all</Link>
-                </div>
-                {data.recentCitations.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead><tr className="text-xs text-slate-500 border-b border-slate-100"><th className="text-left px-5 py-2.5 font-medium">Ticket #</th><th className="text-left px-5 py-2.5 font-medium">Driver</th><th className="text-left px-5 py-2.5 font-medium hidden sm:table-cell">Plate</th><th className="text-right px-5 py-2.5 font-medium">Fine</th><th className="text-center px-5 py-2.5 font-medium">Status</th></tr></thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {data.recentCitations.map((c) => (
-                          <tr key={c.citation_id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-5 py-2.5 font-medium text-slate-800">{c.ticket_number}</td>
-                            <td className="px-5 py-2.5 text-slate-600 truncate max-w-[150px]">{c.driver_name}</td>
-                            <td className="px-5 py-2.5 text-slate-600 hidden sm:table-cell">{c.plate_number}</td>
-                            <td className="px-5 py-2.5 text-right text-slate-700">{formatCurrency(c.fine_amount)}</td>
-                            <td className="px-5 py-2.5 text-center"><span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${c.payment_status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{c.payment_status}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="px-5 py-8 text-center text-sm text-slate-400">No recent citations</div>
-                )}
-              </div>
+              <PermitApplicationsSection showCalendar={showCockfightCalendar} />
+              {(showCitations || showRR || showWaterworks) && <div className="border-t border-slate-200" />}
             </>
           )}
 
-
-          {/* ── PERMIT ROLES (Assessor, Approver, App Creator) ── */}
-          {showPermits && !isAdmin && <PermitApplicationsSection showCalendar={true} />}
-
-          {/* ── ADMIN / SUPERADMIN: grouped sections ── */}
-          {isAdmin && (
+          {showCitations && (
             <>
-              <PermitApplicationsSection showCalendar={true} />
-              <div className="border-t border-slate-200" />
               <CitationsSection />
-              <div className="border-t border-slate-200" />
-              <RightsAndRentalsSection />
+              {(showRR || showWaterworks) && <div className="border-t border-slate-200" />}
             </>
+          )}
+
+          {showRR && (
+            <>
+              <RightsAndRentalsSection />
+              {showWaterworks && <div className="border-t border-slate-200" />}
+            </>
+          )}
+
+          {showWaterworks && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-sky-50 flex items-center justify-center">
+                  <svg className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3c4.97 0 9 4.03 9 9 0 3.31-1.79 6.2-4.45 7.76L12 22l-4.55-2.24A8.96 8.96 0 013 12c0-4.97 4.03-9 9-9z" /></svg>
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800">Waterworks</h2>
+                  <p className="text-xs text-slate-400">Accounts, readings, billing and payments</p>
+                </div>
+                <Link href="/admin/waterworks" className="ml-auto text-xs font-medium text-sky-600 hover:text-sky-700">View module</Link>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'Accounts', href: '/admin/waterworks/accounts' },
+                  { label: 'Readings', href: '/admin/waterworks/readings' },
+                  { label: 'Billing', href: '/admin/waterworks/billing' },
+                  { label: 'Payments', href: '/admin/waterworks/payments' },
+                ].map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md hover:border-sky-300 transition-all text-sm font-medium text-slate-700"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showSolar && !showPermits && !showCitations && !showRR && !showWaterworks && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+              <h2 className="text-base font-semibold text-slate-800 mb-2">Solar Designer</h2>
+              <p className="text-sm text-slate-500 mb-4">Open the solar design workspace to continue.</p>
+              <Link href="/solar" className="inline-flex px-4 py-2 rounded-lg bg-teal-700 text-white text-sm font-medium hover:bg-teal-800">
+                Open Solar Designer
+              </Link>
+            </div>
+          )}
+
+          {!hasAnyModule && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+              <h2 className="text-base font-semibold text-slate-800 mb-2">Welcome</h2>
+              <p className="text-sm text-slate-500 mb-4">No module widgets are available for your permissions yet. Check My Work for assigned tasks.</p>
+              <Link href="/tasks" className="inline-flex px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-900">
+                Go to My Work
+              </Link>
+            </div>
           )}
 
         </div>

@@ -8,6 +8,7 @@ import Image from 'next/image';
 import NotificationBell from './NotificationBell';
 import ChatNotification from './ChatNotification';
 import { resolveNavItems, resolvePageGroup } from '@/config/moduleRegistry';
+import { getHomePath } from '@/utils/homePath';
 import { LocaleSwitcher } from '@/i18n/LocaleProvider';
 
 interface LayoutProps {
@@ -156,6 +157,7 @@ export default function Layout({ children }: LayoutProps) {
   const { main: navLinksRaw, admin: adminLinksRaw } = resolveNavItems(can, {
     isWaterworksOnly,
     isRrOnly,
+    hasRole,
   });
 
   const navLinks = navLinksRaw.map((item) => ({
@@ -175,11 +177,13 @@ export default function Layout({ children }: LayoutProps) {
 
   const currentGroup = resolvePageGroup(pathname);
 
+  const homePath = getHomePath(user);
+
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--sidebar-bg)' }}>
       {/* Logo */}
       <div className="flex items-center h-16 px-4 flex-shrink-0">
-        <Link href="/dashboard" className="flex items-center space-x-3">
+        <Link href={homePath} className="flex items-center space-x-3">
           <Image
             src="/dalaguete-logo.png"
             alt="Municipality of Dalaguete Official Seal"
@@ -313,7 +317,7 @@ export default function Layout({ children }: LayoutProps) {
           </button>
 
           {/* Mobile logo */}
-          <Link href="/dashboard" className="flex items-center space-x-2 md:hidden mr-auto">
+          <Link href={homePath} className="flex items-center space-x-2 md:hidden mr-auto">
             <Image src="/dalaguete-logo.png" alt="PAMS" width={28} height={28} className="object-contain" />
             <span className="text-base font-bold text-slate-800">PAMS</span>
           </Link>

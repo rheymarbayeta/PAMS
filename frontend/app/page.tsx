@@ -3,20 +3,21 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { getHomePath } from '@/utils/homePath';
 
 export default function Home() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
       if (isAuthenticated) {
-        router.push('/dashboard');
+        router.push(getHomePath(user));
       } else {
         router.push('/login');
       }
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, user, router]);
 
   return (
     <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: 'var(--page-bg)' }}>

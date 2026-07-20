@@ -12,6 +12,7 @@ const { paginated, fail } = require('../utils/apiResponse');
 const { requirePermission } = require('../middleware/auth');
 const { assertPermitTransition } = require('../utils/stateMachines');
 const { startApprovalChain, approveCurrentStep, rejectCurrentStep } = require('../utils/approvalEngine');
+const { countDaysFromParameters } = require('../utils/permittedDatesQuantity');
 
 const router = express.Router();
 
@@ -782,7 +783,9 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
   try {
     const applicationId = req.params.id;
-    const { quantity_entered } = req.body;
+    let quantity_entered = req.body.quantity_entered != null
+      ? parseFloat(req.body.quantity_entered)
+      : null;
 
     // Check application status and get full details
     const [apps] = await connection.execute(
@@ -811,6 +814,20 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
     }
 
     const app = apps[0];
+
+    // Prefer day count from permitted_dates when quantity was not supplied
+    const [parametersForQty] = await connection.execute(
+      'SELECT param_name, param_value FROM application_parameters WHERE application_id = ?',
+      [applicationId]
+    );
+    const daysFromDates = countDaysFromParameters(parametersForQty);
+    if (
+      (quantity_entered == null || Number.isNaN(quantity_entered) || quantity_entered <= 0) &&
+      daysFromDates != null &&
+      daysFromDates > 0
+    ) {
+      quantity_entered = daysFromDates;
+    }
 
     // Check for quantity-based fee configuration
     let quantityFeeConfig = null;

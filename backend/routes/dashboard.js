@@ -4,9 +4,9 @@ const { authenticate, requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication; section visibility is permission-gated in the UI
 router.use(authenticate);
-router.use(requirePermission('dashboard_view'));
+router.use(requirePermission('dashboard_view', 'applications', 'citations', 'view_citations', 'create_citations', 'rights_rentals_view', 'waterworks_view', 'tasks_view', 'solar_designer', 'view_reports', 'reports'));
 
 // Get distinct permit type names for dashboard grouping
 router.get('/permit-categories', async (req, res) => {

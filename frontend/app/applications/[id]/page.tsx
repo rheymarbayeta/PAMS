@@ -10,6 +10,11 @@ import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
+import {
+  formatParamDisplayValue,
+  formatParamLabel,
+  countDaysFromParameters,
+} from '@/utils/applicationParameters';
 
 interface ApplicationDetail {
   application_id: string;
@@ -86,6 +91,7 @@ export default function ApplicationDetailPage() {
   const [quantityFeeConfig, setQuantityFeeConfig] = useState<any>(null);
   const [assessingWithQuantity, setAssessingWithQuantity] = useState(false);
   const [quantityPreview, setQuantityPreview] = useState<{baseAmount: number; additionalTotal: number; totalAmount: number} | null>(null);
+  const [quantityFromDates, setQuantityFromDates] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -234,9 +240,32 @@ export default function ApplicationDetailPage() {
           selected_fee_amount: parseFloat(response.data.selected_fee_amount || '0') || 0
         };
         setQuantityFeeConfig(config);
-        setQuantityInput('');
-        setQuantityPreview(null);
-        setShowQuantityModal(true);
+
+        const days = countDaysFromParameters(application.parameters || []);
+        if (days != null && days > 0) {
+          setQuantityInput(String(days));
+          setQuantityFromDates(true);
+          setShowQuantityModal(true);
+          // Preview after config is set — compute inline to avoid stale state
+          const baseFeeAmount = (config.selected_fee_amount || 0) * days;
+          let additionalTotal = 0;
+          if (config.additional_charges && Array.isArray(config.additional_charges)) {
+            additionalTotal = config.additional_charges.reduce(
+              (sum: number, charge: any) => sum + (parseFloat(charge.amount) || 0),
+              0
+            );
+          }
+          setQuantityPreview({
+            baseAmount: Math.round(baseFeeAmount * 100) / 100,
+            additionalTotal: Math.round(additionalTotal * 100) / 100,
+            totalAmount: Math.round((baseFeeAmount + additionalTotal) * 100) / 100,
+          });
+        } else {
+          setQuantityInput('');
+          setQuantityFromDates(false);
+          setQuantityPreview(null);
+          setShowQuantityModal(true);
+        }
       } else {
         // No quantity-based fees - go to manual assess page
         router.push(`/applications/${application?.application_id}/assess`);
@@ -779,12 +808,20 @@ export default function ApplicationDetailPage() {
                         </div>
                       ) : (
                         <dl className="space-y-2">
-                          {application.parameters.map((param, index) => (
-                            <div key={index} className="flex items-start">
-                              <dt className="w-28 text-xs font-medium text-gray-500 flex-shrink-0">{param.param_name}</dt>
-                              <dd className="text-xs text-gray-900">{param.param_value || '-'}</dd>
-                            </div>
-                          ))}
+                          {application.parameters
+                            .map((param) => {
+                              const display = formatParamDisplayValue(param, application.parameters);
+                              if (display === null) return null;
+                              return (
+                                <div key={param.param_name} className="flex items-start">
+                                  <dt className="w-28 text-xs font-medium text-gray-500 flex-shrink-0">
+                                    {formatParamLabel(param.param_name)}
+                                  </dt>
+                                  <dd className="text-xs text-gray-900">{display}</dd>
+                                </div>
+                              );
+                            })
+                            .filter(Boolean)}
                         </dl>
                       )}
                     </>
@@ -1050,7 +1087,9 @@ export default function ApplicationDetailPage() {
                   Assess {application?.permit_type_id}
                 </h2>
                 <p className="text-sm text-gray-500 mb-6">
-                  Enter the {quantityFeeConfig.quantity_label?.toLowerCase() || 'quantity'} to calculate fees
+                  {quantityFromDates
+                    ? 'Days computed from the selected permit dates'
+                    : `Enter the ${quantityFeeConfig.quantity_label?.toLowerCase() || 'quantity'} to calculate fees`}
                 </p>
 
                 {/* Quantity Input */}
@@ -1062,12 +1101,21 @@ export default function ApplicationDetailPage() {
                   {quantityFeeConfig.quantity_description && (
                     <p className="text-xs text-gray-500 mb-2">{quantityFeeConfig.quantity_description}</p>
                   )}
+                  {quantityFromDates && (
+                    <p className="text-xs text-teal-700 bg-teal-50 border border-teal-100 rounded-lg px-2.5 py-1.5 mb-2">
+                      Auto-filled from permitted dates ({quantityInput} day{quantityInput === '1' ? '' : 's'}).
+                      You can adjust if needed.
+                    </p>
+                  )}
                   <input
                     type="number"
                     min={quantityFeeConfig.min_quantity || 0}
                     max={quantityFeeConfig.max_quantity}
                     value={quantityInput}
-                    onChange={(e) => handleQuantityInputChange(e.target.value)}
+                    onChange={(e) => {
+                      setQuantityFromDates(false);
+                      handleQuantityInputChange(e.target.value);
+                    }}
                     placeholder="Enter quantity"
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                   />
@@ -1130,6 +1178,7 @@ export default function ApplicationDetailPage() {
                       setQuantityInput('');
                       setQuantityFeeConfig(null);
                       setQuantityPreview(null);
+                      setQuantityFromDates(false);
                     }}
                     className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
                   >

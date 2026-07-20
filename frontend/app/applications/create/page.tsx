@@ -1,19 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { WizardSteps, WizardNav } from '@/components/ui/Wizard';
 import { PageHeader, Button } from '@/components/ui/Primitives';
+import ParameterFields from '@/components/applications/ParameterFields';
 import api from '@/services/api';
 import { showAlert } from '@/utils/modal';
+import {
+  AppParam,
+  getDefaultParameters,
+} from '@/utils/applicationParameters';
+import { getBarangaysByMunicipality } from '@/utils/barangays';
 
 const STEPS = [
   { id: 'entity', label: 'Entity' },
   { id: 'permit', label: 'Permit' },
   { id: 'location', label: 'Location' },
+  { id: 'parameters', label: 'Parameters' },
   { id: 'review', label: 'Review' },
 ];
 
@@ -30,6 +37,7 @@ const emptyEntityForm = {
 
 export default function CreateApplicationWizardPage() {
   const router = useRouter();
+  const entitySearchRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
   const [entities, setEntities] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
@@ -37,6 +45,8 @@ export default function CreateApplicationWizardPage() {
   const [showAddEntity, setShowAddEntity] = useState(false);
   const [savingEntity, setSavingEntity] = useState(false);
   const [entityForm, setEntityForm] = useState(emptyEntityForm);
+  const [entitySearch, setEntitySearch] = useState('');
+  const [showEntityDropdown, setShowEntityDropdown] = useState(false);
   const [form, setForm] = useState({
     entity_id: '',
     entity_name: '',
@@ -45,8 +55,10 @@ export default function CreateApplicationWizardPage() {
     barangay: '',
     municipality: 'Dalaguete',
     province: 'Cebu',
+    country: 'Philippines',
     street: '',
   });
+  const [parameters, setParameters] = useState<AppParam[]>([]);
 
   const loadEntities = async () => {
     const e = await api.get('/api/entities');
@@ -56,13 +68,22 @@ export default function CreateApplicationWizardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [list, r] = await Promise.all([
+        const [list, r, settingsRes] = await Promise.all([
           loadEntities(),
           api.get('/api/assessment-rules'),
+          api.get('/api/settings').catch(() => ({ data: {} })),
         ]);
         setEntities(list);
         const active = (r.data || []).filter((x: any) => x.is_active);
         setRules(active);
+
+        const settings = settingsRes.data || {};
+        setForm((prev) => ({
+          ...prev,
+          municipality: settings.default_municipality?.value || prev.municipality,
+          province: settings.default_province?.value || prev.province,
+          country: settings.default_country?.value || prev.country,
+        }));
 
         const params = new URLSearchParams(window.location.search);
         const presetEntity = params.get('entity_id');
@@ -74,6 +95,7 @@ export default function CreateApplicationWizardPage() {
               entity_id: match.entity_id,
               entity_name: match.entity_name,
             }));
+            setEntitySearch(match.entity_name || '');
           }
         }
       } catch (err) {
@@ -82,13 +104,62 @@ export default function CreateApplicationWizardPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!entitySearchRef.current?.contains(e.target as Node)) {
+        setShowEntityDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const filteredEntities = useMemo(() => {
+    const q = entitySearch.trim().toLowerCase();
+    if (!q) return entities.slice(0, 50);
+    return entities
+      .filter((ent) => {
+        const hay = [
+          ent.entity_name,
+          ent.contact_person,
+          ent.phone,
+          ent.firstname,
+          ent.lastname,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 50);
+  }, [entities, entitySearch]);
+
+  const selectEntity = (ent: any) => {
+    setForm((f) => ({
+      ...f,
+      entity_id: ent.entity_id,
+      entity_name: ent.entity_name || '',
+    }));
+    setEntitySearch(ent.entity_name || '');
+    setShowEntityDropdown(false);
+  };
+
+  const clearEntity = () => {
+    setForm((f) => ({ ...f, entity_id: '', entity_name: '' }));
+    setEntitySearch('');
+    setShowEntityDropdown(true);
+  };
+
   const selectedRule = rules.find((r) => r.rule_id === form.rule_id);
+  const isSpecialCockfight =
+    (selectedRule?.attribute_name || '').trim().toUpperCase() === 'SPECIAL COCKFIGHT';
 
   const canNext =
     (step === 0 && !!form.entity_id) ||
     (step === 1 && !!form.rule_id) ||
     (step === 2 && !!form.barangay) ||
-    step === 3;
+    step === 3 ||
+    step === 4;
 
   const createEntity = async () => {
     if (!entityForm.entity_name.trim()) {
@@ -108,11 +179,7 @@ export default function CreateApplicationWizardPage() {
       const created = res.data;
       const list = await loadEntities();
       setEntities(list);
-      setForm((f) => ({
-        ...f,
-        entity_id: created.entity_id,
-        entity_name: created.entity_name,
-      }));
+      selectEntity(created);
       setEntityForm(emptyEntityForm);
       setShowAddEntity(false);
       showAlert('Entity created and selected');
@@ -129,16 +196,19 @@ export default function CreateApplicationWizardPage() {
       const permitLabel = selectedRule
         ? `${selectedRule.permit_type_name}${selectedRule.attribute_name ? ` - ${selectedRule.attribute_name}` : ''}`
         : form.permit_type;
+      const userParameters = parameters.filter((p) => p.param_name && p.param_value);
       const res = await api.post('/api/applications', {
         entity_id: form.entity_id,
         permit_type: permitLabel,
         rule_id: form.rule_id,
         parameters: [
-          { param_name: 'Barangay', param_value: form.barangay },
           { param_name: 'Municipality', param_value: form.municipality },
           { param_name: 'Province', param_value: form.province },
+          { param_name: 'Country', param_value: form.country },
+          { param_name: 'Barangay', param_value: form.barangay },
           { param_name: 'Street/Sitio', param_value: form.street },
-        ].filter((p) => p.param_value),
+          ...userParameters,
+        ],
       });
       showAlert('Application created');
       router.push(`/applications/${res.data.application_id || res.data.id}`);
@@ -167,7 +237,13 @@ export default function CreateApplicationWizardPage() {
                   <label className="block text-sm font-medium text-slate-700">Select entity</label>
                   <button
                     type="button"
-                    onClick={() => setShowAddEntity((v) => !v)}
+                    onClick={() => {
+                      if (!showAddEntity && entitySearch.trim() && !form.entity_id) {
+                        setEntityForm((f) => ({ ...f, entity_name: entitySearch.trim() }));
+                      }
+                      setShowAddEntity((v) => !v);
+                      setShowEntityDropdown(false);
+                    }}
                     className="text-sm font-medium text-teal-700 hover:text-teal-800 hover:underline"
                   >
                     {showAddEntity ? 'Cancel' : '+ Add new entity'}
@@ -175,25 +251,95 @@ export default function CreateApplicationWizardPage() {
                 </div>
 
                 {!showAddEntity ? (
-                  <select
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                    value={form.entity_id}
-                    onChange={(e) => {
-                      const ent = entities.find((x) => x.entity_id === e.target.value);
-                      setForm((f) => ({
-                        ...f,
-                        entity_id: e.target.value,
-                        entity_name: ent?.entity_name || '',
-                      }));
-                    }}
-                  >
-                    <option value="">Choose...</option>
-                    {entities.map((ent) => (
-                      <option key={ent.entity_id} value={ent.entity_id}>
-                        {ent.entity_name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative" ref={entitySearchRef}>
+                    <input
+                      type="text"
+                      role="combobox"
+                      aria-expanded={showEntityDropdown}
+                      aria-autocomplete="list"
+                      placeholder="Type to search entities by name…"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-9 text-sm"
+                      value={entitySearch}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setEntitySearch(value);
+                        setShowEntityDropdown(true);
+                        // Typing clears selection until user picks a result
+                        if (form.entity_id) {
+                          setForm((f) => ({ ...f, entity_id: '', entity_name: '' }));
+                        }
+                      }}
+                      onFocus={() => setShowEntityDropdown(true)}
+                    />
+                    {entitySearch && (
+                      <button
+                        type="button"
+                        onClick={clearEntity}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-lg leading-none"
+                        aria-label="Clear entity"
+                      >
+                        ×
+                      </button>
+                    )}
+
+                    {showEntityDropdown && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-auto">
+                        {filteredEntities.length > 0 ? (
+                          filteredEntities.map((ent) => (
+                            <button
+                              key={ent.entity_id}
+                              type="button"
+                              className={`w-full text-left px-3 py-2 text-sm border-b border-slate-100 last:border-b-0 hover:bg-slate-50 ${
+                                form.entity_id === ent.entity_id ? 'bg-slate-50' : ''
+                              }`}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                selectEntity(ent);
+                              }}
+                            >
+                              <div className="font-medium text-slate-800">{ent.entity_name}</div>
+                              {(ent.contact_person || ent.phone) && (
+                                <div className="text-xs text-slate-500">
+                                  {[ent.contact_person, ent.phone].filter(Boolean).join(' · ')}
+                                </div>
+                              )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-3 space-y-2">
+                            <p className="text-sm text-slate-500">
+                              No entity matching &quot;{entitySearch}&quot;
+                            </p>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 rounded-lg border border-teal-200 bg-teal-50 text-teal-800 text-sm font-medium hover:bg-teal-100"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setEntityForm((f) => ({
+                                  ...f,
+                                  entity_name: entitySearch.trim(),
+                                }));
+                                setShowAddEntity(true);
+                                setShowEntityDropdown(false);
+                              }}
+                            >
+                              + Add &quot;{entitySearch.trim() || 'new entity'}&quot;
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {form.entity_id ? (
+                      <p className="mt-1.5 text-xs text-emerald-700">
+                        Selected: {form.entity_name}
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-slate-500">
+                        Start typing a name, then pick from the list
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
                     <p className="text-sm text-slate-600">
@@ -321,6 +467,7 @@ export default function CreateApplicationWizardPage() {
                         ? `${rule.permit_type_name}${rule.attribute_name ? ` - ${rule.attribute_name}` : ''}`
                         : '',
                     }));
+                    setParameters(getDefaultParameters(rule?.attribute_name || ''));
                   }}
                 >
                   <option value="">Choose...</option>
@@ -335,30 +482,121 @@ export default function CreateApplicationWizardPage() {
 
             {step === 2 && (
               <div className="grid sm:grid-cols-2 gap-3">
-                {(['street', 'barangay', 'municipality', 'province'] as const).map((field) => (
-                  <div key={field}>
-                    <label className="block text-sm font-medium text-slate-700 capitalize">{field}</label>
-                    <input
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
-                      value={(form as any)[field]}
-                      onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-                    />
-                  </div>
-                ))}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700">Street / Sitio</label>
+                  <input
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
+                    value={form.street}
+                    onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
+                    placeholder="Optional"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Municipality</label>
+                  <input
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
+                    value={form.municipality}
+                    onChange={(e) => {
+                      const municipality = e.target.value;
+                      const barangays = getBarangaysByMunicipality(municipality);
+                      setForm((f) => ({
+                        ...f,
+                        municipality,
+                        barangay: barangays.includes(f.barangay) ? f.barangay : '',
+                      }));
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Barangay</label>
+                  <select
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white"
+                    value={form.barangay}
+                    onChange={(e) => setForm((f) => ({ ...f, barangay: e.target.value }))}
+                  >
+                    <option value="">Select barangay…</option>
+                    {getBarangaysByMunicipality(form.municipality).map((brgy) => (
+                      <option key={brgy} value={brgy}>
+                        {brgy}
+                      </option>
+                    ))}
+                  </select>
+                  {getBarangaysByMunicipality(form.municipality).length === 0 && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      No barangay list for this municipality. Set municipality to Dalaguete.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Province</label>
+                  <input
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
+                    value={form.province}
+                    onChange={(e) => setForm((f) => ({ ...f, province: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Country</label>
+                  <input
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
+                    value={form.country}
+                    onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+                  />
+                </div>
               </div>
             )}
 
             {step === 3 && (
+              <div>
+                <p className="text-sm text-slate-600 mb-3">
+                  Permit fields for{' '}
+                  <span className="font-medium text-slate-800">
+                    {selectedRule?.attribute_name || form.permit_type || 'this permit'}
+                  </span>
+                </p>
+                {parameters.length === 0 ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    No default parameters for this permit. Go back and re-select the permit type.
+                  </p>
+                ) : (
+                  <ParameterFields
+                    parameters={parameters}
+                    onChange={setParameters}
+                    address={{
+                      street: form.street,
+                      barangay: form.barangay,
+                      municipality: form.municipality,
+                      province: form.province,
+                      country: form.country,
+                    }}
+                    isSpecialCockfight={isSpecialCockfight}
+                  />
+                )}
+              </div>
+            )}
+
+            {step === 4 && (
               <dl className="text-sm space-y-2">
                 <div className="flex justify-between gap-4"><dt className="text-slate-500">Entity</dt><dd className="font-medium">{form.entity_name}</dd></div>
                 <div className="flex justify-between gap-4"><dt className="text-slate-500">Permit</dt><dd className="font-medium text-right">{form.permit_type}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-slate-500">Location</dt><dd className="font-medium text-right">{[form.street, form.barangay, form.municipality, form.province].filter(Boolean).join(', ')}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-slate-500">Location</dt><dd className="font-medium text-right">{[form.street, form.barangay, form.municipality, form.province, form.country].filter(Boolean).join(', ')}</dd></div>
+                {parameters
+                  .filter((p) => p.param_name !== 'permitted_dates' && p.param_value)
+                  .map((p) => (
+                    <div key={p.param_name} className="flex justify-between gap-4">
+                      <dt className="text-slate-500">{p.param_name}</dt>
+                      <dd className="font-medium text-right">{p.param_value}</dd>
+                    </div>
+                  ))}
               </dl>
             )}
 
             <WizardNav
               onBack={step > 0 ? () => setStep((s) => s - 1) : undefined}
               onNext={() => {
+                if (step === 1 && form.rule_id && parameters.length === 0) {
+                  setParameters(getDefaultParameters(selectedRule?.attribute_name || ''));
+                }
                 if (step < STEPS.length - 1) setStep((s) => s + 1);
                 else submit();
               }}

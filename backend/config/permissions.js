@@ -85,7 +85,7 @@ const DEFAULT_PERMISSIONS = {
     'waterworks_reports',
     'tasks_view',
   ],
-  'Meter Reader': ['waterworks_mobile_read', 'tasks_view'],
+  'Meter Reader': ['dashboard_view', 'waterworks_mobile_read', 'tasks_view', 'waterworks_view'],
   'Application Creator': [
     'dashboard_view',
     'applications',
