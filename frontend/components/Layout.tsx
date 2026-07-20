@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import NotificationBell from './NotificationBell';
 import ChatNotification from './ChatNotification';
-import { resolveNavItems } from '@/config/moduleRegistry';
+import { resolveNavItems, resolvePageGroup } from '@/config/moduleRegistry';
 import { LocaleSwitcher } from '@/i18n/LocaleProvider';
 
 interface LayoutProps {
@@ -26,6 +26,9 @@ const navIcons: Record<string, JSX.Element> = {
   ),
   '/admin/portal-payments': (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+  ),
+  '/finance': (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
   ),
   '/tasks': (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
@@ -170,57 +173,7 @@ export default function Layout({ children }: LayoutProps) {
 
   const showAdmin = adminLinks.length > 0;
 
-  // Page groups: show SubNav tabs when on any page in a group
-  const pageGroups = [
-    {
-      paths: ['/admin/permit-types', '/admin/attributes', '/admin/rules', '/admin/fees', '/admin/quantity-fees'],
-      tabs: [
-        { href: '/admin/permit-types', label: 'Permit Types' },
-        { href: '/admin/attributes', label: 'Attributes' },
-        { href: '/admin/rules', label: 'Assessment Rules' },
-        { href: '/admin/fees', label: 'Fees' },
-        { href: '/admin/quantity-fees', label: 'Quantity Fees' },
-      ],
-    },
-    {
-      paths: ['/admin/rights-and-rentals'],
-      tabs: [
-        { href: '/admin/rights-and-rentals', label: 'Lessees' },
-        { href: '/admin/rights-and-rentals/properties', label: 'Properties' },
-        { href: '/admin/rights-and-rentals/lease-contracts', label: 'Lease Contracts' },
-        { href: '/admin/rights-and-rentals/reports', label: 'Reports' },
-      ],
-    },
-    {
-      paths: ['/admin/waterworks'],
-      tabs: [
-        { href: '/admin/waterworks', label: 'Supplies' },
-        { href: '/admin/waterworks/accounts', label: 'Accounts' },
-        { href: '/admin/waterworks/readings', label: 'Readings' },
-        { href: '/admin/waterworks/billing', label: 'Billing' },
-        { href: '/admin/waterworks/payments', label: 'Payments' },
-        { href: '/admin/waterworks/rate-computation', label: 'Rate Computation' },
-        { href: '/admin/waterworks/reports', label: 'Reports' },
-      ],
-    },
-    {
-      paths: ['/reports'],
-      tabs: [
-        { href: '/reports', label: 'Permit Reports' },
-      ],
-    },
-    {
-      paths: ['/admin/settings', '/admin/settings/role-permissions', '/admin/settings/theme'],
-      tabs: [
-        { href: '/admin/settings', label: 'General' },
-        { href: '/admin/settings/permit-display', label: 'Permit Display' },
-        { href: '/admin/settings/role-permissions', label: 'Role Permissions' },
-        { href: '/admin/settings/theme', label: 'Theme' },
-      ],
-    },
-  ];
-
-  const currentGroup = pageGroups.find(g => g.paths.some(p => pathname === p || pathname.startsWith(p + '/')));
+  const currentGroup = resolvePageGroup(pathname);
 
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--sidebar-bg)' }}>

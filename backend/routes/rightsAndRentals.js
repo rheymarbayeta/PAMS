@@ -5,12 +5,10 @@ const { logAction } = require('../utils/auditLogger');
 const { generateId, ID_PREFIXES } = require('../utils/idGenerator');
 const {
   getRightsBalanceSnapshot,
-  getRightsRunningBalanceStart,
   getRentalTotalCollected,
   getRentalRunningTotalStart,
   normalizeLegacyAccountInput,
 } = require('../utils/leaseContractBalances');
-const { recordLedgerEntry } = require('../utils/paymentLedger');
 const rentalsService = require('../modules/rentals/rentalsService');
 
 const router = express.Router();
@@ -1577,51 +1575,8 @@ function getPaymentTableName(type) {
   return type === 'rights' ? 'payment_history_rights' : 'payment_history_rental';
 }
 
-async function recalculateRightsPaymentBalances(connection, contractId) {
-  const [contract] = await connection.query(
-    `SELECT principal_amount, downpayment, is_legacy_account, opening_rights_paid, opening_rights_balance
-     FROM lease_contracts WHERE id = ?`,
-    [contractId]
-  );
-  if (!contract.length) return;
-
-  const [payments] = await connection.query(
-    `SELECT id, amount_paid FROM payment_history_rights
-     WHERE lease_contract_id = ? ORDER BY payment_date ASC, id ASC`,
-    [contractId]
-  );
-
-  let runningBalance = getRightsRunningBalanceStart(contract[0]);
-  for (const payment of payments) {
-    runningBalance -= parseFloat(payment.amount_paid) || 0;
-    await connection.query(
-      'UPDATE payment_history_rights SET balance = ?, collectible = ? WHERE id = ?',
-      [runningBalance, parseFloat(payment.amount_paid) || 0, payment.id]
-    );
-  }
-}
-
-async function recalculateRentalPaymentBalances(connection, contractId) {
-  const [contract] = await connection.query(
-    `SELECT opening_rental_paid, is_legacy_account FROM lease_contracts WHERE id = ?`,
-    [contractId]
-  );
-
-  const [payments] = await connection.query(
-    `SELECT id, amount_paid FROM payment_history_rental
-     WHERE lease_contract_id = ? ORDER BY payment_date ASC, id ASC`,
-    [contractId]
-  );
-
-  let runningTotal = contract.length ? getRentalRunningTotalStart(contract[0]) : 0;
-  for (const payment of payments) {
-    runningTotal += parseFloat(payment.amount_paid) || 0;
-    await connection.query(
-      'UPDATE payment_history_rental SET balance = ?, collectible = ? WHERE id = ?',
-      [runningTotal, parseFloat(payment.amount_paid) || 0, payment.id]
-    );
-  }
-}
+const recalculateRightsPaymentBalances = rentalsService.recalculateRightsPaymentBalances;
+const recalculateRentalPaymentBalances = rentalsService.recalculateRentalPaymentBalances;
 
 async function fetchPaymentWithContext(connection, type, id) {
   const table = getPaymentTableName(type);
@@ -2169,152 +2124,28 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
 router.post('/lease-contracts/:contract_id/payments/record', async (req, res) => {
   try {
     authorize('SuperAdmin', 'Admin', 'Rights and Rentals Manager')(req, res, async () => {
-      const { contract_id } = req.params;
-      const { payment_date, rights_amount, rental_amount, or_number } = req.body;
-
-      if (!payment_date || (!rights_amount && !rental_amount)) {
-        return res.status(400).json({ error: 'Payment date and at least one payment amount are required' });
-      }
-
-      const connection = await pool.getConnection();
       try {
-        await connection.beginTransaction();
-
-        // Get period from payment_date
-        const paymentDate = new Date(payment_date);
-        const period_month = paymentDate.getMonth() + 1;
-        const period_year = paymentDate.getFullYear();
-
-        // Get lease contract details to calculate initial balance
-        const [leaseContract] = await connection.query(`
-          SELECT
-            principal_amount,
-            downpayment,
-            is_legacy_account,
-            opening_rights_paid,
-            opening_rights_balance,
-            opening_rental_paid
-          FROM lease_contracts
-          WHERE id = ?
-        `, [contract_id]);
-
-        if (!leaseContract || leaseContract.length === 0) {
-          throw new Error('Lease contract not found');
-        }
-
-        const contract = leaseContract[0];
-
-        let recordedRights = false;
-        let recordedRental = false;
-
-        // Record rights payment if amount provided
-        if (rights_amount && parseFloat(rights_amount) > 0) {
-          const rightsPaymentAmount = parseFloat(rights_amount);
-
-          await connection.query(`
-            INSERT INTO payment_history_rights 
-            (lease_contract_id, period_month, period_year, or_number, payment_date, amount_paid, collectible, delinquent, balance)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [contract_id, period_month, period_year, or_number || null, payment_date, rightsPaymentAmount, rightsPaymentAmount, 0, 0]);
-
-          recordedRights = true;
-        }
-
-        // Record rental payment if amount provided
-        if (rental_amount && parseFloat(rental_amount) > 0) {
-          const rentalPaymentAmount = parseFloat(rental_amount);
-
-          await connection.query(`
-            INSERT INTO payment_history_rental 
-            (lease_contract_id, period_month, period_year, or_number, payment_date, amount_paid, collectible, delinquent, balance)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [contract_id, period_month, period_year, or_number || null, payment_date, rentalPaymentAmount, rentalPaymentAmount, 0, 0]);
-
-          recordedRental = true;
-        }
-
-        if (recordedRights) {
-          await recalculateRightsPaymentBalances(connection, contract_id);
-          try {
-            await recordLedgerEntry({
-              module: 'rentals',
-              referenceType: 'lease_rights',
-              referenceId: String(contract_id),
-              amount: parseFloat(rights_amount),
-              paymentDate: payment_date,
-              receiptNo: or_number || null,
-              recordedBy: req.user.user_id,
-              sourceTable: 'payment_history_rights',
-              sourceId: String(contract_id),
-              notes: `Rights ${period_month}/${period_year}`,
-              connection,
-            });
-          } catch (ledgerErr) {
-            console.error('[RR Payment] Rights ledger write failed (non-fatal):', ledgerErr.message);
-          }
-        }
-        if (recordedRental) {
-          await recalculateRentalPaymentBalances(connection, contract_id);
-          try {
-            await recordLedgerEntry({
-              module: 'rentals',
-              referenceType: 'lease_rental',
-              referenceId: String(contract_id),
-              amount: parseFloat(rental_amount),
-              paymentDate: payment_date,
-              receiptNo: or_number || null,
-              recordedBy: req.user.user_id,
-              sourceTable: 'payment_history_rental',
-              sourceId: String(contract_id),
-              notes: `Rental ${period_month}/${period_year}`,
-              connection,
-            });
-          } catch (ledgerErr) {
-            console.error('[RR Payment] Rental ledger write failed (non-fatal):', ledgerErr.message);
-          }
-        }
-
-        const [rightsPaid] = await connection.query(`
-          SELECT COALESCE(SUM(amount_paid), 0) as total_paid
-          FROM payment_history_rights
-          WHERE lease_contract_id = ?
-        `, [contract_id]);
-        const rightsSnapshot = getRightsBalanceSnapshot(contract, parseFloat(rightsPaid[0].total_paid) || 0);
-        const currentRightsBalance = rightsSnapshot.rightsBalance;
-
-        const [rentalPaid] = await connection.query(`
-          SELECT COALESCE(SUM(amount_paid), 0) as total_paid
-          FROM payment_history_rental
-          WHERE lease_contract_id = ?
-        `, [contract_id]);
-        const currentRentalBalance = getRentalTotalCollected(contract, parseFloat(rentalPaid[0].total_paid) || 0);
-
-        // Log the action
-        await logAction(req.user.user_id, 'CREATE', 'payments', contract_id, 
-          `Recorded payment - Rights: ${rights_amount || 0}, Rental: ${rental_amount || 0}. New Balance - Rights: ${currentRightsBalance}, Rental: ${currentRentalBalance}`);
-
-        await connection.commit();
-
-        res.status(201).json({ 
+        const created = await rentalsService.recordLeasePayment(
+          req.params.contract_id,
+          req.body,
+          req.user.user_id
+        );
+        await logAction(
+          req.user.user_id,
+          'CREATE',
+          'payments',
+          created.contract_id,
+          `Recorded payment - Rights: ${created.rights_amount || 0}, Rental: ${created.rental_amount || 0}. New Balance - Rights: ${created.remaining_balance.rights}, Rental: ${created.remaining_balance.rental}`
+        );
+        res.status(201).json({
           message: 'Payment recorded successfully',
-          contract_id,
-          period_month,
-          period_year,
-          rights_amount: rights_amount ? parseFloat(rights_amount) : null,
-          rental_amount: rental_amount ? parseFloat(rental_amount) : null,
-          or_number,
-          payment_date,
-          remaining_balance: {
-            rights: currentRightsBalance,
-            rental: currentRentalBalance,
-            total: currentRightsBalance + currentRentalBalance
-          }
+          ...created,
         });
       } catch (error) {
-        await connection.rollback();
+        if (error.status) {
+          return res.status(error.status).json({ error: error.message });
+        }
         throw error;
-      } finally {
-        connection.release();
       }
     });
   } catch (error) {

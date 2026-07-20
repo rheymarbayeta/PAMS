@@ -422,6 +422,40 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 
 ---
 
+### Phase 9 — Platform Shell & Cashier (post–Phase 8)
+
+**Goal:** Registry-driven subnav, unified Cashier workspace, deepen rentals money path.  
+**Status:** Implemented 2026-07-20 (MVP)
+
+| ID | Work item | Priority | Status |
+|----|-----------|----------|--------|
+| P9-1 | Move `pageGroups` into `moduleRegistry` (`PAGE_GROUPS` / `resolvePageGroup`) | High | Done |
+| P9-2 | Cashier workspace at `/finance` (portal intents + links to ledger/citations) | High | Done |
+| P9-3 | Extract lease payment record + balance recalculation into `rentalsService` | High | Done |
+| P9-4 | Unit tests for page-group path resolution | Medium | Done |
+
+**Deliverables**
+
+- `frontend/config/moduleRegistry.ts` owns nav + subnav
+- `/finance` Cashier hub; finance subnav tabs
+- `rentalsService.recordLeasePayment` / recalculate helpers
+- Admin sidebar: portal/ledger reached via Cashier (not duplicate top-level admin items)
+
+**Exit criteria**
+
+- [x] Layout no longer hardcodes page group tabs
+- [x] Cashiers can work from `/finance`
+- [x] R&R payment POST uses module service
+- [x] Page-group resolution covered by unit tests
+
+**Dependencies:** Phase 8 MVP complete
+
+**Notes**
+
+- Full `(authenticated)/layout.tsx` route-group migration deferred (large move; registry shell is the incremental step)
+
+---
+
 ## 6. Timeline Overview
 
 | Phase | Agent-led coding effort | Realistic calendar (with review/UAT) |
@@ -435,6 +469,7 @@ routes/controllers  →  services (domain rules)  →  repositories (SQL)
 | Phase 6 (money integrity) | Short slices | After Phase 5 |
 | Phase 7 (domain money extracts) | Short slices | After Phase 6 |
 | Phase 8 (consolidate & secure) | Short slices | After audit |
+| Phase 9 (platform shell) | Short slices | After Phase 8 |
 | **All phases** | — | **~6–12 months** (+ deepen) |
 
 **Recommended first ship:** Phase 0 + Phase 1 (~1–2 months) for maximum risk reduction.
@@ -450,7 +485,8 @@ flowchart LR
   P6[Phase 6 Money Integrity]
   P7[Phase 7 Domain Money]
   P8[Phase 8 Consolidate]
-  P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8
+  P9[Phase 9 Platform Shell]
+  P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9
 ```
 
 ---
@@ -547,9 +583,9 @@ flowchart LR
 
 ## 12. Next Action
 
-1. **Phase 9 (Platform Shell):** `(authenticated)/layout.tsx`, Cashier workspace, move `pageGroups` to module registry.
-2. Continue service extraction: R&R payments/billing, applications assess/approve/issue.
-3. Stakeholder UAT remains optional / deferred.
+1. **Phase 10:** Executive dashboard widgets, global search, scheduled report export implementation.
+2. Continue service extraction: applications assess/approve/issue; remaining R&R mutations.
+3. Optional: migrate staff pages into `(authenticated)/layout.tsx` route group.
 
 ---
 

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { WizardSteps, WizardNav } from '@/components/ui/Wizard';
-import { PageHeader } from '@/components/ui/Primitives';
+import { PageHeader, Button } from '@/components/ui/Primitives';
 import api from '@/services/api';
 import { showAlert } from '@/utils/modal';
 
@@ -16,12 +17,26 @@ const STEPS = [
   { id: 'review', label: 'Review' },
 ];
 
+const emptyEntityForm = {
+  entity_name: '',
+  entity_type: 'INDIVIDUAL',
+  firstname: '',
+  lastname: '',
+  contact_person: '',
+  phone: '',
+  email: '',
+  address: '',
+};
+
 export default function CreateApplicationWizardPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [entities, setEntities] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [showAddEntity, setShowAddEntity] = useState(false);
+  const [savingEntity, setSavingEntity] = useState(false);
+  const [entityForm, setEntityForm] = useState(emptyEntityForm);
   const [form, setForm] = useState({
     entity_id: '',
     entity_name: '',
@@ -33,14 +48,18 @@ export default function CreateApplicationWizardPage() {
     street: '',
   });
 
+  const loadEntities = async () => {
+    const e = await api.get('/api/entities');
+    return Array.isArray(e.data) ? e.data : e.data?.data || [];
+  };
+
   useEffect(() => {
     (async () => {
       try {
-        const [e, r] = await Promise.all([
-          api.get('/api/entities'),
+        const [list, r] = await Promise.all([
+          loadEntities(),
           api.get('/api/assessment-rules'),
         ]);
-        const list = Array.isArray(e.data) ? e.data : e.data?.data || [];
         setEntities(list);
         const active = (r.data || []).filter((x: any) => x.is_active);
         setRules(active);
@@ -70,6 +89,39 @@ export default function CreateApplicationWizardPage() {
     (step === 1 && !!form.rule_id) ||
     (step === 2 && !!form.barangay) ||
     step === 3;
+
+  const createEntity = async () => {
+    if (!entityForm.entity_name.trim()) {
+      showAlert('Entity name is required');
+      return;
+    }
+    try {
+      setSavingEntity(true);
+      const res = await api.post('/api/entities', {
+        ...entityForm,
+        entity_name: entityForm.entity_name.trim(),
+        contact_person:
+          entityForm.contact_person.trim() ||
+          [entityForm.firstname, entityForm.lastname].filter(Boolean).join(' ') ||
+          null,
+      });
+      const created = res.data;
+      const list = await loadEntities();
+      setEntities(list);
+      setForm((f) => ({
+        ...f,
+        entity_id: created.entity_id,
+        entity_name: created.entity_name,
+      }));
+      setEntityForm(emptyEntityForm);
+      setShowAddEntity(false);
+      showAlert('Entity created and selected');
+    } catch (err: any) {
+      showAlert(err.response?.data?.error || 'Failed to create entity');
+    } finally {
+      setSavingEntity(false);
+    }
+  };
 
   const submit = async () => {
     try {
@@ -111,26 +163,146 @@ export default function CreateApplicationWizardPage() {
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             {step === 0 && (
               <div className="space-y-3">
-                <label className="block text-sm font-medium text-slate-700">Select entity</label>
-                <select
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                  value={form.entity_id}
-                  onChange={(e) => {
-                    const ent = entities.find((x) => x.entity_id === e.target.value);
-                    setForm((f) => ({
-                      ...f,
-                      entity_id: e.target.value,
-                      entity_name: ent?.entity_name || '',
-                    }));
-                  }}
-                >
-                  <option value="">Choose...</option>
-                  {entities.map((ent) => (
-                    <option key={ent.entity_id} value={ent.entity_id}>
-                      {ent.entity_name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="block text-sm font-medium text-slate-700">Select entity</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddEntity((v) => !v)}
+                    className="text-sm font-medium text-teal-700 hover:text-teal-800 hover:underline"
+                  >
+                    {showAddEntity ? 'Cancel' : '+ Add new entity'}
+                  </button>
+                </div>
+
+                {!showAddEntity ? (
+                  <select
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    value={form.entity_id}
+                    onChange={(e) => {
+                      const ent = entities.find((x) => x.entity_id === e.target.value);
+                      setForm((f) => ({
+                        ...f,
+                        entity_id: e.target.value,
+                        entity_name: ent?.entity_name || '',
+                      }));
+                    }}
+                  >
+                    <option value="">Choose...</option>
+                    {entities.map((ent) => (
+                      <option key={ent.entity_id} value={ent.entity_id}>
+                        {ent.entity_name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
+                    <p className="text-sm text-slate-600">
+                      Create a new entity here, or use the{' '}
+                      <Link
+                        href="/admin/entities/add-entity"
+                        className="text-teal-700 hover:underline"
+                      >
+                        full entity form
+                      </Link>{' '}
+                      (eTracs search, etc.).
+                    </p>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Entity name *
+                      </label>
+                      <input
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                        value={entityForm.entity_name}
+                        onChange={(e) =>
+                          setEntityForm((f) => ({ ...f, entity_name: e.target.value }))
+                        }
+                        placeholder="Business or individual name"
+                      />
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
+                        <select
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                          value={entityForm.entity_type}
+                          onChange={(e) =>
+                            setEntityForm((f) => ({ ...f, entity_type: e.target.value }))
+                          }
+                        >
+                          <option value="INDIVIDUAL">Individual</option>
+                          <option value="JURIDICAL">Juridical / Business</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+                        <input
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                          value={entityForm.phone}
+                          onChange={(e) => setEntityForm((f) => ({ ...f, phone: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                          First name
+                        </label>
+                        <input
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                          value={entityForm.firstname}
+                          onChange={(e) =>
+                            setEntityForm((f) => ({ ...f, firstname: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                          Last name
+                        </label>
+                        <input
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                          value={entityForm.lastname}
+                          onChange={(e) =>
+                            setEntityForm((f) => ({ ...f, lastname: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Contact person
+                      </label>
+                      <input
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                        value={entityForm.contact_person}
+                        onChange={(e) =>
+                          setEntityForm((f) => ({ ...f, contact_person: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Address</label>
+                      <input
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                        value={entityForm.address}
+                        onChange={(e) => setEntityForm((f) => ({ ...f, address: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setShowAddEntity(false);
+                          setEntityForm(emptyEntityForm);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="button" onClick={createEntity} disabled={savingEntity}>
+                        {savingEntity ? 'Saving…' : 'Save & select entity'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -190,7 +362,7 @@ export default function CreateApplicationWizardPage() {
                 if (step < STEPS.length - 1) setStep((s) => s + 1);
                 else submit();
               }}
-              canNext={canNext}
+              canNext={canNext && !showAddEntity}
               isLast={step === STEPS.length - 1}
               nextLabel={step === STEPS.length - 1 ? 'Create application' : 'Continue'}
               submitting={submitting}
