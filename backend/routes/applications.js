@@ -524,6 +524,94 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Application Creator'), async 
   }
 });
 
+/** Parse "Valid Until" (MM-DD-YYYY or Date-parseable) → YYYY-MM-DD for MySQL. */
+function parseValidityDateFromParameters(parameters) {
+  if (!Array.isArray(parameters)) return null;
+  const validUntilParam = parameters.find((p) => p.param_name === 'Valid Until' && p.param_value);
+  if (!validUntilParam?.param_value) return null;
+  const dateValue = String(validUntilParam.param_value).trim();
+  const dateMatch = dateValue.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (dateMatch) {
+    return `${dateMatch[3]}-${dateMatch[1]}-${dateMatch[2]}`;
+  }
+  const parsedDate = new Date(dateValue);
+  if (!isNaN(parsedDate.getTime())) {
+    const year = parsedDate.getFullYear();
+    const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(parsedDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return null;
+}
+
+// Update application parameters (Edit Parameters on details page)
+router.put('/:id', authorize('SuperAdmin', 'Admin', 'Application Creator', 'Assessor', 'Approver'), async (req, res) => {
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+
+  try {
+    const applicationId = req.params.id;
+    const { parameters } = req.body;
+
+    if (!parameters || !Array.isArray(parameters)) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'parameters array is required' });
+    }
+
+    const [apps] = await connection.execute(
+      'SELECT application_id, application_number, status FROM applications WHERE application_id = ?',
+      [applicationId]
+    );
+
+    if (apps.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Replace all parameters
+    await connection.execute(
+      'DELETE FROM application_parameters WHERE application_id = ?',
+      [applicationId]
+    );
+
+    for (const param of parameters) {
+      if (param.param_name && param.param_value !== undefined && param.param_value !== null) {
+        const param_id = generateId(ID_PREFIXES.PARAMETER);
+        await connection.execute(
+          'INSERT INTO application_parameters (parameter_id, application_id, param_name, param_value) VALUES (?, ?, ?, ?)',
+          [param_id, applicationId, param.param_name, String(param.param_value)]
+        );
+      }
+    }
+
+    // Keep applications.validity_date in sync when Valid Until is present
+    const validity_date = parseValidityDateFromParameters(parameters);
+    if (validity_date) {
+      await connection.execute(
+        'UPDATE applications SET validity_date = ?, updated_at = CURRENT_TIMESTAMP WHERE application_id = ?',
+        [validity_date, applicationId]
+      );
+    }
+
+    await connection.commit();
+
+    await logAction(
+      req.user.user_id,
+      'UPDATE_APP_PARAMETERS',
+      `Updated parameters for application #${apps[0].application_number || applicationId}`,
+      applicationId
+    );
+
+    res.json({ message: 'Parameters updated successfully', validity_date });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Update application parameters error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    connection.release();
+  }
+});
+
 // Add assessed fee
 router.post('/:id/fees', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
   try {
