@@ -24,6 +24,7 @@ export default function CreateCitationWizardPage() {
   const [enforcers, setEnforcers] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
+    ticketNumber: '',
     driverName: '',
     driverAddress: '',
     licenseNumber: '',
@@ -64,7 +65,7 @@ export default function CreateCitationWizardPage() {
   };
 
   const canNext =
-    (step === 0 && !!form.driverName.trim()) ||
+    (step === 0 && !!form.ticketNumber.trim() && !!form.driverName.trim()) ||
     (step === 1 && !!form.plateNumber.trim()) ||
     (step === 2 && form.violations.length > 0) ||
     step === 3;
@@ -73,6 +74,7 @@ export default function CreateCitationWizardPage() {
     try {
       setSubmitting(true);
       const res = await api.post('/api/citations', {
+        ticketNumber: form.ticketNumber.trim(),
         driverName: form.driverName,
         driverAddress: form.driverAddress || undefined,
         licenseNumber: form.licenseNumber || undefined,
@@ -119,6 +121,16 @@ export default function CreateCitationWizardPage() {
           <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
             {step === 0 && (
               <>
+                <label className="block text-sm font-medium text-slate-700">
+                  Ticket number *
+                  <input
+                    className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2"
+                    value={form.ticketNumber}
+                    onChange={(e) => set('ticketNumber', e.target.value)}
+                    placeholder="e.g. TKT-2026-001234"
+                    autoFocus
+                  />
+                </label>
                 <label className="block text-sm font-medium text-slate-700">
                   Driver name *
                   <input
@@ -258,6 +270,9 @@ export default function CreateCitationWizardPage() {
 
             {step === 3 && (
               <div className="text-sm text-slate-700 space-y-2">
+                <p>
+                  <strong>Ticket #:</strong> {form.ticketNumber}
+                </p>
                 <p>
                   <strong>Driver:</strong> {form.driverName}
                 </p>

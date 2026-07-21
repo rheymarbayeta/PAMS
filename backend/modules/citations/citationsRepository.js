@@ -40,8 +40,19 @@ async function listCitations(query = {}) {
   const params = [];
 
   if (status && status !== 'all') {
-    whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.payment_status = ?';
-    params.push(status);
+    if (status === 'Partial') {
+      whereSQL +=
+        (whereSQL ? ' AND ' : ' WHERE ') +
+        `c.payment_status IN ('Partially Paid', 'Installment', 'Partial')`;
+    } else if (status === 'Paid') {
+      // Paid reports include partially paid tickets
+      whereSQL +=
+        (whereSQL ? ' AND ' : ' WHERE ') +
+        `c.payment_status IN ('Paid', 'Partially Paid', 'Installment', 'Partial')`;
+    } else {
+      whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.payment_status = ?';
+      params.push(status);
+    }
   }
   if (plateNumber && String(plateNumber).trim()) {
     whereSQL += (whereSQL ? ' AND ' : ' WHERE ') + 'c.plate_number LIKE ?';
@@ -88,7 +99,12 @@ async function listCitations(query = {}) {
      LEFT JOIN users u ON c.issued_by_user_id = u.user_id
      LEFT JOIN enforcers e ON c.enforcer_id = e.enforcer_id
      LEFT JOIN (SELECT citation_id, SUM(amount_paid) as total_paid FROM citation_payments GROUP BY citation_id) cp ON cp.citation_id = c.citation_id
-     LEFT JOIN (SELECT citation_id, MAX(receipt_number) as receipt_number FROM citation_payments GROUP BY citation_id) cr ON cr.citation_id = c.citation_id
+     LEFT JOIN (
+       SELECT citation_id,
+              GROUP_CONCAT(DISTINCT NULLIF(TRIM(receipt_number), '') ORDER BY payment_date SEPARATOR ', ') as receipt_number
+       FROM citation_payments
+       GROUP BY citation_id
+     ) cr ON cr.citation_id = c.citation_id
      ${whereSQL}
      ORDER BY c.created_at DESC
      LIMIT ${limitNum} OFFSET ${offset}`,

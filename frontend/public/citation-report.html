@@ -352,8 +352,15 @@ async function loadReport() {
 
     // Re-apply payment status filter client-side so computed statuses (from the
     // server CASE expression) are consistent with the filter label in the report.
+    // Partial filter → Partially Paid / Installment; Paid filter includes partials.
     if (paymentStatus && paymentStatus !== 'all') {
-      citations = citations.filter(c => c.payment_status === paymentStatus);
+      const partialStatuses = ['Partially Paid', 'Installment', 'Partial'];
+      citations = citations.filter(c => {
+        const status = (c.payment_status || '').trim();
+        if (paymentStatus === 'Partial') return partialStatuses.includes(status);
+        if (paymentStatus === 'Paid') return status === 'Paid' || partialStatuses.includes(status);
+        return status === paymentStatus;
+      });
     }
 
     // Client-side violation filter
@@ -413,8 +420,22 @@ function formatDate(dateStr) {
 }
 
 function formatCurrency(value) {
-  const num = parseFloat(value) || 0;
-  return '₱ ' + num.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const n = parseFloat(value) || 0;
+  return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Amount shown in the report: paid/partial → amount received (with OR); otherwise assessed fine. */
+function isPaidOrPartialStatus(status) {
+  const s = (status || '').trim();
+  return s === 'Paid' || s === 'Partially Paid' || s === 'Installment' || s === 'Partial';
+}
+
+function reportAmount(c) {
+  if (isPaidOrPartialStatus(c.payment_status)) {
+    const paid = parseFloat(c.total_paid);
+    if (!isNaN(paid) && paid > 0) return paid;
+  }
+  return parseFloat(c.fine_amount) || 0;
 }
 
 function buildFilterLabel() {
@@ -517,7 +538,7 @@ function citationRowCellsHTML(c, rowNum) {
         <td class="center" style="width:6%">${c.violation_time || '—'}</td>
         <td class="center" style="width:7%">${c.receipt_number || '—'}</td>
         <td style="width:27%">${violations}</td>
-        <td class="right"  style="width:12%">${formatCurrency(c.fine_amount)}</td>
+        <td class="right"  style="width:12%">${formatCurrency(reportAmount(c))}</td>
       `;
 }
 
@@ -602,8 +623,8 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
   const signatoryEnabled = settings.citation_signatory_enabled?.value !== 'false';
   const reserveH = SUMMARY_H + (signatoryEnabled ? SIGNATORY_H : 0);
 
-  // Totals
-  const totalFines  = citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
+  // Totals — paid/partial rows use amount received (OR); pending uses fine
+  const totalFines  = citations.reduce((s, c) => s + reportAmount(c), 0);
   const paidCount   = citations.filter(c => c.payment_status === 'Paid').length;
   const pendingCount = citations.filter(c => c.payment_status === 'Pending').length;
   const partialCount = citations.filter(c => c.payment_status === 'Partially Paid').length;
@@ -633,7 +654,7 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
           <td class="center">${c.violation_time || '—'}</td>
           <td class="center">${c.receipt_number || '—'}</td>
           <td>${violations}</td>
-          <td class="right">${formatCurrency(c.fine_amount)}</td>
+          <td class="right">${formatCurrency(reportAmount(c))}</td>
         </tr>
       `;
     });
@@ -681,7 +702,7 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
           <strong>Paid:</strong> ${paidCount} &nbsp;&nbsp;
           <strong>Pending:</strong> ${pendingCount} &nbsp;&nbsp;
           <strong>Partially Paid:</strong> ${partialCount} &nbsp;&nbsp;
-          <strong>Total Fine Amount:</strong> ${formatCurrency(totalFines)}
+          <strong>Total Amount:</strong> ${formatCurrency(totalFines)}
         </div>
       `;
     }
@@ -742,7 +763,7 @@ function buildGroupedItems(groups) {
   let globalRowNum = 0;
 
   groups.forEach(g => {
-    const subtotal = g.citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
+    const subtotal = g.citations.reduce((s, c) => s + reportAmount(c), 0);
     const eName = escapeHtml(g.name);
     const cnt   = g.citations.length;
 
@@ -769,7 +790,7 @@ function buildGroupedItems(groups) {
         `<td class="center" style="width:6%">${escapeHtml(c.violation_time || '\u2014')}</td>` +
         `<td class="center" style="width:7%">${escapeHtml(c.receipt_number || '\u2014')}</td>` +
         `<td style="width:27%">${escapeHtml(violations)}</td>` +
-        `<td class="right" style="width:12%">${formatCurrency(c.fine_amount)}</td>` +
+        `<td class="right" style="width:12%">${formatCurrency(reportAmount(c))}</td>` +
         `</tr>`;
       items.push({ html: rowHtml, type: 'citation' });
       const tr = document.createElement('tr');
@@ -843,7 +864,7 @@ function buildGroupedReportHTML(citations, settings, currentUserName) {
   const reserveH = SUMMARY_H + (signatoryEnabled ? SIGNATORY_H : 0);
 
   // Grand totals
-  const totalFines   = citations.reduce((s, c) => s + (parseFloat(c.fine_amount) || 0), 0);
+  const totalFines   = citations.reduce((s, c) => s + reportAmount(c), 0);
   const paidCount    = citations.filter(c => c.payment_status === 'Paid').length;
   const pendingCount = citations.filter(c => c.payment_status === 'Pending').length;
   const partialCount = citations.filter(c => c.payment_status === 'Partially Paid').length;
@@ -887,7 +908,7 @@ function buildGroupedReportHTML(citations, settings, currentUserName) {
         <strong>Paid:</strong> ${paidCount} &nbsp;&nbsp;
         <strong>Pending:</strong> ${pendingCount} &nbsp;&nbsp;
         <strong>Partially Paid:</strong> ${partialCount} &nbsp;&nbsp;
-        <strong>Total Fine Amount:</strong> ${formatCurrency(totalFines)}
+        <strong>Total Amount:</strong> ${formatCurrency(totalFines)}
       </div>` : '';
 
     const signatoryBlock = isLast ? buildSignatoryHTML(settings, currentUserName) : '';

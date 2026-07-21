@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { VIOLATIONS } from '@/features/citations/constants';
 import { CitationListPanel } from '@/features/citations/CitationListPanel';
+import { matchesPaymentStatusFilter } from '@/features/citations/citationUtils';
 
 interface Citation {
   citation_id: string;
@@ -351,8 +352,8 @@ export default function CitationsPage() {
 
   const getFilteredCitations = () => {
     return citations.filter((citation) => {
-      // Filter by payment status
-      if (reportFilters.paymentStatus !== 'all' && citation.payment_status !== reportFilters.paymentStatus) {
+      // Filter by payment status (Partial → Partially Paid; Paid includes partials)
+      if (!matchesPaymentStatusFilter(citation.payment_status, reportFilters.paymentStatus)) {
         return false;
       }
 
@@ -652,9 +653,9 @@ export default function CitationsPage() {
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All</option>
-                      <option value="Paid">Paid</option>
+                      <option value="Paid">Paid (incl. Partial)</option>
                       <option value="Pending">Pending</option>
-                      <option value="Partial">Partial</option>
+                      <option value="Partial">Partially Paid</option>
                     </select>
                   </div>
 
