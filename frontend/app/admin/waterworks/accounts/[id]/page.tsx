@@ -18,12 +18,22 @@ export default function AccountDetailPage() {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [showReading, setShowReading] = useState(false);
+  const [savingReading, setSavingReading] = useState(false);
+  const now = new Date();
   const [paymentForm, setPaymentForm] = useState({
     amount_paid: '',
     bill_id: '',
     or_number: '',
     payment_method: 'cash',
     payment_date: new Date().toISOString().split('T')[0],
+    notes: '',
+  });
+  const [readingForm, setReadingForm] = useState({
+    current_reading: '',
+    reading_date: now.toISOString().split('T')[0],
+    period_month: String(now.getMonth() + 1),
+    period_year: String(now.getFullYear()),
     notes: '',
   });
 
@@ -71,6 +81,50 @@ export default function AccountDetailPage() {
     }
   };
 
+  const openAddReading = () => {
+    const d = new Date();
+    setReadingForm({
+      current_reading: '',
+      reading_date: d.toISOString().split('T')[0],
+      period_month: String(d.getMonth() + 1),
+      period_year: String(d.getFullYear()),
+      notes: '',
+    });
+    setShowReading(true);
+  };
+
+  const submitReading = async () => {
+    const acct = summary?.account;
+    const current = parseFloat(readingForm.current_reading);
+    if (Number.isNaN(current) || current < 0) {
+      showAlert('Enter a valid current reading', 'Validation');
+      return;
+    }
+    const previous = parseFloat(acct?.last_reading ?? acct?.previous_reading) || 0;
+    if (current < previous) {
+      showAlert(`Current reading cannot be less than previous reading (${previous})`, 'Validation');
+      return;
+    }
+    try {
+      setSavingReading(true);
+      await waterworksService.createReading({
+        account_id: accountId,
+        current_reading: current,
+        reading_date: readingForm.reading_date,
+        period_month: parseInt(readingForm.period_month, 10),
+        period_year: parseInt(readingForm.period_year, 10),
+        notes: readingForm.notes || undefined,
+      });
+      setShowReading(false);
+      showAlert('Reading recorded successfully', 'Success');
+      load();
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || 'Failed to record reading', 'Error');
+    } finally {
+      setSavingReading(false);
+    }
+  };
+
   if (loading) {
     return (
       <ProtectedRoute allowedRoles={WW_ROLES}>
@@ -109,8 +163,19 @@ export default function AccountDetailPage() {
               <p className="text-2xl font-bold">{account.last_reading ?? account.previous_reading ?? 0} m³</p>
               <p className="text-xs text-gray-400">{account.last_reading_date || 'No reading yet'}</p>
             </div>
-            <div className="bg-white rounded-xl border p-4 shadow-sm flex flex-col justify-center">
-              <button onClick={() => setShowPayment(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+            <div className="bg-white rounded-xl border p-4 shadow-sm flex flex-col justify-center gap-2">
+              <button
+                type="button"
+                onClick={openAddReading}
+                className="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700"
+              >
+                Add Reading
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPayment(true)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+              >
                 Record Payment
               </button>
             </div>
@@ -167,7 +232,16 @@ export default function AccountDetailPage() {
             </section>
 
             <section className="bg-white rounded-xl border overflow-hidden">
-              <h2 className="px-4 py-3 font-semibold bg-gray-50 border-b">Recent Readings</h2>
+              <div className="px-4 py-3 font-semibold bg-gray-50 border-b flex items-center justify-between gap-3">
+                <h2>Recent Readings</h2>
+                <button
+                  type="button"
+                  onClick={openAddReading}
+                  className="text-sm font-medium text-sky-700 hover:text-sky-800 hover:underline"
+                >
+                  + Add reading
+                </button>
+              </div>
               <table className="min-w-full text-sm">
                 <thead><tr className="border-b bg-gray-50">
                   <th className="px-4 py-2 text-left">Period</th>
@@ -215,6 +289,108 @@ export default function AccountDetailPage() {
             </section>
           </div>
         </div>
+
+        {showReading && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+              <h2 className="text-lg font-bold mb-1">Add Meter Reading</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Previous reading:{' '}
+                <span className="font-medium text-gray-800">
+                  {account.last_reading ?? account.previous_reading ?? 0} m³
+                </span>
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Current reading (m³) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={readingForm.current_reading}
+                    onChange={(e) => setReadingForm({ ...readingForm, current_reading: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="Enter current meter reading"
+                    autoFocus
+                  />
+                  {readingForm.current_reading !== '' && !Number.isNaN(parseFloat(readingForm.current_reading)) && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Consumption:{' '}
+                      {Math.max(
+                        0,
+                        parseFloat(readingForm.current_reading) -
+                          (parseFloat(account.last_reading ?? account.previous_reading) || 0)
+                      ).toFixed(2)}{' '}
+                      m³
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reading date</label>
+                  <input
+                    type="date"
+                    value={readingForm.reading_date}
+                    onChange={(e) => setReadingForm({ ...readingForm, reading_date: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Period month</label>
+                    <select
+                      value={readingForm.period_month}
+                      onChange={(e) => setReadingForm({ ...readingForm, period_month: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Period year</label>
+                    <input
+                      type="number"
+                      value={readingForm.period_year}
+                      onChange={(e) => setReadingForm({ ...readingForm, period_year: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    rows={2}
+                    value={readingForm.notes}
+                    onChange={(e) => setReadingForm({ ...readingForm, notes: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowReading(false)}
+                  className="px-4 py-2 border rounded-lg text-sm"
+                  disabled={savingReading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitReading}
+                  disabled={savingReading}
+                  className="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm disabled:opacity-50"
+                >
+                  {savingReading ? 'Saving…' : 'Save Reading'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showPayment && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
