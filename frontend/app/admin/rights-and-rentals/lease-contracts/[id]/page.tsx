@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import LesseePaymentDetails from '@/components/LesseePaymentDetails';
+import LeaseContractInsights from '@/components/LeaseContractInsights';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
@@ -377,6 +378,20 @@ export default function ViewLeaseContractPage() {
               module="rentals"
               referenceType="lease_contract"
               referenceId={String(contract.id)}
+            />
+          </div>
+
+          <div className="mb-6">
+            <LeaseContractInsights
+              contractId={contract.id}
+              principalAmount={Number(contract.principal_amount) || 0}
+              downpayment={Number(contract.downpayment) || 0}
+              monthlyRights={Number(contract.monthly_rights_amount) || 0}
+              monthlyRental={Number(contract.monthly_rental_amount) || 0}
+              outstandingRentalBalance={Number(contract.outstanding_rental_balance) || 0}
+              contractEffectiveDate={contract.contract_effective_date}
+              contractTerminationDate={contract.contract_termination_date}
+              status={contract.status}
             />
           </div>
 
