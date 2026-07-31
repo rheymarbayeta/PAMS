@@ -78,6 +78,7 @@ const DEFAULT_PERMISSIONS = {
   ],
   'Waterworks Manager': [
     'dashboard_view',
+    'entities',
     'waterworks_view',
     'waterworks_manage',
     'waterworks_billing',

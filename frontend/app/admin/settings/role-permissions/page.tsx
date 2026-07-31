@@ -64,8 +64,8 @@ const ROLE_PERMISSIONS_MAP: Record<string, { label: string; permissions: string[
   },
   'Waterworks Manager': {
     label: 'Waterworks Manager',
-    permissions: ['waterworks_view', 'waterworks_manage', 'waterworks_billing', 'waterworks_payments', 'waterworks_reports'],
-    description: 'Manage water supplies, accounts, billing, and payments',
+    permissions: ['entities', 'waterworks_view', 'waterworks_manage', 'waterworks_billing', 'waterworks_payments', 'waterworks_reports', 'dashboard_view', 'tasks_view'],
+    description: 'Manage water supplies, accounts, billing, payments, and add consumers',
   },
   'Meter Reader': {
     label: 'Meter Reader',

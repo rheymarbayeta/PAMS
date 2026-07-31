@@ -54,7 +54,7 @@ async function getEntityRelatedModules(entityId) {
 
 // All routes require authentication
 router.use(authenticate);
-router.use(requirePermission('entities', 'applications', 'create_applications'));
+router.use(requirePermission('entities', 'applications', 'create_applications', 'waterworks_manage'));
 
 // Get entities (paginated; backward-compatible array when page omitted)
 router.get('/', async (req, res) => {
