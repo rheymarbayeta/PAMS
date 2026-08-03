@@ -1062,16 +1062,36 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       return res.status(400).json({ error: 'No fees assessed for this application' });
     }
 
-    // Get address from parameters
+    // Get address from application address Information parameters
     const [parameters] = await connection.execute(
       'SELECT * FROM application_parameters WHERE application_id = ?',
       [applicationId]
     );
-    const addressParam = parameters.find(p => 
-      p.param_name.toLowerCase().includes('address') || 
-      p.param_name.toLowerCase() === 'address'
-    );
-    const address = addressParam ? addressParam.param_value : '';
+    const paramMap = {};
+    parameters.forEach((p) => {
+      if (!p?.param_name) return;
+      paramMap[String(p.param_name).trim().toLowerCase()] = p.param_value != null ? String(p.param_value).trim() : '';
+    });
+    const getParam = (...names) => {
+      for (const name of names) {
+        const value = paramMap[name.toLowerCase()];
+        if (value) return value;
+      }
+      return '';
+    };
+    let address = getParam('location');
+    if (!address) {
+      address = [
+        getParam('street/sitio', 'street', 'sitio'),
+        getParam('barangay'),
+        getParam('municipality', 'city'),
+        getParam('province'),
+        getParam('country')
+      ].filter(Boolean).join(', ');
+    }
+    if (!address) {
+      address = getParam('address', 'business address', 'business_address');
+    }
 
     // Calculate totals
     let totalBalanceDue = 0;

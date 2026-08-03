@@ -541,7 +541,32 @@ async function fetchAssessmentReport() {
       assessmentData = {
         business_name: applicationData.entity_name || 'N/A',
         owner_name: applicationData.contact_person || applicationData.entity_name || 'N/A',
-        address: applicationData.parameters?.find(p => p.param_name.toLowerCase().includes('address'))?.param_value || 'N/A',
+        address: (() => {
+          const params = applicationData.parameters || [];
+          const byName = {};
+          params.forEach((p) => {
+            if (!p?.param_name) return;
+            byName[String(p.param_name).trim().toLowerCase()] = p.param_value != null ? String(p.param_value).trim() : '';
+          });
+          const get = (...names) => {
+            for (const name of names) {
+              const value = byName[name.toLowerCase()];
+              if (value) return value;
+            }
+            return '';
+          };
+          const location = get('location');
+          if (location) return location;
+          const parts = [
+            get('street/sitio', 'street', 'sitio'),
+            get('barangay'),
+            get('municipality', 'city'),
+            get('province'),
+            get('country')
+          ].filter(Boolean);
+          if (parts.length) return parts.join(', ');
+          return get('address', 'business address', 'business_address') || 'N/A';
+        })(),
         app_number: applicationData.application_number || `#${applicationData.application_id}`,
         app_type: applicationData.permit_type || 'NEW',
         app_date: applicationData.created_at,
@@ -1006,10 +1031,15 @@ function generateReportHTML(data, settings = {}, applicationData = {}) {
   }
 
   categoryOrder.sort((a, b) => {
-    const aIsReg = a.toLowerCase().includes('regulatory') || a.toLowerCase().includes('reg');
-    const bIsReg = b.toLowerCase().includes('regulatory') || b.toLowerCase().includes('reg');
-    if (aIsReg && !bIsReg) return -1;
-    if (!aIsReg && bIsReg) return 1;
+    const rank = (name) => {
+      const n = (name || '').toLowerCase();
+      if (n.includes('business tax') || n.includes('business')) return 0;
+      if (n.includes('regulatory') || (n.includes('reg') && !n.includes('business'))) return 1;
+      return 2;
+    };
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
     return a.localeCompare(b);
   });
 

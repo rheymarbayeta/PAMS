@@ -4,6 +4,43 @@ const path = require('path');
 const pool = require('../config/database');
 
 /**
+ * Build a display address from application parameters.
+ * Prefers Location; otherwise Street/Sitio + Barangay + Municipality + Province + Country.
+ * @param {Array<{param_name: string, param_value: string}>} parameters
+ * @returns {string}
+ */
+const buildAddressFromParameters = (parameters = []) => {
+  const byName = {};
+  parameters.forEach((p) => {
+    if (!p?.param_name) return;
+    byName[String(p.param_name).trim().toLowerCase()] = p.param_value != null ? String(p.param_value).trim() : '';
+  });
+
+  const get = (...names) => {
+    for (const name of names) {
+      const value = byName[name.toLowerCase()];
+      if (value) return value;
+    }
+    return '';
+  };
+
+  const location = get('location');
+  if (location) return location;
+
+  const parts = [
+    get('street/sitio', 'street', 'sitio'),
+    get('barangay'),
+    get('municipality', 'city'),
+    get('province'),
+    get('country')
+  ].filter(Boolean);
+
+  if (parts.length > 0) return parts.join(', ');
+
+  return get('address', 'business address', 'business_address') || '';
+};
+
+/**
  * Generate PDF permit for an application
  * @param {number} applicationId - Application ID
  * @returns {Promise<Buffer>} PDF buffer
@@ -235,7 +272,7 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
       // Extract data
       const bin = paramsObj.bin || paramsObj.business_identification_number || assessment.app_number || '';
       const tradeName = assessment.business_name || '';
-      const businessAddress = assessment.address || '';
+      const businessAddress = buildAddressFromParameters(parameters) || assessment.address || '';
       const proprietorName = assessment.owner_name || assessment.business_name || '';
       const proprietorId = paramsObj.proprietor_id || paramsObj.owner_id || '';
       const proprietorDisplay = proprietorId ? `${proprietorName} (${proprietorId})` : proprietorName;
@@ -696,11 +733,13 @@ const getAssessmentData = async (applicationId) => {
   // Extract data
   const bin = paramsObj.bin || paramsObj.business_identification_number || assessment.app_number || '';
   const tradeName = assessment.business_name || '';
-  const businessAddress = assessment.entity_address || assessment.address || '';
+  // Prefer application address Information (parameters), then assessment snapshot, then entity
+  const applicationAddress = buildAddressFromParameters(parameters);
+  const businessAddress = applicationAddress || assessment.address || assessment.entity_address || '';
   const proprietorName = assessment.owner_name || assessment.business_name || '';
   const proprietorId = paramsObj.proprietor_id || paramsObj.owner_id || '';
   const proprietorDisplay = proprietorId ? `${proprietorName} (${proprietorId})` : proprietorName;
-  const ownerAddress = assessment.entity_address || assessment.address || paramsObj.owner_address || paramsObj.proprietor_address || '';
+  const ownerAddress = applicationAddress || assessment.address || assessment.entity_address || paramsObj.owner_address || paramsObj.proprietor_address || '';
   
   // Barcode format: prefix:application_number
   const barcodePrefix = paramsObj.barcode_prefix || '51005';
