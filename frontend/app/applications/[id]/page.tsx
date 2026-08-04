@@ -503,7 +503,9 @@ export default function ApplicationDetailPage() {
                 {/* Action Buttons - Horizontal scroll on mobile */}
                 <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide touch-scroll">
                   {/* Reports Dropdown - shows when there are reports available */}
-                  {((canPrintPermit && application.status !== 'Paid') || ((application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0)) && (
+                  {((canPrintPermit && application.status !== 'Paid') ||
+                    ((application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0) ||
+                    (application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released')) && (
                     <>
                       <button
                         ref={reportsButtonRef}
@@ -584,6 +586,22 @@ export default function ApplicationDetailPage() {
                                   </button>
                                 )
                               )
+                            )}
+                            {(application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && (
+                              <button
+                                onClick={() => {
+                                  const token = localStorage.getItem('token') || '';
+                                  const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+                                  const url = `/business-permit.html?id=${application.application_id}${encodedToken}`;
+                                  openReportModal(url, 'Business Permit');
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                              >
+                                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Business Permit
+                              </button>
                             )}
                           </div>
                         </>

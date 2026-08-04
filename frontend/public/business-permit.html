@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Business Permit / Mayor's Permit</title>
+<style>
+  :root {
+    --etracs-green: #00a328;
+    --etracs-green-dark: #008020;
+    --etracs-purple: #9933ff;
+    --ink: #111111;
+    --muted: #333333;
+    --line: #222222;
+    --soft: #f3f3f3;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: #d8d8d8;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--ink);
+  }
+
+  #report-container {
+    max-width: 8.5in;
+    margin: 16px auto;
+    background: white;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  }
+
+  .controls {
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    font-family: system-ui, sans-serif;
+  }
+  .btn {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #fff;
+  }
+  .btn-print { background: #28a745; }
+  .btn-print:hover { background: #1e7e34; }
+  .btn-pdf { background: #007bff; }
+  .btn-pdf:hover { background: #0056b3; }
+  .btn:disabled { background: #6c757d; cursor: not-allowed; }
+  .report-error {
+    display: none;
+    color: #856404;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .report-error.show { display: block; }
+  .loading, .error {
+    padding: 40px 20px;
+    text-align: center;
+    font-family: system-ui, sans-serif;
+  }
+  .error {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+    margin: 16px;
+    border-radius: 4px;
+  }
+  .hidden { display: none !important; }
+
+  /* Printable area: 8.5in × 13in (PH legal / PAMS "legal" PDF) */
+  .page {
+    width: 8.5in;
+    height: 13in;
+    padding: 0.35in 0.5in 0.55in;
+    position: relative;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .bp-header {
+    display: grid;
+    grid-template-columns: 72px 1fr 72px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0;
+  }
+  .bp-logo {
+    width: 68px;
+    height: 68px;
+    object-fit: contain;
+  }
+  .bp-qr-slot {
+    width: 68px;
+    height: 68px;
+    border: 1px dashed #bbb;
+    background: #fafafa;
+  }
+  .bp-header-center {
+    text-align: center;
+    line-height: 1.15;
+  }
+  .bp-header-center .republic {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--etracs-green);
+  }
+  .bp-header-center .muni {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--etracs-green);
+    margin-top: 1px;
+  }
+  .bp-header-center .province {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--etracs-green);
+  }
+  .bp-header-center .office {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--etracs-green);
+    margin-top: 2px;
+  }
+
+  .bp-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--etracs-green);
+    margin: 6px 0 10px;
+    text-transform: uppercase;
+  }
+
+  /* ── Top meta: values ABOVE labels (ETRACS style) ── */
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1.35fr 1fr;
+    gap: 4px 12px;
+    margin-bottom: 10px;
+  }
+  .meta-cell {
+    text-align: center;
+    min-width: 0;
+  }
+  .meta-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+    padding: 0 4px 1px;
+    min-height: 16px;
+    text-transform: uppercase;
+    word-break: break-word;
+  }
+  .meta-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    margin-top: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ── Certify + proprietor on one row ── */
+  .cert-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+  .cert-row .lead { font-size: 11px; }
+  .cert-row .proprietor {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 1px;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 3px;
+    font-size: 11px;
+  }
+  .field-row .lbl { color: var(--ink); }
+  .field-row .val {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 13px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 1px;
+  }
+  .field-row .val.sm { font-size: 11.5px; }
+
+  .cert-body {
+    text-align: justify;
+    font-size: 10px;
+    line-height: 1.32;
+    margin: 8px 0;
+    color: var(--ink);
+  }
+
+  .activity {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin: 10px 28px 12px;
+    padding: 6px 8px;
+    border: 1.5px solid var(--etracs-purple);
+    color: var(--ink);
+    background: #faf7ff;
+  }
+
+  .plate-block {
+    text-align: center;
+    margin: 4px 0 8px;
+  }
+  .plate-value {
+    display: inline-block;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border: 1px solid var(--line);
+    padding: 4px 12px;
+    min-width: 240px;
+  }
+  .plate-caption {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+    color: var(--muted);
+  }
+
+  /* ── Bottom: OR table + approval ── */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 16px;
+    align-items: start;
+    margin-top: 4px;
+  }
+  .or-head {
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .or-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+  .or-table th {
+    border: 1px solid var(--line);
+    background: var(--soft);
+    padding: 2px 4px;
+    text-align: left;
+    font-size: 9px;
+  }
+  .or-table td {
+    border: 1px solid var(--line);
+    padding: 2px 4px;
+  }
+  .or-table td.num { text-align: right; }
+  .or-empty {
+    font-size: 10px;
+    font-style: italic;
+    color: #666;
+  }
+
+  .approve-block {
+    text-align: center;
+    padding-top: 0;
+  }
+  .approve-block .approved {
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 28px;
+  }
+  .approve-block .sig-img {
+    height: 36px;
+    width: auto;
+    max-width: 150px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto 2px;
+  }
+  .approve-block .name {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    text-decoration: underline;
+  }
+  .approve-block .pos {
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 1px;
+  }
+
+  .warning {
+    margin: 10px 0 6px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--etracs-purple);
+    letter-spacing: 0.4px;
+    line-height: 1.2;
+  }
+
+  .cert-body.secondary {
+    margin-top: 2px;
+    margin-bottom: 8px;
+  }
+
+  .bp-footer {
+    position: absolute;
+    left: 0.5in;
+    right: 0.5in;
+    bottom: 0.22in;
+    margin-top: 0;
+    padding-top: 6px;
+    border-top: 1px solid #ccc;
+    font-size: 8px;
+    color: #555;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  @page {
+    size: 8.5in 13in;
+    margin: 0;
+  }
+  @media print {
+    body { background: white; }
+    #report-container { box-shadow: none; margin: 0; max-width: 100%; }
+    .controls { display: none !important; }
+    .page {
+      box-shadow: none;
+      margin: 0;
+      width: 8.5in;
+      height: 13in;
+      padding: 0.35in 0.5in 0.55in;
+      overflow: hidden;
+      page-break-after: avoid;
+    }
+    .bp-qr-slot {
+      border-color: transparent;
+      background: transparent;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="report-container">
+  <div class="controls">
+    <button class="btn btn-print" onclick="printReport()">Print</button>
+    <button class="btn btn-pdf" id="reportPdfBtn" onclick="generateReportPDF()">Download PDF</button>
+    <div id="reportError" class="report-error"></div>
+  </div>
+  <div id="loading" class="loading">Loading business permit...</div>
+  <div id="error" class="error hidden"></div>
+  <div id="report-content" class="hidden"></div>
+</div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const applicationId = urlParams.get('id') || urlParams.get('applicationId');
+const authToken = urlParams.get('token') || localStorage.getItem('token') || '';
+const apiBaseUrl = window.location.origin;
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (!applicationId) {
+    showError('No application ID provided. Pass ?id=<applicationId> in the URL.');
+    return;
+  }
+  fetchBusinessPermit();
+});
+
+function showError(message) {
+  const el = document.getElementById('error');
+  el.textContent = message;
+  el.classList.remove('hidden');
+  document.getElementById('loading').classList.add('hidden');
+}
+
+function getParam(parameters, ...names) {
+  const map = {};
+  (parameters || []).forEach((p) => {
+    if (!p?.param_name) return;
+    map[String(p.param_name).trim().toLowerCase()] = p.param_value != null ? String(p.param_value).trim() : '';
+  });
+  for (const name of names) {
+    const v = map[name.toLowerCase()];
+    if (v) return v;
+  }
+  return '';
+}
+
+function buildAddress(parameters) {
+  const location = getParam(parameters, 'location');
+  if (location) {
+    // PDF sample drops country: "TAPON, DALAGUETE, CEBU"
+    return location.replace(/,\s*Philippines\s*$/i, '').trim();
+  }
+  const parts = [
+    getParam(parameters, 'street/sitio', 'street', 'sitio'),
+    getParam(parameters, 'barangay'),
+    getParam(parameters, 'municipality', 'city'),
+    getParam(parameters, 'province')
+  ].filter(Boolean);
+  return parts.join(', ');
+}
+
+function formatDateLong(value) {
+  if (!value) return 'N/A';
+
+  // Already a Date instance
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return 'N/A';
+    return value.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  const str = String(value).trim();
+
+  // MM-DD-YYYY or MM/DD/YYYY
+  const mdy = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (mdy) {
+    const d = new Date(Number(mdy[3]), Number(mdy[1]) - 1, Number(mdy[2]));
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  }
+
+  // ISO / parseable dates (including Date.toString() forms)
+  const d = new Date(str);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  // Human-readable already, e.g. "July 30, 2026 up to December 31, 2026"
+  if (/[a-zA-Z]/.test(str)) {
+    return str.replace(/\s+up to\s+.*/i, '').trim();
+  }
+
+  return str;
+}
+
+function formatDateShort(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${mm}-${dd}-${d.getFullYear()}`;
+}
+
+function formatMoney(amount) {
+  return Number(amount || 0).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function parseValidUntil(parameters, application) {
+  const raw = getParam(parameters, 'valid until', 'validity', 'expiry');
+  if (raw) return formatDateLong(raw);
+  if (application.validity_date) return formatDateLong(application.validity_date);
+  return 'December 31, ' + new Date().getFullYear();
+}
+
+function parseDateIssued(parameters, application, payments) {
+  const dateParam = getParam(parameters, 'date');
+  if (dateParam) {
+    return formatDateLong(dateParam.split(/\s+up to\s+/i)[0].trim());
+  }
+  // ETRACS sample often uses first payment / OR date
+  if (payments?.length) {
+    const first = [...payments].sort((a, b) =>
+      new Date(a.payment_date || a.created_at || 0) - new Date(b.payment_date || b.created_at || 0)
+    )[0];
+    if (first?.payment_date) return formatDateLong(first.payment_date);
+  }
+  if (application.issued_date) return formatDateLong(application.issued_date);
+  return formatDateLong(application.created_at);
+}
+
+function formatProprietor(name) {
+  if (!name) return '';
+  const parts = String(name).trim().split(/\s+/);
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1];
+    const first = parts.slice(0, -1).join(' ');
+    // ETRACS style: LAST, FIRST MIDDLE
+    return `${last}, ${first}`.toUpperCase();
+  }
+  return String(name).toUpperCase();
+}
+
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function fetchBusinessPermit() {
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const appRes = await fetch(`${apiBaseUrl}/api/applications/${applicationId}`, {
+      method: 'GET', headers, credentials: 'include'
+    });
+    if (!appRes.ok) {
+      if (appRes.status === 401) throw new Error('Unauthorized. Please login again.');
+      if (appRes.status === 404) throw new Error('Application not found.');
+      throw new Error(`HTTP Error: ${appRes.status} ${appRes.statusText}`);
+    }
+    const application = await appRes.json();
+
+    let settings = {};
+    try {
+      const sRes = await fetch(`${apiBaseUrl}/api/settings`, { method: 'GET', headers, credentials: 'include' });
+      if (sRes.ok) settings = await sRes.json();
+    } catch (_) {}
+
+    let payments = [];
+    try {
+      const pRes = await fetch(`${apiBaseUrl}/api/applications/${applicationId}/payment`, {
+        method: 'GET', headers, credentials: 'include'
+      });
+      if (pRes.ok) {
+        const data = await pRes.json();
+        payments = Array.isArray(data) ? data : [];
+      }
+    } catch (_) {}
+
+    payments = [...payments].sort((a, b) => {
+      const da = new Date(a.payment_date || a.created_at || 0).getTime();
+      const db = new Date(b.payment_date || b.created_at || 0).getTime();
+      return da - db;
+    });
+
+    renderPermit(application, settings, payments);
+  } catch (err) {
+    console.error(err);
+    showError(`Failed to load business permit: ${err.message}`);
+  }
+}
+
+function renderPermit(application, settings, payments) {
+  const params = application.parameters || [];
+  const tradeName = application.entity_name || 'N/A';
+  const address = buildAddress(params) || application.entity_address || 'N/A';
+  const proprietor = formatProprietor(application.contact_person || tradeName);
+  const classification = (application.application_type || 'NEW').toUpperCase();
+  const permitNo = application.permit_number || application.application_number || application.application_id;
+  const permitYear = (() => {
+    const d = application.validity_date || application.created_at || new Date();
+    const y = new Date(d).getFullYear();
+    return Number.isNaN(y) ? new Date().getFullYear() : y;
+  })();
+  const activity = getParam(params, 'conduct/engage in', 'business activity', 'nature of business', 'activity')
+    || application.attribute_name
+    || application.permit_type
+    || 'N/A';
+  const dateIssued = parseDateIssued(params, application, payments);
+  const permitExpires = parseValidUntil(params, application);
+  const barcodePrefix = settings.barcode_prefix?.value || settings.permit_barcode_prefix?.value || '51005';
+  const plateNumber = `${barcodePrefix}:${permitNo}`;
+
+  const mayorName = settings.permit_signatory_name?.value || 'NELIN B. TAMBIS, CPA, MPA';
+  const mayorPos = settings.permit_signatory_position?.value || 'MUNICIPAL MAYOR';
+  const mayorSigRaw = settings.permit_signatory_signature?.value || '';
+  const mayorSig = mayorSigRaw
+    ? (String(mayorSigRaw).startsWith('http') || String(mayorSigRaw).startsWith('/')
+        ? mayorSigRaw
+        : `/uploads/${mayorSigRaw}`)
+    : '';
+
+  const logoUrl = '/dalaguete-logo.png';
+  const now = new Date();
+
+  const orRows = payments.length
+    ? payments.map((p) => `
+        <tr>
+          <td>${escapeHtml(p.official_receipt_no || '—')}</td>
+          <td>${escapeHtml(formatDateShort(p.payment_date || p.created_at))}</td>
+          <td class="num">${escapeHtml(formatMoney(p.amount))}</td>
+        </tr>
+      `).join('')
+    : '';
+
+  const html = `
+    <div class="page">
+      <div class="bp-header">
+        <img class="bp-logo" src="${logoUrl}" alt="Municipality of Dalaguete" />
+        <div class="bp-header-center">
+          <div class="republic">Republic of the Philippines</div>
+          <div class="muni">MUNICIPALITY OF DALAGUETE</div>
+          <div class="province">PROVINCE OF CEBU</div>
+          <div class="office">OFFICE OF THE MAYOR</div>
+        </div>
+        <div class="bp-qr-slot" title="QR code placeholder" aria-label="QR code placeholder"></div>
+      </div>
+
+      <div class="bp-title">MAYOR'S PERMIT</div>
+
+      <div class="meta-grid">
+        <div class="meta-cell">
+          <div class="meta-value">${escapeHtml(dateIssued)}</div>
+          <div class="meta-label">Date Issued</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-value">${escapeHtml(permitNo)}</div>
+          <div class="meta-label">Mayor's Permit No.</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-value">${escapeHtml(permitYear)}</div>
+          <div class="meta-label">Permit Year</div>
+        </div>
+
+        <div class="meta-cell">
+          <div class="meta-value">${escapeHtml(permitExpires)}</div>
+          <div class="meta-label">Permit Expires</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-value" style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.5px;">${escapeHtml(plateNumber)}</div>
+          <div class="meta-label">Plate Number</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-value">${escapeHtml(classification)}</div>
+          <div class="meta-label">Classification</div>
+        </div>
+      </div>
+
+      <div class="cert-row">
+        <div class="lead">This <strong>CERTIFIES</strong> that</div>
+        <div class="proprietor">${escapeHtml(proprietor)}</div>
+      </div>
+
+      <div class="field-row">
+        <div class="lbl">Business Tradename</div>
+        <div class="val">${escapeHtml(tradeName)}</div>
+      </div>
+      <div class="field-row">
+        <div class="lbl">business address at</div>
+        <div class="val sm">${escapeHtml(address)}</div>
+      </div>
+
+      <div class="cert-body">
+        has been granted <strong>BUSINESS PERMIT</strong> to operate the following businesses subject to existing laws, ordinances,
+        rules and regulations of the <strong>MUNICIPALITY OF DALAGUETE</strong> and to the pertinent provisions of Republic Act 7160
+        otherwise known as the Local Government Code of 1991 and provided further, that conditions stipulated in the
+        application must be complied with, any infraction or violation therefore will be sufficient ground for the revocation of
+        the PERMIT.
+      </div>
+
+      <div class="activity">${escapeHtml(activity)}</div>
+
+      <div class="bottom-grid">
+        <div>
+          <div class="or-head">Amount Paid Under the following O.R.:</div>
+          ${payments.length ? `
+            <table class="or-table">
+              <thead>
+                <tr>
+                  <th>O.R No</th>
+                  <th>O.R. Dates</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>${orRows}</tbody>
+            </table>
+          ` : `<div class="or-empty">No payment records found.</div>`}
+        </div>
+        <div class="approve-block">
+          <div class="approved">APPROVED:</div>
+          ${mayorSig ? `<img class="sig-img" src="${escapeHtml(mayorSig)}" alt="Signature" />` : ''}
+          <div class="name">${escapeHtml(mayorName)}</div>
+          <div class="pos">${escapeHtml(mayorPos)}</div>
+        </div>
+      </div>
+
+      <div class="warning">
+        ERASURE AND/OR ALTERATION<br/>
+        WILL INVALIDATE THIS PERMIT
+      </div>
+
+      <div class="cert-body secondary">
+        This permit shall be posted conspicously at the place where the business is/are being conducted and shall be presented
+        and/or surendered to competent authorities upon demand: <strong>NOT TRANSFERABLE AND NOT VALID WITHOUT THE
+        PAYMENT OF MAYOR'S PERMIT FEES AND TAXES.</strong> In case of closure of business surrender this permit to the OFFICE
+        OF THE MUNICIPAL TREASURER for the Official retirement.
+      </div>
+
+      <div class="plate-block">
+        <div class="plate-value">${escapeHtml(plateNumber)}</div>
+        <div class="plate-caption">PLATE NUMBER</div>
+      </div>
+
+      <div class="bp-footer">
+        <div>Enhanced Tax Revenue Assessment and Collection System (ETRACS 2.5)</div>
+        <div>Date Printed: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('report-content').innerHTML = html;
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('report-content').classList.remove('hidden');
+}
+
+function printReport() {
+  window.print();
+}
+
+async function generateReportPDF() {
+  const reportPdfBtn = document.getElementById('reportPdfBtn');
+  const reportError = document.getElementById('reportError');
+  try {
+    const reportContent = document.getElementById('report-content');
+    if (!reportContent || reportContent.classList.contains('hidden')) {
+      throw new Error('Report not loaded yet.');
+    }
+    reportPdfBtn.disabled = true;
+    reportPdfBtn.innerHTML = 'Generating PDF...';
+    reportError.classList.remove('show');
+
+    const styleText = Array.from(document.querySelectorAll('style')).map((s) => s.innerHTML).join('\n');
+    const fullHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><style>
+${styleText}
+body{background:white;margin:0;padding:0;}
+.controls{display:none!important;}
+#report-container{box-shadow:none;margin:0;max-width:100%;}
+.page{box-shadow:none;margin:0;}
+.bp-qr-slot{border-color:transparent;background:transparent;color:transparent;}
+</style></head><body><div id="report-container">${reportContent.innerHTML}</div></body></html>`;
+
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `Business_Permit_${date}.pdf`;
+
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { Authorization: `Bearer ${authToken}` })
+      },
+      body: JSON.stringify({ html: fullHtml, filename, pageSize: 'legal' })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Server error' }));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    reportPdfBtn.innerHTML = 'Downloaded!';
+    setTimeout(() => {
+      reportPdfBtn.innerHTML = 'Download PDF';
+      reportPdfBtn.disabled = false;
+    }, 2000);
+  } catch (error) {
+    reportError.textContent = `Error: ${error.message}`;
+    reportError.classList.add('show');
+    setTimeout(() => reportError.classList.remove('show'), 5000);
+    reportPdfBtn.innerHTML = 'Download PDF';
+    reportPdfBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
