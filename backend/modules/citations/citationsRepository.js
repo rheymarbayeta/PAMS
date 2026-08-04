@@ -84,7 +84,7 @@ async function listCitations(query = {}) {
   const [rows] = await pool.execute(
     `SELECT c.citation_id, c.ticket_number, c.driver_name, c.plate_number,
             c.violation_date, c.fine_amount, c.is_completed,
-            c.violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name,
+            c.violations, c.other_violations, c.created_at, COALESCE(u.full_name, 'Unknown') as issued_by_name,
             COALESCE(c.enforcer_name, e.full_name) as enforcer_name,
             c.driver_address, c.violation_location, c.violation_time,
             COALESCE(cp.total_paid, 0) as total_paid,

@@ -56,23 +56,38 @@ export default function CreateCitationWizardPage() {
   const set = (key: string, value: any) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const toggleViolation = (v: string) => {
-    setForm((prev) => ({
-      ...prev,
-      violations: prev.violations.includes(v)
+    setForm((prev) => {
+      const nextViolations = prev.violations.includes(v)
         ? prev.violations.filter((x) => x !== v)
-        : [...prev.violations, v],
-    }));
+        : [...prev.violations, v];
+      return {
+        ...prev,
+        violations: nextViolations,
+        otherViolations: nextViolations.includes('Others') ? prev.otherViolations : '',
+      };
+    });
   };
 
   const canNext =
     (step === 0 && !!form.ticketNumber.trim() && !!form.driverName.trim()) ||
     (step === 1 && !!form.plateNumber.trim()) ||
-    (step === 2 && form.violations.length > 0) ||
+    (step === 2 &&
+      form.violations.length > 0 &&
+      (!form.violations.includes('Others') || !!form.otherViolations.trim())) ||
     step === 3;
 
   const submit = async () => {
     try {
+      if (form.violations.includes('Others') && !form.otherViolations.trim()) {
+        await showAlert('Please specify the violation under Others.');
+        return;
+      }
       setSubmitting(true);
+      const resolvedViolations = form.violations.map((v) =>
+        v === 'Others' && form.otherViolations.trim()
+          ? `Others: ${form.otherViolations.trim().toUpperCase()}`
+          : v
+      );
       const res = await api.post('/api/citations', {
         ticketNumber: form.ticketNumber.trim(),
         driverName: form.driverName,
@@ -82,8 +97,8 @@ export default function CreateCitationWizardPage() {
         vehicleType: form.vehicleType || undefined,
         vehicleColor: form.vehicleColor || undefined,
         vehicleOwner: form.vehicleOwner || undefined,
-        violations: form.violations,
-        otherViolations: form.otherViolations || undefined,
+        violations: resolvedViolations,
+        otherViolations: form.otherViolations.trim() || undefined,
         violationLocation: form.placeViolation || undefined,
         placeViolation: form.placeViolation || undefined,
         violationDate: form.violationDate,
@@ -212,6 +227,19 @@ export default function CreateCitationWizardPage() {
                     </label>
                   ))}
                 </div>
+                {form.violations.includes('Others') && (
+                  <label className="block text-sm font-medium text-slate-700">
+                    Specify other violation
+                    <input
+                      type="text"
+                      className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2"
+                      placeholder="Describe the violation committed"
+                      value={form.otherViolations}
+                      onChange={(e) => set('otherViolations', e.target.value)}
+                      required
+                    />
+                  </label>
+                )}
                 <label className="block text-sm font-medium text-slate-700">
                   Place of violation
                   <input
@@ -280,7 +308,14 @@ export default function CreateCitationWizardPage() {
                   <strong>Plate:</strong> {form.plateNumber}
                 </p>
                 <p>
-                  <strong>Violations:</strong> {form.violations.join(', ') || '—'}
+                  <strong>Violations:</strong>{' '}
+                  {form.violations
+                    .map((v) =>
+                      v === 'Others' && form.otherViolations.trim()
+                        ? `Others: ${form.otherViolations.trim()}`
+                        : v
+                    )
+                    .join(', ') || '—'}
                 </p>
                 <p>
                   <strong>Fine:</strong> ₱{Number(form.fineAmount || 0).toLocaleString()}

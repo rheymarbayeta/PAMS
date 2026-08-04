@@ -379,8 +379,12 @@ export default function CitationsPage() {
       // Filter by violations
       if (reportFilters.violations !== '') {
         const citationViolations = citation.violations || [];
-        // Check if the selected violation is in the citation's violations array
-        if (!citationViolations.includes(reportFilters.violations)) {
+        const list = Array.isArray(citationViolations) ? citationViolations : [citationViolations];
+        const other = String((citation as any).other_violations || (citation as any).otherViolations || '').trim();
+        if (reportFilters.violations === 'Others') {
+          const hasOthers = list.some((item) => /^Others(\b|:)/i.test(String(item || ''))) || !!other;
+          if (!hasOthers) return false;
+        } else if (!list.includes(reportFilters.violations)) {
           return false;
         }
       }

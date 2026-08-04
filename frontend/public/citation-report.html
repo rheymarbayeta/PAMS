@@ -367,7 +367,12 @@ async function loadReport() {
     if (violationFilter) {
       citations = citations.filter(c => {
         const v = c.violations || [];
-        return Array.isArray(v) ? v.includes(violationFilter) : false;
+        const list = Array.isArray(v) ? v : [v];
+        const other = (c.other_violations || c.otherViolations || '').trim();
+        if (violationFilter === 'Others') {
+          return list.some((item) => /^Others(\b|:)/i.test(String(item || ''))) || !!other;
+        }
+        return list.includes(violationFilter);
       });
     }
 
@@ -422,6 +427,31 @@ function formatDate(dateStr) {
 function formatCurrency(value) {
   const n = parseFloat(value) || 0;
   return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Merge violations list with other_violations detail for display. */
+function formatViolationsDisplay(c) {
+  const raw = c?.violations;
+  let list = Array.isArray(raw)
+    ? raw.map((v) => String(v || '').trim()).filter(Boolean)
+    : (raw ? [String(raw).trim()] : []);
+  const other = String(c?.other_violations || c?.otherViolations || '').trim();
+
+  if (other) {
+    let replaced = false;
+    list = list.map((v) => {
+      if (/^Others$/i.test(v)) {
+        replaced = true;
+        return `Others: ${other}`;
+      }
+      return v;
+    });
+    if (!replaced && !list.some((v) => /^Others\s*:/i.test(v))) {
+      list.push(`Others: ${other}`);
+    }
+  }
+
+  return list.length ? list.join('; ') : 'N/A';
 }
 
 /** Amount shown in the report: paid/partial → amount received (with OR); otherwise assessed fine. */
@@ -525,9 +555,7 @@ function tableHeaderRow() {
 }
 
 function citationRowCellsHTML(c, rowNum) {
-  const violations = Array.isArray(c.violations)
-    ? c.violations.join('; ')
-    : (c.violations || 'N/A');
+  const violations = formatViolationsDisplay(c);
   return `
         <td class="center" style="width:3%">${rowNum}</td>
         <td class="center" style="width:8%">${c.ticket_number  || 'N/A'}</td>
@@ -642,7 +670,7 @@ function buildReportHTML(citations, rowHeights, settings, currentUserName) {
     let rowNum = pages.slice(0, pageIdx).reduce((sum, p) => sum + p.rows.length, 0);
     page.rows.forEach(c => {
       rowNum++;
-      const violations = Array.isArray(c.violations) ? c.violations.join('; ') : (c.violations || 'N/A');
+      const violations = formatViolationsDisplay(c);
       rowsHTML += `
         <tr>
           <td class="center">${rowNum}</td>
@@ -779,7 +807,7 @@ function buildGroupedItems(groups) {
     // ── Citation rows ──
     g.citations.forEach(c => {
       globalRowNum++;
-      const violations = Array.isArray(c.violations) ? c.violations.join('; ') : (c.violations || 'N/A');
+      const violations = formatViolationsDisplay(c);
       const rowHtml = `<tr>` +
         `<td class="center" style="width:3%">${globalRowNum}</td>` +
         `<td class="center" style="width:8%">${escapeHtml(c.ticket_number || 'N/A')}</td>` +
