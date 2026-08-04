@@ -116,23 +116,23 @@
     line-height: 1.15;
   }
   .bp-header-center .republic {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--etracs-green);
   }
   .bp-header-center .muni {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--etracs-green);
     margin-top: 1px;
   }
   .bp-header-center .province {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--etracs-green);
   }
   .bp-header-center .office {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--etracs-green);
     margin-top: 2px;
@@ -140,12 +140,20 @@
 
   .bp-title {
     text-align: center;
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 700;
     letter-spacing: 2px;
     color: var(--etracs-green);
-    margin: 6px 0 10px;
+    margin: 6px auto 10px;
     text-transform: uppercase;
+    border: 2px solid #000;
+    padding: 6px 28px;
+    display: inline-block;
+    width: auto;
+    max-width: 100%;
+  }
+  .bp-title-wrap {
+    text-align: center;
   }
 
   /* ── Top meta: values ABOVE labels (ETRACS style) ── */
@@ -160,17 +168,37 @@
     min-width: 0;
   }
   .meta-value {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--ink);
     border-bottom: 1px solid var(--line);
     padding: 0 4px 1px;
-    min-height: 16px;
+    min-height: 18px;
     text-transform: uppercase;
     word-break: break-word;
   }
+  .meta-value.plate-input {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    min-height: 20px;
+    outline: none;
+    cursor: text;
+  }
+  .meta-value.plate-input:empty::before {
+    content: 'Click to enter';
+    color: #999;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .meta-value.plate-input:focus {
+    background: #fffde7;
+  }
   .meta-label {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.4px;
     color: var(--muted);
@@ -181,15 +209,15 @@
   /* ── Certify + proprietor on one row ── */
   .cert-row {
     display: grid;
-    grid-template-columns: 140px 1fr;
+    grid-template-columns: 150px 1fr;
     gap: 8px;
     align-items: baseline;
     margin-bottom: 4px;
-    font-size: 11px;
+    font-size: 13px;
   }
-  .cert-row .lead { font-size: 11px; }
+  .cert-row .lead { font-size: 13px; }
   .cert-row .proprietor {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
     text-transform: uppercase;
     border-bottom: 1px solid var(--line);
@@ -198,143 +226,200 @@
 
   .field-row {
     display: grid;
-    grid-template-columns: 140px 1fr;
+    grid-template-columns: 150px 1fr;
     gap: 8px;
     align-items: baseline;
     margin-bottom: 3px;
-    font-size: 11px;
+    font-size: 13px;
   }
   .field-row .lbl { color: var(--ink); }
   .field-row .val {
     font-weight: 700;
     text-transform: uppercase;
-    font-size: 13px;
+    font-size: 15px;
     border-bottom: 1px solid var(--line);
     padding-bottom: 1px;
   }
-  .field-row .val.sm { font-size: 11.5px; }
+  .field-row .val.sm { font-size: 13px; }
 
   .cert-body {
     text-align: justify;
-    font-size: 10px;
-    line-height: 1.32;
+    font-size: 12px;
+    line-height: 1.35;
     margin: 8px 0;
     color: var(--ink);
   }
 
-  .activity {
+  /* ── Boxed lower section (ETRACS-style frames) ── */
+  .boxed-section {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bp-box {
+    border: 2px solid #000;
+    background: #fff;
+  }
+
+  .activity-box {
+    min-height: 310px;
+    padding: 10px 12px 48px;
     text-align: center;
-    font-size: 12px;
-    font-weight: 700;
+  }
+  .activity-box .val {
+    font-size: 18px;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
-    margin: 10px 28px 12px;
-    padding: 6px 8px;
-    border: 1.5px solid var(--etracs-purple);
-    color: var(--ink);
-    background: #faf7ff;
+    letter-spacing: 0.4px;
   }
 
-  .plate-block {
-    text-align: center;
-    margin: 4px 0 8px;
-  }
-  .plate-value {
-    display: inline-block;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    border: 1px solid var(--line);
-    padding: 4px 12px;
-    min-width: 240px;
-  }
-  .plate-caption {
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    margin-top: 2px;
-    color: var(--muted);
-  }
-
-  /* ── Bottom: OR table + approval ── */
-  .bottom-grid {
+  .boxed-mid {
     display: grid;
     grid-template-columns: 1.15fr 1fr;
-    gap: 16px;
-    align-items: start;
-    margin-top: 4px;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .boxed-mid-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .or-box {
+    flex: 1;
+    padding: 8px 10px 10px;
+    min-height: 88px;
   }
   .or-head {
-    font-size: 10px;
-    font-weight: 700;
-    margin-bottom: 4px;
+    font-size: 13px;
+    font-weight: 400;
+    margin-bottom: 8px;
   }
   .or-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: 13px;
   }
   .or-table th {
-    border: 1px solid var(--line);
-    background: var(--soft);
-    padding: 2px 4px;
+    border: none;
+    background: transparent;
+    padding: 1px 8px 2px 0;
     text-align: left;
-    font-size: 9px;
+    font-size: 13px;
+    font-weight: 700;
   }
   .or-table td {
-    border: 1px solid var(--line);
-    padding: 2px 4px;
+    border: none;
+    padding: 1px 8px 1px 0;
+    vertical-align: top;
   }
-  .or-table td.num { text-align: right; }
+  .or-table td.num { text-align: left; }
   .or-empty {
-    font-size: 10px;
+    font-size: 12px;
     font-style: italic;
     color: #666;
   }
 
-  .approve-block {
+  .warning-box {
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    padding-top: 0;
+    min-height: 48px;
   }
-  .approve-block .approved {
-    font-size: 11px;
+  .warning-box .txt {
+    font-size: 14px;
     font-weight: 700;
-    margin-bottom: 28px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    line-height: 1.25;
+    color: var(--ink);
   }
-  .approve-block .sig-img {
-    height: 36px;
+
+  .approve-box {
+    padding: 8px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  .approve-box .approved {
+    font-size: 14px;
+    font-weight: 400;
+    text-align: left;
+    margin-bottom: 8px;
+  }
+  .approve-box .sig-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 70px;
+    padding-bottom: 2px;
+  }
+  .approve-box .sig-img {
+    height: 40px;
     width: auto;
-    max-width: 150px;
+    max-width: 160px;
     object-fit: contain;
     display: block;
     margin: 0 auto 2px;
   }
-  .approve-block .name {
-    font-size: 12px;
+  .approve-box .name {
+    font-size: 14px;
     font-weight: 700;
     text-transform: uppercase;
-    text-decoration: underline;
+    text-align: center;
   }
-  .approve-block .pos {
-    font-size: 10px;
-    font-weight: 700;
-    margin-top: 1px;
-  }
-
-  .warning {
-    margin: 10px 0 6px;
-    text-align: left;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--etracs-purple);
-    letter-spacing: 0.4px;
-    line-height: 1.2;
-  }
-
-  .cert-body.secondary {
+  .approve-box .pos {
+    font-size: 13px;
+    font-weight: 400;
+    text-transform: uppercase;
+    text-align: center;
     margin-top: 2px;
-    margin-bottom: 8px;
+  }
+
+  .terms-box {
+    padding: 8px 10px;
+  }
+  .terms-box .txt {
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: justify;
+    color: var(--ink);
+  }
+
+  .bin-barcode-block {
+    text-align: right;
+    margin: 8px 0 4px;
+  }
+  .bin-barcode-block svg,
+  .bin-barcode-block img {
+    max-width: 320px;
+    height: 48px;
+  }
+  .bin-barcode-value {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+  .bin-barcode-caption {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-top: 1px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .bin-barcode-empty {
+    font-size: 11px;
+    color: #888;
+    font-style: italic;
   }
 
   .bp-footer {
@@ -345,7 +430,7 @@
     margin-top: 0;
     padding-top: 6px;
     border-top: 1px solid #ccc;
-    font-size: 8px;
+    font-size: 10px;
     color: #555;
     display: flex;
     justify-content: space-between;
@@ -373,6 +458,12 @@
       border-color: transparent;
       background: transparent;
     }
+    .meta-value.plate-input:empty::before {
+      content: none;
+    }
+    .meta-value.plate-input:focus {
+      background: transparent;
+    }
   }
 </style>
 </head>
@@ -388,6 +479,7 @@
   <div id="report-content" class="hidden"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script>
 const urlParams = new URLSearchParams(window.location.search);
 const applicationId = urlParams.get('id') || urlParams.get('applicationId');
@@ -593,8 +685,12 @@ function renderPermit(application, settings, payments) {
     || 'N/A';
   const dateIssued = parseDateIssued(params, application, payments);
   const permitExpires = parseValidUntil(params, application);
+  const bin = getParam(params, 'bin', 'business identification number', 'business_identification_number')
+    || application.permit_number
+    || application.application_number
+    || '';
   const barcodePrefix = settings.barcode_prefix?.value || settings.permit_barcode_prefix?.value || '51005';
-  const plateNumber = `${barcodePrefix}:${permitNo}`;
+  const binBarcodeValue = bin ? `${barcodePrefix}:${bin}` : '';
 
   const mayorName = settings.permit_signatory_name?.value || 'NELIN B. TAMBIS, CPA, MPA';
   const mayorPos = settings.permit_signatory_position?.value || 'MUNICIPAL MAYOR';
@@ -631,7 +727,9 @@ function renderPermit(application, settings, payments) {
         <div class="bp-qr-slot" title="QR code placeholder" aria-label="QR code placeholder"></div>
       </div>
 
-      <div class="bp-title">MAYOR'S PERMIT</div>
+      <div class="bp-title-wrap">
+        <div class="bp-title">MAYOR'S PERMIT</div>
+      </div>
 
       <div class="meta-grid">
         <div class="meta-cell">
@@ -652,7 +750,7 @@ function renderPermit(application, settings, payments) {
           <div class="meta-label">Permit Expires</div>
         </div>
         <div class="meta-cell">
-          <div class="meta-value" style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.5px;">${escapeHtml(plateNumber)}</div>
+          <div class="meta-value plate-input" id="plateNumberMeta" contenteditable="true" spellcheck="false" title="Click to enter plate number"></div>
           <div class="meta-label">Plate Number</div>
         </div>
         <div class="meta-cell">
@@ -683,47 +781,61 @@ function renderPermit(application, settings, payments) {
         the PERMIT.
       </div>
 
-      <div class="activity">${escapeHtml(activity)}</div>
-
-      <div class="bottom-grid">
-        <div>
-          <div class="or-head">Amount Paid Under the following O.R.:</div>
-          ${payments.length ? `
-            <table class="or-table">
-              <thead>
-                <tr>
-                  <th>O.R No</th>
-                  <th>O.R. Dates</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>${orRows}</tbody>
-            </table>
-          ` : `<div class="or-empty">No payment records found.</div>`}
+      <div class="boxed-section">
+        <div class="bp-box activity-box">
+          <div class="val">${escapeHtml(activity)}</div>
         </div>
-        <div class="approve-block">
-          <div class="approved">APPROVED:</div>
-          ${mayorSig ? `<img class="sig-img" src="${escapeHtml(mayorSig)}" alt="Signature" />` : ''}
-          <div class="name">${escapeHtml(mayorName)}</div>
-          <div class="pos">${escapeHtml(mayorPos)}</div>
+
+        <div class="boxed-mid">
+          <div class="boxed-mid-left">
+            <div class="bp-box or-box">
+              <div class="or-head">Paid Under the following O.R.:</div>
+              ${payments.length ? `
+                <table class="or-table">
+                  <thead>
+                    <tr>
+                      <th>O.R No</th>
+                      <th>O.R. Dates</th>
+                      <th>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>${orRows}</tbody>
+                </table>
+              ` : `<div class="or-empty">No payment records found.</div>`}
+            </div>
+            <div class="bp-box warning-box">
+              <div class="txt">ERASURE AND/OR ALTERATION<br/>WILL INVALIDATE THIS PERMIT</div>
+            </div>
+          </div>
+
+          <div class="bp-box approve-box">
+            <div class="approved">APPROVED:</div>
+            <div class="sig-area">
+              ${mayorSig ? `<img class="sig-img" src="${escapeHtml(mayorSig)}" alt="Signature" />` : ''}
+              <div class="name">${escapeHtml(mayorName)}</div>
+              <div class="pos">${escapeHtml(mayorPos)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bp-box terms-box">
+          <div class="txt">
+            This permit shall be posted conspicously at the place where the business is/are being conducted and shall be presented
+            and/or surendered to competent authorities upon demand: <strong>NOT TRANSFERABLE AND NOT VALID WITHOUT THE
+            PAYMENT OF MAYOR'S PERMIT FEES AND TAXES.</strong> In case of closure of business surrender this permit to the OFFICE
+            OF THE MUNICIPAL TREASURER for the Official retirement.
+          </div>
         </div>
       </div>
 
-      <div class="warning">
-        ERASURE AND/OR ALTERATION<br/>
-        WILL INVALIDATE THIS PERMIT
-      </div>
-
-      <div class="cert-body secondary">
-        This permit shall be posted conspicously at the place where the business is/are being conducted and shall be presented
-        and/or surendered to competent authorities upon demand: <strong>NOT TRANSFERABLE AND NOT VALID WITHOUT THE
-        PAYMENT OF MAYOR'S PERMIT FEES AND TAXES.</strong> In case of closure of business surrender this permit to the OFFICE
-        OF THE MUNICIPAL TREASURER for the Official retirement.
-      </div>
-
-      <div class="plate-block">
-        <div class="plate-value">${escapeHtml(plateNumber)}</div>
-        <div class="plate-caption">PLATE NUMBER</div>
+      <div class="bin-barcode-block">
+        ${binBarcodeValue ? `
+          <svg id="binBarcode"></svg>
+          <div class="bin-barcode-value">${escapeHtml(binBarcodeValue)}</div>
+          <div class="bin-barcode-caption">BIN</div>
+        ` : `
+          <div class="bin-barcode-empty">BIN barcode unavailable</div>
+        `}
       </div>
 
       <div class="bp-footer">
@@ -736,6 +848,38 @@ function renderPermit(application, settings, payments) {
   document.getElementById('report-content').innerHTML = html;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('report-content').classList.remove('hidden');
+  wirePlateNumberInput();
+  renderBinBarcode(binBarcodeValue);
+}
+
+function wirePlateNumberInput() {
+  const meta = document.getElementById('plateNumberMeta');
+  if (!meta) return;
+
+  meta.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text').trim();
+    document.execCommand('insertText', false, text);
+  });
+}
+
+function renderBinBarcode(value) {
+  if (!value) return;
+  const el = document.getElementById('binBarcode');
+  if (!el || typeof JsBarcode !== 'function') return;
+  try {
+    JsBarcode(el, value, {
+      format: 'CODE128',
+      displayValue: false,
+      margin: 0,
+      width: 1.6,
+      height: 46,
+      background: '#ffffff',
+      lineColor: '#000000'
+    });
+  } catch (err) {
+    console.warn('BIN barcode render failed:', err);
+  }
 }
 
 function printReport() {
