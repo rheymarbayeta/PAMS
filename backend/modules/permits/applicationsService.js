@@ -15,14 +15,11 @@ function buildListFilters(user, query) {
   const { status, search, permit_type, org_unit_id } = query;
 
   const roles = user.roles || [];
-  const seesAll = roles.some((r) => ['SuperAdmin', 'Admin', 'Viewer'].includes(r));
+  // Application Creators share a common application pool (not limited to own creations)
+  const seesAll = roles.some((r) => ['SuperAdmin', 'Admin', 'Viewer', 'Application Creator'].includes(r));
 
   if (!seesAll) {
     const roleConditions = [];
-    if (roles.includes('Application Creator')) {
-      roleConditions.push('a.creator_id = ?');
-      params.push(user.user_id);
-    }
     if (roles.includes('Assessor')) {
       roleConditions.push('(a.status = ? OR a.assessor_id = ?)');
       params.push('Pending', user.user_id);

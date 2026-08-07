@@ -52,17 +52,15 @@ router.get('/', async (req, res) => {
     const params = [];
 
     // Role-based filtering
-    if (roleName === 'Application Creator') {
-      query += ' AND a.creator_id = ?';
-      params.push(userId);
-    } else if (roleName === 'Assessor') {
+    // Application Creators share the full application list (not limited to own creations)
+    if (roleName === 'Assessor') {
       query += ' AND (a.assessor_id = ? OR a.status = ?)';
       params.push(userId, 'Pending');
     } else if (roleName === 'Approver') {
       query += ' AND (a.approver_id = ? OR a.status = ?)';
       params.push(userId, 'Pending Approval');
     }
-    // SuperAdmin, Admin, Viewer can see all
+    // SuperAdmin, Admin, Viewer, Application Creator can see all
 
     // Filter by Attribute
     if (attributeId) {
@@ -154,10 +152,8 @@ router.get('/summary', async (req, res) => {
     const params = [];
 
     // Role-based filtering
-    if (roleName === 'Application Creator') {
-      baseQuery += ' AND a.creator_id = ?';
-      params.push(userId);
-    } else if (roleName === 'Assessor') {
+    // Application Creators share the full application list (not limited to own creations)
+    if (roleName === 'Assessor') {
       baseQuery += ' AND (a.assessor_id = ? OR a.status = ?)';
       params.push(userId, 'Pending');
     } else if (roleName === 'Approver') {
@@ -304,17 +300,15 @@ router.post('/generate', async (req, res) => {
       params.push(applicationId);
     } else {
       // Role-based filtering
-      if (roleName === 'Application Creator') {
-        query += ' AND a.creator_id = ?';
-        params.push(userId);
-      } else if (roleName === 'Assessor') {
+      // Application Creators share the full application list (not limited to own creations)
+      if (roleName === 'Assessor') {
         query += ' AND (a.assessor_id = ? OR a.status = ?)';
         params.push(userId, 'Pending');
       } else if (roleName === 'Approver') {
         query += ' AND (a.approver_id = ? OR a.status = ?)';
         params.push(userId, 'Pending Approval');
       }
-      // SuperAdmin, Admin, Viewer can see all
+      // SuperAdmin, Admin, Viewer, Application Creator can see all
 
       // Filter by Attribute
       if (attributeId) {

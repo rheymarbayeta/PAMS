@@ -35,10 +35,8 @@ router.get('/full-stats', async (req, res) => {
     // Build role filter
     let roleWhere = '';
     const roleParams = [];
-    if (roleName === 'Application Creator') {
-      roleWhere = ' AND a.creator_id = ?';
-      roleParams.push(userId);
-    } else if (roleName === 'Assessor') {
+    // Application Creators share the full application list (not limited to own creations)
+    if (roleName === 'Assessor') {
       roleWhere = ' AND (a.assessor_id = ? OR a.status = ?)';
       roleParams.push(userId, 'Pending');
     } else if (roleName === 'Approver') {
@@ -245,20 +243,8 @@ router.get('/stats', async (req, res) => {
     }
 
     // Role-based filtering
-    if (roleName === 'Application Creator') {
-      pendingQuery += ' AND a.creator_id = ?';
-      pendingParams.push(userId);
-      pendingApprovalQuery += ' AND a.creator_id = ?';
-      pendingApprovalParams.push(userId);
-      approvedQuery += ' AND a.creator_id = ?';
-      approvedParams.push(userId);
-      issuedQuery += ' AND a.creator_id = ?';
-      issuedParams.push(userId);
-      releasedQuery += ' AND a.creator_id = ?';
-      releasedParams.push(userId);
-      totalQuery += (hasWhere ? ' AND' : ' WHERE') + ' a.creator_id = ?';
-      totalParams.push(userId);
-    } else if (roleName === 'Assessor') {
+    // Application Creators share the full application list (not limited to own creations)
+    if (roleName === 'Assessor') {
       pendingQuery += ' AND (a.status = ? OR a.assessor_id = ?)';
       pendingParams.push('Pending', userId);
       pendingApprovalQuery += ' AND a.assessor_id = ?';
