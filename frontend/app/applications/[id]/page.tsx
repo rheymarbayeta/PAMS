@@ -502,10 +502,8 @@ export default function ApplicationDetailPage() {
                 
                 {/* Action Buttons - Horizontal scroll on mobile */}
                 <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide touch-scroll">
-                  {/* Reports Dropdown - shows when there are reports available */}
-                  {((canPrintPermit && application.status !== 'Paid') ||
-                    ((application.status === 'Assessed' || application.status === 'Pending Approval' || application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released') && application.assessed_fees.length > 0) ||
-                    (application.status === 'Approved' || application.status === 'Paid' || application.status === 'Issued' || application.status === 'Released')) && (
+                  {/* Reports Dropdown */}
+                  {(
                     <>
                       <button
                         ref={reportsButtonRef}
@@ -537,6 +535,20 @@ export default function ApplicationDetailPage() {
                             className="fixed w-48 bg-white rounded-xl shadow-2xl border border-gray-200 py-1 z-50"
                             style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
                           >
+                            <button
+                              onClick={() => {
+                                const token = localStorage.getItem('token') || '';
+                                const encodedToken = token ? `&token=${encodeURIComponent(token)}` : '';
+                                const url = `/application-form.html?id=${application.application_id}${encodedToken}`;
+                                openReportModal(url, 'Application Form');
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-800 transition-colors"
+                            >
+                              <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M9 8h2m4-5H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V7l-4-4z" />
+                              </svg>
+                              Application Form
+                            </button>
                             {canPrintPermit && application.status !== 'Paid' && (
                               <button
                                 onClick={() => {

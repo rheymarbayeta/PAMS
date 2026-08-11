@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Application Form</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef1f4; color: #111; font-family: Arial, Helvetica, sans-serif; }
+  .controls {
+    position: sticky; top: 0; z-index: 10; padding: 12px calc((100% - 8.5in) / 2);
+    text-align: right; background: #f8f9fa; border-bottom: 1px solid #d7dce1;
+  }
+  button { border: 0; border-radius: 4px; padding: 9px 16px; margin-left: 6px; color: #fff; cursor: pointer; }
+  .print { background: #16a34a; }
+  .pdf { background: #4f46e5; }
+  button:disabled { background: #9ca3af; cursor: wait; }
+  .message { max-width: 8.5in; margin: 20px auto; padding: 30px; background: #fff; text-align: center; }
+  .error { color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; }
+  .hidden { display: none; }
+  .page {
+    width: 8.5in; min-height: 13in; margin: 18px auto; padding: .45in .55in .55in;
+    background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  .header { display: grid; grid-template-columns: 90px 1fr 90px; align-items: center; min-height: 72px; }
+  .header-logo { display: flex; align-items: center; justify-content: center; }
+  .header-logo img { max-width: 86px; object-fit: contain; }
+  .header-copy { text-align: center; line-height: 1.2; }
+  .form-title { margin: 16px 0 12px; text-align: center; font-size: 23px; font-weight: 700; letter-spacing: 1.5px; }
+  .form-subtitle { margin: -7px 0 17px; text-align: center; font-size: 12px; }
+  .section { margin-top: 12px; break-inside: avoid; }
+  .section-title {
+    padding: 6px 9px; border: 1px solid #111; background: #e8e8e8;
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; border-left: 1px solid #111; }
+  .field { min-height: 43px; padding: 6px 9px; border-right: 1px solid #111; border-bottom: 1px solid #111; }
+  .field.full { grid-column: 1 / -1; }
+  .label { display: block; margin-bottom: 4px; color: #444; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+  .value { min-height: 16px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .declaration { margin-top: 18px; font-size: 11px; line-height: 1.45; text-align: justify; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 55px; margin-top: 55px; text-align: center; font-size: 10px; }
+  .signature-line { padding-top: 5px; border-top: 1px solid #111; font-weight: 700; }
+  .footer { margin-top: 35px; padding-top: 6px; border-top: 1px solid #aaa; color: #666; font-size: 8px; text-align: center; }
+  @page { size: 8.5in 13in portrait; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .controls { display: none !important; }
+    .page { width: 8.5in; min-height: 13in; margin: 0; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="controls">
+  <button class="print" onclick="window.print()">Print</button>
+  <button class="pdf" id="pdfButton" onclick="downloadPdf()">Download PDF</button>
+</div>
+<div id="loading" class="message">Loading application form...</div>
+<div id="error" class="message error hidden"></div>
+<main id="report" class="hidden"></main>
+
+<script>
+const query = new URLSearchParams(location.search);
+const applicationId = query.get('id') || query.get('applicationId');
+const authToken = query.get('token') || localStorage.getItem('token') || '';
+const apiBaseUrl = location.origin;
+
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+
+const setting = (settings, key, fallback = '') =>
+  settings?.[key]?.value !== undefined ? settings[key].value : fallback;
+
+const formatDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+};
+
+const logoUrl = (value) => {
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return value.startsWith('/api/') ? apiBaseUrl + value : value;
+};
+
+function field(label, value, full = false) {
+  return `<div class="field${full ? ' full' : ''}">
+    <span class="label">${escapeHtml(label)}</span>
+    <div class="value">${escapeHtml(value) || '&nbsp;'}</div>
+  </div>`;
+}
+
+function render(application, settings) {
+  const parameters = Array.isArray(application.parameters) ? application.parameters : [];
+  const leftLogo = logoUrl(setting(settings, 'permit_header_logo_left', '/dalaguete-logo.png'));
+  const rightLogo = logoUrl(setting(settings, 'permit_header_logo_right', ''));
+  const logoHeight = Math.max(20, Math.min(120, Number(setting(settings, 'permit_header_logo_size', 50)) || 50));
+  const fontSize = Math.max(7, Math.min(20, Number(setting(settings, 'permit_header_font_size', 11)) || 11));
+  const lines = [
+    setting(settings, 'permit_header_line_1', 'REPUBLIC OF THE PHILIPPINES'),
+    setting(settings, 'permit_header_line_2', 'MUNICIPALITY OF DALAGUETE'),
+    setting(settings, 'permit_header_line_3', 'PROVINCE OF CEBU'),
+    setting(settings, 'permit_header_line_4', 'OFFICE OF THE MUNICIPAL MAYOR'),
+    setting(settings, 'permit_header_line_5', 'Tel. # 520 4141 loc. 315')
+  ];
+  const headerText = lines.map((line, index) => line ? `<div style="font-size:${index === 3 ? Math.round(fontSize * 1.45) : fontSize}px;font-weight:700;${index === 3 ? 'margin-top:2px' : ''}">${escapeHtml(line)}</div>` : '').join('');
+  const parameterFields = parameters.length
+    ? parameters.map((p) => field(p.param_name || 'Field', p.param_value)).join('')
+    : field('Application Details', 'No application parameters were supplied.', true);
+  const applicantName = application.contact_person || application.entity_name || '';
+  const generated = new Date().toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  document.title = `Application Form - ${application.application_number || application.entity_name || ''}`;
+  document.getElementById('report').innerHTML = `
+    <article class="page">
+      <header class="header">
+        <div class="header-logo">${leftLogo ? `<img src="${escapeHtml(leftLogo)}" style="height:${logoHeight}px" alt="Municipal logo">` : ''}</div>
+        <div class="header-copy">${headerText}</div>
+        <div class="header-logo">${rightLogo ? `<img src="${escapeHtml(rightLogo)}" style="height:${logoHeight}px" alt="Office logo">` : ''}</div>
+      </header>
+
+      <h1 class="form-title">APPLICATION FORM</h1>
+      <div class="form-subtitle">${escapeHtml(application.permit_type || 'Permit Application')}</div>
+
+      <section class="section">
+        <div class="section-title">Application Information</div>
+        <div class="grid">
+          ${field('Application Number', application.application_number)}
+          ${field('Date Filed', formatDate(application.created_at))}
+          ${field('Permit Type', application.permit_type)}
+          ${field('Application Status', application.status)}
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">Applicant / Business Information</div>
+        <div class="grid">
+          ${field('Applicant / Contact Person', applicantName)}
+          ${field('Business / Entity Name', application.entity_name)}
+          ${field('Contact Number', application.phone)}
+          ${field('Email Address', application.email)}
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">Application Details</div>
+        <div class="grid">${parameterFields}</div>
+      </section>
+
+      <div class="declaration">
+        I hereby certify that the information provided in this application is true and correct to the best
+        of my knowledge. I understand that any false statement or material omission may be grounds for
+        denial or cancellation of the permit and may subject me to penalties under applicable laws and ordinances.
+      </div>
+
+      <div class="signatures">
+        <div><div class="signature-line">${escapeHtml(applicantName) || 'APPLICANT'}</div><div>Applicant's Signature over Printed Name / Date</div></div>
+        <div><div class="signature-line">&nbsp;</div><div>Receiving Officer / Date</div></div>
+      </div>
+
+      <footer class="footer">
+        Permit and Assessment Management System | Generated: ${escapeHtml(generated)}
+      </footer>
+    </article>`;
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('report').classList.remove('hidden');
+}
+
+async function loadForm() {
+  if (!applicationId) return showError('No application ID was provided.');
+  const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  try {
+    const [applicationResponse, settingsResponse] = await Promise.all([
+      fetch(`${apiBaseUrl}/api/applications/${applicationId}`, { headers, credentials: 'include' }),
+      fetch(`${apiBaseUrl}/api/settings`, { headers, credentials: 'include' })
+    ]);
+    if (!applicationResponse.ok) throw new Error(`Unable to load application (${applicationResponse.status}).`);
+    const application = await applicationResponse.json();
+    const settings = settingsResponse.ok ? await settingsResponse.json() : {};
+    render(application, settings);
+  } catch (error) {
+    showError(error.message || 'Unable to load the application form.');
+  }
+}
+
+function showError(message) {
+  document.getElementById('loading').classList.add('hidden');
+  const element = document.getElementById('error');
+  element.textContent = message;
+  element.classList.remove('hidden');
+}
+
+async function downloadPdf() {
+  const button = document.getElementById('pdfButton');
+  button.disabled = true;
+  try {
+    const filename = `Application_Form_${(document.title.split(' - ')[1] || applicationId).replace(/[^a-z0-9_-]/gi, '_')}.pdf`;
+    const html = '<!DOCTYPE html>' + document.documentElement.outerHTML;
+    const response = await fetch(`${apiBaseUrl}/api/reports/generate-from-html`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+      body: JSON.stringify({ html, filename, pageSize: 'legal' })
+    });
+    if (!response.ok) throw new Error('PDF generation failed.');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = filename; link.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert(error.message || 'Unable to download PDF.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadForm);
+</script>
+</body>
+</html>
