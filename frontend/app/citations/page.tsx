@@ -11,7 +11,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { VIOLATIONS } from '@/features/citations/constants';
 import { CitationListPanel } from '@/features/citations/CitationListPanel';
-import { matchesPaymentStatusFilter } from '@/features/citations/citationUtils';
+import {
+  matchesPaymentStatusFilter,
+  citationReportAmount,
+  PARTIAL_PAYMENT_STATUSES,
+} from '@/features/citations/citationUtils';
 
 interface Citation {
   citation_id: string;
@@ -20,6 +24,7 @@ interface Citation {
   plate_number: string;
   violation_date: string;
   fine_amount: number;
+  total_paid?: number | string;
   payment_status: string;
   is_completed: boolean;
   violations?: string[];
@@ -773,7 +778,7 @@ export default function CitationsPage() {
                 <h3 className="text-lg font-bold text-slate-800 mb-4">
                   Citation Statistics
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                   <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                     <p className="text-sm text-slate-600 mb-1">Total Citations</p>
                     <p className="text-2xl font-bold text-slate-800">
@@ -786,6 +791,16 @@ export default function CitationsPage() {
                       {reportFilteredCitations.filter((c) => c.payment_status === 'Paid').length}
                     </p>
                   </div>
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <p className="text-sm text-orange-600 mb-1">Partially Paid</p>
+                    <p className="text-2xl font-bold text-orange-800">
+                      {
+                        reportFilteredCitations.filter((c) =>
+                          PARTIAL_PAYMENT_STATUSES.includes((c.payment_status || '').trim())
+                        ).length
+                      }
+                    </p>
+                  </div>
                   <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                     <p className="text-sm text-yellow-600 mb-1">Pending</p>
                     <p className="text-2xl font-bold text-yellow-800">
@@ -793,9 +808,12 @@ export default function CitationsPage() {
                     </p>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-600 mb-1">Total Fines</p>
+                    <p className="text-sm text-blue-600 mb-1">Total Amount</p>
                     <p className="text-2xl font-bold text-blue-800">
-                      ₱{formatCurrency(reportFilteredCitations.reduce((sum, c) => sum + (Number(c.fine_amount) || 0), 0))}
+                      ₱{formatCurrency(reportFilteredCitations.reduce((sum, c) => sum + citationReportAmount(c), 0))}
+                    </p>
+                    <p className="text-[11px] text-blue-500 mt-1">
+                      Amount received for paid/partial, assessed fine otherwise
                     </p>
                   </div>
                 </div>

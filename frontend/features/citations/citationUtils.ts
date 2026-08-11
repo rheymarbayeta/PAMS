@@ -34,6 +34,28 @@ export function matchesPaymentStatusFilter(
   return status === filter;
 }
 
+/** True when the ticket has any payment recorded against it. */
+export function isPaidOrPartialStatus(status: string | null | undefined): boolean {
+  const s = (status || '').trim();
+  return s === 'Paid' || PARTIAL_PAYMENT_STATUSES.includes(s);
+}
+
+/**
+ * Amount reported for a citation — must stay in sync with citation-report.html.
+ * Paid/partial tickets report the amount actually received; others report the assessed fine.
+ */
+export function citationReportAmount(citation: {
+  payment_status?: string | null;
+  total_paid?: number | string | null;
+  fine_amount?: number | string | null;
+}): number {
+  if (isPaidOrPartialStatus(citation?.payment_status)) {
+    const paid = parseFloat(String(citation?.total_paid ?? ''));
+    if (!Number.isNaN(paid) && paid > 0) return paid;
+  }
+  return parseFloat(String(citation?.fine_amount ?? '')) || 0;
+}
+
 export function formatCitationMoney(amount: number | string | null | undefined) {
   const n = typeof amount === 'string' ? parseFloat(amount) : Number(amount || 0);
   return `₱ ${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
