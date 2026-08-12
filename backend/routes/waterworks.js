@@ -992,10 +992,20 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
     } = req.body;
 
     const [existing] = await pool.execute(
-      'SELECT account_id, entity_id, last_reading_date FROM ww_consumer_accounts WHERE account_id = ?',
+      `SELECT account_id, entity_id, last_reading_date, supply_id, account_type, account_number
+       FROM ww_consumer_accounts WHERE account_id = ?`,
       [req.params.id]
     );
     if (!existing.length) return res.status(404).json({ error: 'Account not found' });
+
+    const current = existing[0];
+    const nextSupplyId = supply_id || current.supply_id;
+    const nextAccountType = account_type
+      ? normalizeAccountType(account_type)
+      : normalizeAccountType(current.account_type);
+    const supplyOrTypeChanged =
+      String(nextSupplyId) !== String(current.supply_id) ||
+      nextAccountType !== normalizeAccountType(current.account_type);
 
     let openingDues = null;
     if (unpaid_dues !== undefined) {
@@ -1030,15 +1040,45 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
       last_reading !== undefined && last_reading !== null && last_reading !== ''
         ? parseFloat(last_reading)
         : null;
-    if (parsedLast === null && parsedPrevious !== null && !existing[0].last_reading_date) {
+    if (parsedLast === null && parsedPrevious !== null && !current.last_reading_date) {
       parsedLast = parsedPrevious;
+    }
+
+    let nextAccountNumber =
+      account_number !== undefined && account_number !== null && String(account_number).trim()
+        ? String(account_number).trim()
+        : current.account_number;
+
+    // If supply/type was corrected and number still matches the old prefix, assign a new series number
+    if (supplyOrTypeChanged) {
+      const [supplies] = await pool.execute(
+        'SELECT supply_code FROM ww_water_supplies WHERE supply_id = ?',
+        [nextSupplyId]
+      );
+      if (!supplies.length) {
+        return res.status(400).json({ error: 'Invalid supply_id' });
+      }
+      const expectedPrefix = `${supplies[0].supply_code}-${getAccountTypeCode(nextAccountType)}-`;
+      if (!nextAccountNumber.startsWith(expectedPrefix)) {
+        nextAccountNumber = await generateNextAccountNumber(pool, nextSupplyId, nextAccountType);
+      }
+    }
+
+    if (nextAccountNumber !== current.account_number) {
+      const [dup] = await pool.execute(
+        'SELECT account_id FROM ww_consumer_accounts WHERE account_number = ? AND account_id != ? LIMIT 1',
+        [nextAccountNumber, req.params.id]
+      );
+      if (dup.length) {
+        return res.status(400).json({ error: 'Account number already in use' });
+      }
     }
 
     await pool.execute(
       `UPDATE ww_consumer_accounts SET
-        account_number = COALESCE(?, account_number),
-        account_type = COALESCE(?, account_type),
-        supply_id = COALESCE(?, supply_id),
+        account_number = ?,
+        account_type = ?,
+        supply_id = ?,
         entity_id = COALESCE(?, entity_id),
         consumer_name = COALESCE(?, consumer_name),
         address = COALESCE(?, address),
@@ -1053,9 +1093,9 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
         unpaid_dues_notes = COALESCE(?, unpaid_dues_notes)
        WHERE account_id = ?`,
       [
-        account_number || null,
-        account_type ? normalizeAccountType(account_type) : null,
-        supply_id || null,
+        nextAccountNumber,
+        nextAccountType,
+        nextSupplyId,
         resolvedConsumer ? resolvedConsumer.entity_id : null,
         resolvedConsumer ? resolvedConsumer.consumer_name : (consumer_name || null),
         resolvedConsumer ? resolvedConsumer.address : (address !== undefined ? address : null),
@@ -1072,10 +1112,23 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
       ]
     );
 
-    await logAction(req.user.user_id, 'UPDATE_WW_ACCOUNT', `Updated account: ${req.params.id}`, req.params.id);
-    res.json({ message: 'Account updated' });
+    await logAction(
+      req.user.user_id,
+      'UPDATE_WW_ACCOUNT',
+      supplyOrTypeChanged
+        ? `Updated account ${req.params.id}: ${current.account_number} → ${nextAccountNumber}`
+        : `Updated account: ${req.params.id}`,
+      req.params.id
+    );
+    res.json({
+      message: 'Account updated',
+      data: { account_number: nextAccountNumber, supply_id: nextSupplyId, account_type: nextAccountType },
+    });
   } catch (error) {
     console.error('Update account error:', error);
+    if (error && error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ error: 'Account number already in use' });
+    }
     res.status(500).json({ error: 'Failed to update account' });
   }
 });

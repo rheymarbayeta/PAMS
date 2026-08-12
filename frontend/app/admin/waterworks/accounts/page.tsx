@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -74,6 +74,11 @@ function AccountsContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ConsumerAccount | null>(null);
+  const editBaselineRef = useRef<{
+    supply_id: string;
+    account_type: AccountType;
+    account_number: string;
+  } | null>(null);
 
   const [entitySearch, setEntitySearch] = useState('');
   const [filteredEntities, setFilteredEntities] = useState<Entity[]>([]);
@@ -135,8 +140,24 @@ function AccountsContent() {
   }, []);
 
   useEffect(() => {
-    if (!showModal || editing) return;
-    if (!form.supply_id) return;
+    if (!showModal || !form.supply_id) return;
+
+    // Edit: keep original account number unless supply or type was corrected
+    if (editing && editBaselineRef.current) {
+      const baseline = editBaselineRef.current;
+      const unchanged =
+        form.supply_id === baseline.supply_id &&
+        form.account_type === baseline.account_type;
+      if (unchanged) {
+        setForm((prev) =>
+          prev.account_number === baseline.account_number
+            ? prev
+            : { ...prev, account_number: baseline.account_number }
+        );
+        return;
+      }
+    }
+
     fetchNextAccountNumber(form.supply_id, form.account_type);
   }, [showModal, editing, form.supply_id, form.account_type, fetchNextAccountNumber]);
 
@@ -248,6 +269,7 @@ function AccountsContent() {
 
   const openCreate = () => {
     setEditing(null);
+    editBaselineRef.current = null;
     resetEntityState();
     setForm({
       account_number: '',
@@ -270,6 +292,11 @@ function AccountsContent() {
 
   const openEdit = (a: ConsumerAccount) => {
     setEditing(a);
+    editBaselineRef.current = {
+      supply_id: a.supply_id,
+      account_type: a.account_type || 'residential',
+      account_number: a.account_number,
+    };
     resetEntityState();
     setForm({
       account_number: a.account_number,
@@ -311,11 +338,11 @@ function AccountsContent() {
       showAlert('Water supply is required', 'Validation');
       return;
     }
-    if (!editing && !form.account_number) {
+    if (!form.account_number || loadingNextNumber) {
       showAlert('Account number is being generated. Please wait or try again.', 'Validation');
       return;
     }
-    if (!form.entity_id && !editing) {
+    if (!editing && !form.entity_id) {
       showAlert('Select a consumer from entities or add a new one', 'Validation');
       return;
     }
@@ -545,20 +572,23 @@ function AccountsContent() {
                 <select
                   value={form.supply_id}
                   onChange={(e) => setForm({ ...form, supply_id: e.target.value })}
-                  disabled={!!editing}
-                  className="w-full px-3 py-2 border rounded-lg text-sm disabled:bg-gray-50"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                 >
                   <option value="">Select supply</option>
                   {supplies.map((s) => <option key={s.supply_id} value={s.supply_id}>{s.supply_name} ({s.supply_code})</option>)}
                 </select>
+                {editing && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Changing supply regenerates the account number for the new supply.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Account Type *</label>
                 <select
                   value={form.account_type}
                   onChange={(e) => setForm({ ...form, account_type: e.target.value as AccountType })}
-                  disabled={!!editing}
-                  className="w-full px-3 py-2 border rounded-lg text-sm disabled:bg-gray-50"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                 >
                   {ACCOUNT_TYPE_OPTIONS.map((type) => (
                     <option key={type.value} value={type.value}>
@@ -566,7 +596,7 @@ function AccountsContent() {
                     </option>
                   ))}
                 </select>
-                {!editing && form.supply_id && (
+                {form.supply_id && (
                   <p className="mt-1 text-xs text-gray-500">
                     Format: supply code − type − series (e.g. WS000001-{accountTypeCode(form.account_type)}-0001)
                   </p>
@@ -575,7 +605,7 @@ function AccountsContent() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
                 <input
-                  value={loadingNextNumber && !editing ? 'Generating...' : form.account_number}
+                  value={loadingNextNumber ? 'Generating...' : form.account_number}
                   readOnly
                   className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 font-mono"
                 />
