@@ -192,6 +192,7 @@ export default function DashboardPage() {
   // Color palette per permit type attribute_name
   const PERMIT_TYPE_COLORS: Record<string, string> = {
     'SPECIAL COCKFIGHT': '#10b981', // emerald
+    'DERBY':             '#059669', // darker emerald
     'DISCO':             '#8b5cf6', // purple
     'CARAVAN':           '#0ea5e9', // sky
     'MOTORCADE':         '#f59e0b', // amber
@@ -199,6 +200,7 @@ export default function DashboardPage() {
   };
   const PERMIT_TYPE_LABEL: Record<string, string> = {
     'SPECIAL COCKFIGHT': 'Special Cockfight',
+    'DERBY':             'Derby',
     'DISCO':             'Disco',
     'CARAVAN':           'Caravan',
     'MOTORCADE':         'Motorcade',
@@ -239,7 +241,7 @@ export default function DashboardPage() {
       };
 
       // Types that use JSON permitted_dates array (MM-DD-YYYY)
-      const jsonDateTypes = new Set(['SPECIAL COCKFIGHT']);
+      const jsonDateTypes = new Set(['SPECIAL COCKFIGHT', 'DERBY']);
       // Types that use a "Date" text param
       const textDateTypes = new Set(['DISCO', 'CARAVAN', 'MOTORCADE', 'PERYA']);
 

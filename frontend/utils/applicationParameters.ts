@@ -1,11 +1,17 @@
 export type AppParam = { param_name: string; param_value: string };
 export type DateMode = 'range' | 'multiple' | 'yearly';
 
+/** Special Cockfight and Derby share the same create/print/calendar process. */
+export function isCockfightStyleAttribute(attributeName: string | null | undefined): boolean {
+  const attr = (attributeName || '').trim().toUpperCase();
+  return attr === 'SPECIAL COCKFIGHT' || attr === 'DERBY';
+}
+
 /** Default permit parameters by assessment attribute (ported from legacy /applications/new). */
 export function getDefaultParameters(attributeName: string): AppParam[] {
   const attr = (attributeName || '').trim().toLowerCase();
   const isMahjong = attr === 'mahjong';
-  const isSpecialCockfight = attr === 'special cockfight';
+  const isCockfightStyle = isCockfightStyleAttribute(attributeName);
   const isMotorcade = attr === 'motorcade';
   const isDisco = attr === 'disco';
 
@@ -15,10 +21,11 @@ export function getDefaultParameters(attributeName: string): AppParam[] {
     mahjongValidUntil = formatDateInput(yearEnd);
   }
 
-  if (isSpecialCockfight) {
+  if (isCockfightStyle) {
+    const conductDefault = attr === 'derby' ? 'Derby' : 'Special Cockfight';
     return [
       { param_name: 'Date', param_value: '' },
-      { param_name: 'Conduct/engage in', param_value: 'Special Cockfight' },
+      { param_name: 'Conduct/engage in', param_value: conductDefault },
       { param_name: 'Valid Until', param_value: '' },
       { param_name: 'SB Resolution No.', param_value: '' },
       { param_name: 'Location', param_value: '' },

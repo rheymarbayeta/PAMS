@@ -14,6 +14,7 @@ import {
   formatParamDisplayValue,
   formatParamLabel,
   countDaysFromParameters,
+  isCockfightStyleAttribute,
 } from '@/utils/applicationParameters';
 
 interface ApplicationDetail {
@@ -118,8 +119,8 @@ export default function ApplicationDetailPage() {
       return `/disco-permit.html?id=${app.application_id}${encodedToken}`;
     }
     
-    // Check for Special Cockfight attribute
-    if (attrName === 'SPECIAL COCKFIGHT') {
+    // Check for Special Cockfight / Derby attributes (shared template)
+    if (isCockfightStyleAttribute(attrName)) {
       return `/cockfight-permit.html?id=${app.application_id}${encodedToken}`;
     }
     

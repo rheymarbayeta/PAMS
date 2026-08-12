@@ -13,6 +13,7 @@ import { showAlert } from '@/utils/modal';
 import {
   AppParam,
   getDefaultParameters,
+  isCockfightStyleAttribute,
 } from '@/utils/applicationParameters';
 import { getBarangaysByMunicipality } from '@/utils/barangays';
 
@@ -151,8 +152,7 @@ export default function CreateApplicationWizardPage() {
   };
 
   const selectedRule = rules.find((r) => r.rule_id === form.rule_id);
-  const isSpecialCockfight =
-    (selectedRule?.attribute_name || '').trim().toUpperCase() === 'SPECIAL COCKFIGHT';
+  const isSpecialCockfight = isCockfightStyleAttribute(selectedRule?.attribute_name);
 
   const canNext =
     (step === 0 && !!form.entity_id) ||
