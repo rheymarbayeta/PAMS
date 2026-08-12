@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import Pagination from '@/components/Pagination';
@@ -59,18 +59,30 @@ function accountTypeCode(type?: AccountType): string {
   return ACCOUNT_TYPE_OPTIONS.find((t) => t.value === type)?.code || 'R';
 }
 
+function buildAccountsListQuery(page: number, search: string, supplyId: string) {
+  const params = new URLSearchParams();
+  if (page > 1) params.set('page', String(page));
+  if (search.trim()) params.set('search', search.trim());
+  if (supplyId) params.set('supply_id', supplyId);
+  return params.toString();
+}
+
 function AccountsContent() {
   const { hasRole } = useAuth();
   const canDeleteAccount = hasRole(WW_DELETE_ROLES);
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const initialSupply = searchParams.get('supply_id') || '';
+  const initialPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+  const initialSearch = searchParams.get('search') || '';
 
   const [accounts, setAccounts] = useState<ConsumerAccount[]>([]);
   const [supplies, setSupplies] = useState<WaterSupply[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [supplyFilter, setSupplyFilter] = useState(initialSupply);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const [totalPages, setTotalPages] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ConsumerAccount | null>(null);
@@ -200,6 +212,25 @@ function AccountsContent() {
   useEffect(() => {
     fetchData();
   }, [search, supplyFilter, page]);
+
+  // Keep list page / filters in the URL so Back from account detail can restore them
+  useEffect(() => {
+    const qs = buildAccountsListQuery(page, search, supplyFilter);
+    const currentQs = buildAccountsListQuery(
+      Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1),
+      searchParams.get('search') || '',
+      searchParams.get('supply_id') || ''
+    );
+    if (qs !== currentQs) {
+      const nextUrl = qs ? `${pathname}?${qs}` : pathname;
+      router.replace(nextUrl, { scroll: false });
+    }
+  }, [page, search, supplyFilter, pathname, router, searchParams]);
+
+  const listQuery = useMemo(
+    () => buildAccountsListQuery(page, search, supplyFilter),
+    [page, search, supplyFilter]
+  );
 
   const resetEntityState = () => {
     setEntitySearch('');
@@ -478,7 +509,12 @@ function AccountsContent() {
                     <span className={`px-2 py-0.5 rounded-full text-xs ${a.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{a.status}</span>
                   </td>
                   <td className="px-4 py-3 text-right text-sm space-x-2">
-                    <Link href={`/admin/waterworks/accounts/${a.account_id}`} className="text-blue-600 hover:underline">View</Link>
+                    <Link
+                      href={`/admin/waterworks/accounts/${a.account_id}${listQuery ? `?${listQuery}` : ''}`}
+                      className="text-blue-600 hover:underline"
+                    >
+                      View
+                    </Link>
                     <button onClick={() => openEdit(a)} className="text-gray-600 hover:underline">Edit</button>
                     {canDeleteAccount && (
                       <button onClick={() => handleDelete(a)} className="text-red-600 hover:underline">Delete</button>

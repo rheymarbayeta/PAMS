@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import waterworksService from '@/services/waterworksService';
@@ -11,9 +11,22 @@ import { formatPeso } from '@/utils/formatters';
 
 const WW_ROLES = ['SuperAdmin', 'Admin', 'Waterworks Manager'];
 
-export default function AccountDetailPage() {
+function AccountDetailContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const accountId = params.id as string;
+
+  const backToAccountsHref = useMemo(() => {
+    const listParams = new URLSearchParams();
+    const page = searchParams.get('page');
+    const search = searchParams.get('search');
+    const supplyId = searchParams.get('supply_id');
+    if (page && page !== '1') listParams.set('page', page);
+    if (search) listParams.set('search', search);
+    if (supplyId) listParams.set('supply_id', supplyId);
+    const qs = listParams.toString();
+    return qs ? `/admin/waterworks/accounts?${qs}` : '/admin/waterworks/accounts';
+  }, [searchParams]);
 
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -151,7 +164,7 @@ export default function AccountDetailPage() {
       <Layout>
         <div className="px-2 py-4 sm:px-4 sm:py-8 max-w-7xl mx-auto">
           <div className="mb-6">
-            <Link href="/admin/waterworks/accounts" className="text-blue-600 text-sm hover:underline">← Back to Accounts</Link>
+            <Link href={backToAccountsHref} className="text-blue-600 text-sm hover:underline">← Back to Accounts</Link>
             <h1 className="text-2xl font-bold mt-2">{account.consumer_name}</h1>
             <p className="text-gray-600">Account #{account.account_number} · {account.supply_name}</p>
           </div>
@@ -453,5 +466,19 @@ export default function AccountDetailPage() {
         )}
       </Layout>
     </ProtectedRoute>
+  );
+}
+
+export default function AccountDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <ProtectedRoute allowedRoles={WW_ROLES}>
+          <Layout><div className="p-8 text-center">Loading...</div></Layout>
+        </ProtectedRoute>
+      }
+    >
+      <AccountDetailContent />
+    </Suspense>
   );
 }
