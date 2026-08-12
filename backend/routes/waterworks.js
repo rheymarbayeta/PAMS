@@ -992,7 +992,7 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
     } = req.body;
 
     const [existing] = await pool.execute(
-      'SELECT account_id, entity_id FROM ww_consumer_accounts WHERE account_id = ?',
+      'SELECT account_id, entity_id, last_reading_date FROM ww_consumer_accounts WHERE account_id = ?',
       [req.params.id]
     );
     if (!existing.length) return res.status(404).json({ error: 'Account not found' });
@@ -1017,6 +1017,21 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
       if (resolvedConsumer.error) {
         return res.status(400).json({ error: resolvedConsumer.error });
       }
+    }
+
+    // Initial reading is stored on previous_reading. Display uses last_reading.
+    // When no meter reading has been recorded yet, keep both in sync so editing
+    // "Initial Reading" actually changes what the list/detail pages show.
+    const parsedPrevious =
+      previous_reading !== undefined && previous_reading !== null && previous_reading !== ''
+        ? parseFloat(previous_reading)
+        : null;
+    let parsedLast =
+      last_reading !== undefined && last_reading !== null && last_reading !== ''
+        ? parseFloat(last_reading)
+        : null;
+    if (parsedLast === null && parsedPrevious !== null && !existing[0].last_reading_date) {
+      parsedLast = parsedPrevious;
     }
 
     await pool.execute(
@@ -1049,8 +1064,8 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
         meter_number !== undefined ? meter_number : null,
         parseDate(connection_date),
         status || null,
-        previous_reading !== undefined ? parseFloat(previous_reading) : null,
-        last_reading !== undefined ? parseFloat(last_reading) : null,
+        parsedPrevious,
+        parsedLast,
         openingDues,
         unpaid_dues_notes !== undefined ? (unpaid_dues_notes ? String(unpaid_dues_notes).trim() : null) : null,
         req.params.id,

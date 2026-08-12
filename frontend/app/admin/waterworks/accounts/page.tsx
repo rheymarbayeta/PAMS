@@ -283,7 +283,12 @@ function AccountsContent() {
       meter_number: a.meter_number || '',
       connection_date: a.connection_date || '',
       status: a.status,
-      previous_reading: String(a.previous_reading ?? 0),
+      // Prefer opening/initial reading when no meter reading has been recorded yet
+      previous_reading: String(
+        a.last_reading_date == null
+          ? (a.previous_reading ?? a.last_reading ?? 0)
+          : (a.previous_reading ?? 0)
+      ),
       unpaid_dues: String(a.unpaid_dues ?? 0),
       unpaid_dues_notes: a.unpaid_dues_notes || '',
     });
@@ -315,10 +320,13 @@ function AccountsContent() {
       return;
     }
     try {
+      const openingReading = parseFloat(form.previous_reading) || 0;
       const payload = {
         ...form,
         entity_id: form.entity_id || undefined,
-        previous_reading: parseFloat(form.previous_reading) || 0,
+        previous_reading: openingReading,
+        // Keep meter position in sync when editing initial reading (no readings yet)
+        ...(editing && !editing.last_reading_date ? { last_reading: openingReading } : {}),
         unpaid_dues: parseFloat(form.unpaid_dues) || 0,
         unpaid_dues_notes: form.unpaid_dues_notes.trim() || null,
       };
@@ -423,7 +431,11 @@ function AccountsContent() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{a.supply_name}</td>
                   <td className="px-4 py-3 text-sm">{a.meter_number || '—'}</td>
-                  <td className="px-4 py-3 text-sm text-right">{a.last_reading ?? a.previous_reading ?? 0}</td>
+                  <td className="px-4 py-3 text-sm text-right">
+                    {a.last_reading_date != null
+                      ? (a.last_reading ?? a.previous_reading ?? 0)
+                      : (a.previous_reading ?? a.last_reading ?? 0)}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs ${a.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{a.status}</span>
                   </td>

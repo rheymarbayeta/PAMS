@@ -100,7 +100,10 @@ export default function AccountDetailPage() {
       showAlert('Enter a valid current reading', 'Validation');
       return;
     }
-    const previous = parseFloat(acct?.last_reading ?? acct?.previous_reading) || 0;
+    const previous =
+      acct?.last_reading_date != null
+        ? parseFloat(acct?.last_reading ?? acct?.previous_reading) || 0
+        : parseFloat(acct?.previous_reading ?? acct?.last_reading) || 0;
     if (current < previous) {
       showAlert(`Current reading cannot be less than previous reading (${previous})`, 'Validation');
       return;
@@ -159,8 +162,16 @@ export default function AccountDetailPage() {
               <p className="text-2xl font-bold text-red-600">{formatPeso(outstanding_balance)}</p>
             </div>
             <div className="bg-white rounded-xl border p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Last Reading</p>
-              <p className="text-2xl font-bold">{account.last_reading ?? account.previous_reading ?? 0} m³</p>
+              <p className="text-sm text-gray-500">
+                {account.last_reading_date ? 'Last Reading' : 'Initial Reading'}
+              </p>
+              <p className="text-2xl font-bold">
+                {(account.last_reading_date != null
+                  ? (account.last_reading ?? account.previous_reading ?? 0)
+                  : (account.previous_reading ?? account.last_reading ?? 0)
+                )}{' '}
+                m³
+              </p>
               <p className="text-xs text-gray-400">{account.last_reading_date || 'No reading yet'}</p>
             </div>
             <div className="bg-white rounded-xl border p-4 shadow-sm flex flex-col justify-center gap-2">
@@ -297,7 +308,11 @@ export default function AccountDetailPage() {
               <p className="text-sm text-gray-500 mb-4">
                 Previous reading:{' '}
                 <span className="font-medium text-gray-800">
-                  {account.last_reading ?? account.previous_reading ?? 0} m³
+                  {(account.last_reading_date != null
+                    ? (account.last_reading ?? account.previous_reading ?? 0)
+                    : (account.previous_reading ?? account.last_reading ?? 0)
+                  )}{' '}
+                  m³
                 </span>
               </p>
               <div className="space-y-3">
@@ -319,7 +334,9 @@ export default function AccountDetailPage() {
                       {Math.max(
                         0,
                         parseFloat(readingForm.current_reading) -
-                          (parseFloat(account.last_reading ?? account.previous_reading) || 0)
+                          (account.last_reading_date != null
+                            ? parseFloat(account.last_reading ?? account.previous_reading) || 0
+                            : parseFloat(account.previous_reading ?? account.last_reading) || 0)
                       ).toFixed(2)}{' '}
                       m³
                     </p>
