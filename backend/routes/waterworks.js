@@ -198,6 +198,56 @@ async function generateNextAccountNumber(connection, supplyId, accountType) {
   throw new Error('Unable to generate a unique account number');
 }
 
+function accountSeriesLockName(supplyId, accountType) {
+  return `ww_acct_${String(supplyId)}_${normalizeAccountType(accountType)}`.slice(0, 64);
+}
+
+/** Serialize account-number assignment per supply + type so concurrent encoders cannot collide. */
+async function withAccountSeriesLock(connection, supplyId, accountType, fn) {
+  const lockName = accountSeriesLockName(supplyId, accountType);
+  const [lockRows] = await connection.query('SELECT GET_LOCK(?, 15) AS acquired', [lockName]);
+  if (!lockRows.length || Number(lockRows[0].acquired) !== 1) {
+    const err = new Error(
+      'Another encoder is assigning an account number for this supply. Please try again.'
+    );
+    err.code = 'LOCK_TIMEOUT';
+    throw err;
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      await connection.query('SELECT RELEASE_LOCK(?)', [lockName]);
+    } catch (_) {
+      // ignore release failures
+    }
+  }
+}
+
+/**
+ * Prefer the previewed number when still free; otherwise allocate the next series number.
+ * Call only while holding withAccountSeriesLock for the same supply + type.
+ */
+async function resolveUniqueAccountNumber(
+  connection,
+  supplyId,
+  accountType,
+  preferredNumber,
+  excludeAccountId = null
+) {
+  const preferred = preferredNumber ? String(preferredNumber).trim() : '';
+  if (preferred) {
+    const [existing] = await connection.query(
+      excludeAccountId
+        ? 'SELECT 1 FROM ww_consumer_accounts WHERE account_number = ? AND account_id != ? LIMIT 1'
+        : 'SELECT 1 FROM ww_consumer_accounts WHERE account_number = ? LIMIT 1',
+      excludeAccountId ? [preferred, excludeAccountId] : [preferred]
+    );
+    if (!existing.length) return preferred;
+  }
+  return generateNextAccountNumber(connection, supplyId, accountType);
+}
+
 function normalizeSupplyCode(code) {
   return String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
@@ -918,48 +968,73 @@ router.post('/accounts', authorize(...WW_MANAGER_ROLES), async (req, res) => {
       );
       if (!supply.length) return res.status(400).json({ error: 'Invalid supply_id' });
 
-      let finalAccountNumber = account_number ? String(account_number).trim() : '';
-      if (!finalAccountNumber) {
-        finalAccountNumber = await generateNextAccountNumber(connection, supply_id, normalizedType);
-      }
-
-      const accountId = generateId(ID_PREFIXES.WW_ACCOUNT);
-      await connection.query(
-        `INSERT INTO ww_consumer_accounts
-          (account_id, account_number, account_type, supply_id, entity_id, consumer_name, address, contact_number, email,
-           meter_number, connection_date, status, previous_reading, last_reading, unpaid_dues, unpaid_dues_notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          accountId,
-          finalAccountNumber,
-          normalizedType,
-          supply_id,
-          resolved.entity_id,
-          resolved.consumer_name,
-          resolved.address,
-          resolved.contact_number,
-          resolved.email,
-          meter_number || null,
-          parseDate(connection_date),
-          status || 'active',
-          parseFloat(previous_reading) || 0,
-          parseFloat(previous_reading) || 0,
-          openingDues,
-          unpaid_dues_notes ? String(unpaid_dues_notes).trim() : null,
-        ]
+      const { accountId, finalAccountNumber, reassigned } = await withAccountSeriesLock(
+        connection,
+        supply_id,
+        normalizedType,
+        async () => {
+          const preferred = account_number ? String(account_number).trim() : '';
+          const assigned = await resolveUniqueAccountNumber(
+            connection,
+            supply_id,
+            normalizedType,
+            preferred
+          );
+          const newAccountId = generateId(ID_PREFIXES.WW_ACCOUNT);
+          await connection.query(
+            `INSERT INTO ww_consumer_accounts
+              (account_id, account_number, account_type, supply_id, entity_id, consumer_name, address, contact_number, email,
+               meter_number, connection_date, status, previous_reading, last_reading, unpaid_dues, unpaid_dues_notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              newAccountId,
+              assigned,
+              normalizedType,
+              supply_id,
+              resolved.entity_id,
+              resolved.consumer_name,
+              resolved.address,
+              resolved.contact_number,
+              resolved.email,
+              meter_number || null,
+              parseDate(connection_date),
+              status || 'active',
+              parseFloat(previous_reading) || 0,
+              parseFloat(previous_reading) || 0,
+              openingDues,
+              unpaid_dues_notes ? String(unpaid_dues_notes).trim() : null,
+            ]
+          );
+          return {
+            accountId: newAccountId,
+            finalAccountNumber: assigned,
+            reassigned: Boolean(preferred && preferred !== assigned),
+          };
+        }
       );
 
       await logAction(req.user.user_id, 'CREATE_WW_ACCOUNT', `Created account: ${finalAccountNumber}`, accountId);
       res.status(201).json({
-        data: { account_id: accountId, account_number: finalAccountNumber },
-        message: 'Account created',
+        data: {
+          account_id: accountId,
+          account_number: finalAccountNumber,
+          reassigned: Boolean(reassigned),
+        },
+        message: reassigned
+          ? `Account created as ${finalAccountNumber} (number was reassigned for concurrent encoding)`
+          : 'Account created',
       });
     } finally {
       connection.release();
     }
   } catch (error) {
+    if (error.code === 'LOCK_TIMEOUT') {
+      return res.status(503).json({ error: error.message });
+    }
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ error: 'Account number already exists' });
+      return res.status(409).json({
+        error: 'Account number already exists. Please try saving again.',
+      });
     }
     if (error.code === 'ER_BAD_FIELD_ERROR') {
       return res.status(500).json({
@@ -1049,22 +1124,39 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
         ? String(account_number).trim()
         : current.account_number;
 
-    // If supply/type was corrected and number still matches the old prefix, assign a new series number
+    // If supply/type was corrected, assign under a series lock so concurrent renumbers cannot collide
     if (supplyOrTypeChanged) {
-      const [supplies] = await pool.execute(
-        'SELECT supply_code FROM ww_water_supplies WHERE supply_id = ?',
-        [nextSupplyId]
-      );
-      if (!supplies.length) {
-        return res.status(400).json({ error: 'Invalid supply_id' });
+      const connection = await pool.getConnection();
+      try {
+        const [supplies] = await connection.query(
+          'SELECT supply_code FROM ww_water_supplies WHERE supply_id = ?',
+          [nextSupplyId]
+        );
+        if (!supplies.length) {
+          return res.status(400).json({ error: 'Invalid supply_id' });
+        }
+        const expectedPrefix = `${supplies[0].supply_code}-${getAccountTypeCode(nextAccountType)}-`;
+        nextAccountNumber = await withAccountSeriesLock(
+          connection,
+          nextSupplyId,
+          nextAccountType,
+          async () => {
+            const preferred = nextAccountNumber.startsWith(expectedPrefix)
+              ? nextAccountNumber
+              : null;
+            return resolveUniqueAccountNumber(
+              connection,
+              nextSupplyId,
+              nextAccountType,
+              preferred,
+              req.params.id
+            );
+          }
+        );
+      } finally {
+        connection.release();
       }
-      const expectedPrefix = `${supplies[0].supply_code}-${getAccountTypeCode(nextAccountType)}-`;
-      if (!nextAccountNumber.startsWith(expectedPrefix)) {
-        nextAccountNumber = await generateNextAccountNumber(pool, nextSupplyId, nextAccountType);
-      }
-    }
-
-    if (nextAccountNumber !== current.account_number) {
+    } else if (nextAccountNumber !== current.account_number) {
       const [dup] = await pool.execute(
         'SELECT account_id FROM ww_consumer_accounts WHERE account_number = ? AND account_id != ? LIMIT 1',
         [nextAccountNumber, req.params.id]
@@ -1126,6 +1218,9 @@ router.put('/accounts/:id', authorize(...WW_MANAGER_ROLES), async (req, res) => 
     });
   } catch (error) {
     console.error('Update account error:', error);
+    if (error.code === 'LOCK_TIMEOUT') {
+      return res.status(503).json({ error: error.message });
+    }
     if (error && error.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ error: 'Account number already in use' });
     }

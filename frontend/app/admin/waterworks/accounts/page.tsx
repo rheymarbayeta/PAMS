@@ -358,9 +358,20 @@ function AccountsContent() {
         unpaid_dues_notes: form.unpaid_dues_notes.trim() || null,
       };
       if (editing) {
-        await waterworksService.updateAccount(editing.account_id, payload);
+        const result = await waterworksService.updateAccount(editing.account_id, payload);
+        const assigned = result?.data?.account_number;
+        if (assigned && assigned !== form.account_number) {
+          showAlert(`Account updated. New account number: ${assigned}`, 'Success');
+        }
       } else {
-        await waterworksService.createAccount(payload);
+        const result = await waterworksService.createAccount(payload);
+        const assigned = result?.data?.account_number;
+        if (result?.data?.reassigned && assigned) {
+          showAlert(
+            `Account created as ${assigned}. The previewed number was already taken by another encoder.`,
+            'Success'
+          );
+        }
       }
       setShowModal(false);
       fetchData();

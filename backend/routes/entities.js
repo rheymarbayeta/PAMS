@@ -249,7 +249,7 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Appli
 });
 
 // Update entity (all roles except Viewer)
-router.put('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator'), async (req, res) => {
+router.put('/:id', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Application Creator', 'Waterworks Manager'), async (req, res) => {
   try {
     const {
       entity_name,
