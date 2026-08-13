@@ -38,6 +38,7 @@ async function listBills(query = {}) {
 
   const [rows] = await pool.execute(
     `SELECT b.*, a.account_number, a.consumer_name, a.supply_id, s.supply_name,
+      s.reading_day_from, s.reading_day_to, s.billing_day,
       COALESCE((SELECT SUM(amount_paid) FROM ww_payments p WHERE p.bill_id = b.bill_id), 0) AS total_paid
      FROM ww_bills b
      JOIN ww_consumer_accounts a ON a.account_id = b.account_id

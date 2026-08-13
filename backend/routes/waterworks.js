@@ -8,6 +8,7 @@ const {
   BILLING_MODELS,
   getRateTiersForSupply,
   getSupplyBillingConfig,
+  resolveBillingPeriodMeta,
 } = require('../utils/waterworksBilling');
 const {
   buildDefaultWorksheetPayload,
@@ -1582,7 +1583,8 @@ router.get('/accounts/:id/billing', async (req, res) => {
 
     const [accounts] = await pool.execute(
       `SELECT a.*, s.supply_name, s.supply_code, s.location AS supply_location,
-              s.rate_per_cubic_meter, s.minimum_charge, s.billing_model
+              s.rate_per_cubic_meter, s.minimum_charge, s.billing_model,
+              s.reading_day_from, s.reading_day_to, s.billing_day
        FROM ww_consumer_accounts a
        JOIN ww_water_supplies s ON s.supply_id = a.supply_id
        WHERE a.account_id = ?`,
@@ -1603,6 +1605,11 @@ router.get('/accounts/:id/billing', async (req, res) => {
       const outstandingBalance = await getAccountOutstandingBalance(connection, accountId);
       const billingConfig = await getSupplyBillingConfig(connection, accounts[0].supply_id);
       const tiers = billingConfig.tiers;
+      const periodMeta = resolveBillingPeriodMeta(billingMonth, billingYear, {
+        readingDayFrom: accounts[0].reading_day_from,
+        readingDayTo: accounts[0].reading_day_to,
+        billingDay: accounts[0].billing_day,
+      });
 
       let bill = bills[0] || null;
       if (bill && bill.tier_breakdown && typeof bill.tier_breakdown === 'string') {
@@ -1622,6 +1629,7 @@ router.get('/accounts/:id/billing', async (req, res) => {
           rate_tiers: tiers,
           billing_model: billingConfig.billingModel,
           outstanding_balance: outstandingBalance,
+          ...periodMeta,
         },
       });
     } finally {

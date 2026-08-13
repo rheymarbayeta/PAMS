@@ -9,6 +9,13 @@ const {
   getRentalRunningTotalStart,
   normalizeLegacyAccountInput,
 } = require('../utils/leaseContractBalances');
+const {
+  normalizeScheduleRows,
+  fetchContractSchedule,
+  replaceContractSchedule,
+  resolveMonthlyRentalForPeriod,
+  sumRentalDueThroughPrev,
+} = require('../utils/rentalSchedule');
 const rentalsService = require('../modules/rentals/rentalsService');
 
 const router = express.Router();
@@ -714,7 +721,9 @@ router.get('/lease-contracts/:id', async (req, res) => {
         // Junction table may not exist yet during migration
       }
 
-      res.json({ ...contract[0], property_units });
+      const rental_schedule = await fetchContractSchedule(connection, id);
+
+      res.json({ ...contract[0], property_units, rental_schedule });
     } finally {
       connection.release();
     }
@@ -745,6 +754,7 @@ router.post('/lease-contracts', async (req, res) => {
         opening_rights_balance,
         opening_rental_paid,
         opening_balance_notes,
+        rental_schedule,
       } = req.body;
 
       const legacyFields = normalizeLegacyAccountInput({
@@ -756,6 +766,13 @@ router.post('/lease-contracts', async (req, res) => {
       });
       if (legacyFields.error) {
         return res.status(400).json({ error: legacyFields.error });
+      }
+
+      const scheduleNorm = normalizeScheduleRows(
+        rental_schedule === undefined ? null : rental_schedule
+      );
+      if (scheduleNorm.error) {
+        return res.status(400).json({ error: scheduleNorm.error });
       }
 
       // Normalise unit IDs: accept array (new) or single id (legacy)
@@ -772,12 +789,15 @@ router.post('/lease-contracts', async (req, res) => {
 
       const connection = await pool.getConnection();
       try {
+        await connection.beginTransaction();
+
         // Verify lessee exists
         const [lessee] = await connection.query(
           'SELECT id FROM lessees WHERE id = ?',
           [lessee_id]
         );
         if (lessee.length === 0) {
+          await connection.rollback();
           return res.status(400).json({ error: 'Lessee not found' });
         }
 
@@ -787,6 +807,7 @@ router.post('/lease-contracts', async (req, res) => {
           [property_id]
         );
         if (property.length === 0) {
+          await connection.rollback();
           return res.status(400).json({ error: 'Property not found' });
         }
 
@@ -841,6 +862,20 @@ router.post('/lease-contracts', async (req, res) => {
           }
         }
 
+        if (scheduleNorm.rows !== null) {
+          try {
+            await replaceContractSchedule(connection, result.insertId, scheduleNorm.rows);
+          } catch (schedErr) {
+            if (schedErr.code === 'ER_NO_SUCH_TABLE') {
+              await connection.rollback();
+              return res.status(500).json({
+                error: 'Rental schedule table missing. Run database/migrations/add_lease_contract_rental_schedule.sql',
+              });
+            }
+            throw schedErr;
+          }
+        }
+
         // Get the created contract with details
         const [createdContract] = await connection.query(`
           SELECT 
@@ -853,6 +888,8 @@ router.post('/lease-contracts', async (req, res) => {
           WHERE lc.id = ?
         `, [result.insertId]);
 
+        const savedSchedule = await fetchContractSchedule(connection, result.insertId);
+
         await logAction(
           req.user.user_id,
           'CREATE',
@@ -861,7 +898,11 @@ router.post('/lease-contracts', async (req, res) => {
           `Created lease contract for ${createdContract[0].lessee_name} - ${createdContract[0].property_name}`
         );
 
-        res.status(201).json(createdContract[0]);
+        await connection.commit();
+        res.status(201).json({ ...createdContract[0], rental_schedule: savedSchedule });
+      } catch (txError) {
+        await connection.rollback();
+        throw txError;
       } finally {
         connection.release();
       }
@@ -891,6 +932,7 @@ router.put('/lease-contracts/:id', async (req, res) => {
         opening_rights_balance,
         opening_rental_paid,
         opening_balance_notes,
+        rental_schedule,
       } = req.body;
 
       const legacyFields = normalizeLegacyAccountInput({
@@ -904,6 +946,13 @@ router.put('/lease-contracts/:id', async (req, res) => {
         return res.status(400).json({ error: legacyFields.error });
       }
 
+      const scheduleNorm = normalizeScheduleRows(
+        rental_schedule === undefined ? null : rental_schedule
+      );
+      if (scheduleNorm.error) {
+        return res.status(400).json({ error: scheduleNorm.error });
+      }
+
       // Normalise incoming unit IDs (may be undefined if not changed)
       const newUnitIds = Array.isArray(property_unit_ids)
         ? property_unit_ids.map(Number).filter(Boolean)
@@ -911,6 +960,8 @@ router.put('/lease-contracts/:id', async (req, res) => {
 
       const connection = await pool.getConnection();
       try {
+        await connection.beginTransaction();
+
         // Get current contract
         const [currentContract] = await connection.query(
           'SELECT property_unit_id, lessee_id, status FROM lease_contracts WHERE id = ?',
@@ -1022,6 +1073,20 @@ router.put('/lease-contracts/:id', async (req, res) => {
         await recalculateRightsPaymentBalances(connection, id);
         await recalculateRentalPaymentBalances(connection, id);
 
+        if (scheduleNorm.rows !== null) {
+          try {
+            await replaceContractSchedule(connection, id, scheduleNorm.rows);
+          } catch (schedErr) {
+            if (schedErr.code === 'ER_NO_SUCH_TABLE') {
+              await connection.rollback();
+              return res.status(500).json({
+                error: 'Rental schedule table missing. Run database/migrations/add_lease_contract_rental_schedule.sql',
+              });
+            }
+            throw schedErr;
+          }
+        }
+
         // Get updated contract
         const [updatedContract] = await connection.query(`
           SELECT 
@@ -1034,6 +1099,8 @@ router.put('/lease-contracts/:id', async (req, res) => {
           WHERE lc.id = ?
         `, [id]);
 
+        const savedSchedule = await fetchContractSchedule(connection, id);
+
         await logAction(
           req.user.user_id,
           'UPDATE',
@@ -1042,7 +1109,11 @@ router.put('/lease-contracts/:id', async (req, res) => {
           `Updated lease contract information`
         );
 
-        res.json(updatedContract[0]);
+        await connection.commit();
+        res.json({ ...updatedContract[0], rental_schedule: savedSchedule });
+      } catch (txError) {
+        await connection.rollback();
+        throw txError;
       } finally {
         connection.release();
       }
@@ -1954,7 +2025,18 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
       const principal     = parseFloat(contract.principal_amount)     || 0;
       const downpayment   = parseFloat(contract.downpayment)          || 0;
       const monthlyRights = parseFloat(contract.monthly_rights_amount) || 0;
-      const monthlyRental = parseFloat(contract.monthly_rental_amount) || 0;
+      const fallbackMonthlyRental = parseFloat(contract.monthly_rental_amount) || 0;
+
+      // Resolve this billing month's rental from schedule (falls back to flat monthly)
+      const resolvedCurrent = await resolveMonthlyRentalForPeriod(
+        connection,
+        contract_id,
+        billingMonth,
+        billingYear,
+        fallbackMonthlyRental
+      );
+      const monthlyRental = resolvedCurrent.monthlyRental;
+      const scheduleRow = resolvedCurrent.scheduleRow;
 
       // Total rights payments ever paid
       const [rightsTotalRow] = await connection.query(`
@@ -1983,21 +2065,34 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
         prevMonth,
         prevYear
       );
-      const rentalBalances = calculateRentalBillingBalances({
-        contractEffectiveDate: contract.contract_effective_date,
-        monthlyRental,
-        outstandingRentalBalance: contract.outstanding_rental_balance,
-        billingMonth,
-        billingYear,
-        totalRentalPaidThroughPrev,
-        prevMonthPaid,
-      });
-      const {
-        outstandingBalance,
-        previousMonthBalance,
-        previousBalance,
-        totalRentalDueThroughPrev,
-      } = rentalBalances;
+
+      const outstandingBalance = parseFloat(contract.outstanding_rental_balance) || 0;
+      const totalRentalDueThroughPrev = await sumRentalDueThroughPrev(
+        connection,
+        contract,
+        prevMonth,
+        prevYear
+      );
+      const previousBalance = Math.max(
+        0,
+        parseFloat((totalRentalDueThroughPrev - totalRentalPaidThroughPrev).toFixed(2))
+      );
+
+      const resolvedPrev = await resolveMonthlyRentalForPeriod(
+        connection,
+        contract_id,
+        prevMonth,
+        prevYear,
+        fallbackMonthlyRental
+      );
+      let previousMonthBalance = 0;
+      if (isBillableRentalMonth(contract.contract_effective_date, prevMonth, prevYear)) {
+        previousMonthBalance = Math.max(
+          0,
+          parseFloat((resolvedPrev.monthlyRental - prevMonthPaid).toFixed(2))
+        );
+      }
+
       const surchargeSettings = await getBillingSurchargeSettings(connection);
       const surcharge = surchargeSettings.enabled && previousBalance > 0
         ? parseFloat((previousBalance * surchargeSettings.rate).toFixed(2))
@@ -2106,7 +2201,21 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             late_payment_amount: rentalPaymentAmount,
             latest_payment: formatPaymentRecord(latestRentalPayment),
             monthly_rental:      monthlyRental,
-            dues:                rentalDues
+            dues:                rentalDues,
+            schedule_row: scheduleRow
+              ? {
+                  period_label: scheduleRow.period_label,
+                  rent_type: scheduleRow.rent_type,
+                  basic_monthly_rent: parseFloat(scheduleRow.basic_monthly_rent) || 0,
+                  vat_rate: parseFloat(scheduleRow.vat_rate) || 0,
+                  vat_amount: parseFloat(scheduleRow.vat_amount) || 0,
+                  total_monthly_rent: parseFloat(scheduleRow.total_monthly_rent) || 0,
+                  wht_rate: parseFloat(scheduleRow.wht_rate) || 0,
+                  wht_amount: parseFloat(scheduleRow.wht_amount) || 0,
+                  net_monthly_rent: parseFloat(scheduleRow.net_monthly_rent) || 0,
+                  notes: scheduleRow.notes || null,
+                }
+              : null,
           },
           total_due: totalDue
         }

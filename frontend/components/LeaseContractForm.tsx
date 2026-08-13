@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
+import RentalScheduleEditor, {
+  RentalScheduleRow,
+  computeScheduleAmounts,
+  emptyScheduleRow,
+} from '@/components/RentalScheduleEditor';
 
 interface Lessee {
   id: number;
@@ -66,6 +71,7 @@ export default function LeaseContractForm({
     opening_balance_notes: '',
   });
   const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
+  const [rentalSchedule, setRentalSchedule] = useState<RentalScheduleRow[]>([]);
   const [noTerminationDate, setNoTerminationDate] = useState(false);
   const [lesseeSearch, setLesseeSearch] = useState('');
   const [lesseeDropdownOpen, setLesseeDropdownOpen] = useState(false);
@@ -175,6 +181,25 @@ export default function LeaseContractForm({
       } else {
         setSelectedUnitIds([]);
       }
+
+      if (Array.isArray(initialData.rental_schedule)) {
+        setRentalSchedule(
+          initialData.rental_schedule.map((row: any, i: number) => ({
+            id: row.id,
+            sort_order: row.sort_order ?? i,
+            period_label: row.period_label || `Period ${i + 1}`,
+            date_from: row.date_from ? String(row.date_from).slice(0, 10) : '',
+            date_to: row.date_to ? String(row.date_to).slice(0, 10) : '',
+            rent_type: row.rent_type || 'full',
+            basic_monthly_rent: row.basic_monthly_rent ?? '',
+            vat_rate: row.vat_rate ?? 0.12,
+            wht_rate: row.wht_rate ?? 0.05,
+            notes: row.notes || '',
+          }))
+        );
+      } else {
+        setRentalSchedule([]);
+      }
     }
   }, [initialData]);
 
@@ -245,7 +270,38 @@ export default function LeaseContractForm({
       }
     }
 
+    for (let i = 0; i < rentalSchedule.length; i++) {
+      const row = rentalSchedule[i];
+      if (!row.date_from || !row.date_to) {
+        setError(`Schedule row ${i + 1}: date from and date to are required`);
+        return;
+      }
+      if (row.date_to < row.date_from) {
+        setError(`Schedule row ${i + 1}: date to must be on or after date from`);
+        return;
+      }
+    }
+
     try {
+      const rental_schedule = rentalSchedule.map((row, i) => {
+        const amounts = computeScheduleAmounts(row);
+        return {
+          sort_order: i,
+          period_label: row.period_label || `Period ${i + 1}`,
+          date_from: row.date_from,
+          date_to: row.date_to,
+          rent_type: row.rent_type,
+          basic_monthly_rent: amounts.basic_monthly_rent,
+          vat_rate: amounts.vat_rate,
+          wht_rate: amounts.wht_rate,
+          vat_amount: amounts.vat_amount,
+          total_monthly_rent: amounts.total_monthly_rent,
+          wht_amount: amounts.wht_amount,
+          net_monthly_rent: amounts.net_monthly_rent,
+          notes: row.notes?.trim() || null,
+        };
+      });
+
       await onSubmit({
         ...formData,
         lessee_id: parseInt(formData.lessee_id),
@@ -269,6 +325,7 @@ export default function LeaseContractForm({
         opening_balance_notes: formData.is_legacy_account
           ? formData.opening_balance_notes.trim() || null
           : null,
+        rental_schedule,
       });
     } catch (error: any) {
       setError(error.response?.data?.error || 'Error submitting form');
@@ -574,6 +631,9 @@ export default function LeaseContractForm({
             min="0"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
           />
+          <p className="mt-1 text-xs text-gray-500">
+            Fallback amount when no rental schedule is defined (or for months outside schedule bands).
+          </p>
         </div>
 
         {/* Downpayment */}
@@ -610,6 +670,23 @@ export default function LeaseContractForm({
             <option value="pending">Pending</option>
           </select>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4">
+        <RentalScheduleEditor
+          rows={rentalSchedule}
+          onChange={setRentalSchedule}
+          disabled={isLoading}
+        />
+        {rentalSchedule.length === 0 && (
+          <button
+            type="button"
+            onClick={() => setRentalSchedule([emptyScheduleRow(0)])}
+            className="mt-3 text-xs font-medium text-indigo-700 hover:text-indigo-900"
+          >
+            Start with one schedule period →
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-5 space-y-4">

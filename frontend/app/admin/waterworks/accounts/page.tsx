@@ -701,7 +701,7 @@ function AccountsContent() {
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Prior unpaid balance carried into the next bill as previous balance
+                  Prior unpaid balance carried into the next bill as unpaid dues
                   {parseFloat(form.unpaid_dues) > 0 ? ` (${formatPeso(parseFloat(form.unpaid_dues) || 0)})` : ''}.
                 </p>
               </div>

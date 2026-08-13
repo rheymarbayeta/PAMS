@@ -252,6 +252,28 @@
     return false;
   }
 
+  function buildScheduleNoteHtml(scheduleRow) {
+    if (!scheduleRow) return '';
+    var parts = [];
+    if (scheduleRow.period_label) parts.push(esc(scheduleRow.period_label));
+    if (scheduleRow.rent_type) parts.push(esc(String(scheduleRow.rent_type).toUpperCase()));
+    if (scheduleRow.vat_amount > 0) {
+      parts.push('VAT ₱ ' + fmt(scheduleRow.vat_amount));
+    }
+    if (scheduleRow.wht_amount > 0) {
+      parts.push('WHT ₱ ' + fmt(scheduleRow.wht_amount));
+    }
+    if (scheduleRow.net_monthly_rent != null) {
+      parts.push('Net ₱ ' + fmt(scheduleRow.net_monthly_rent));
+    }
+    if (!parts.length) return '';
+    return (
+      '<div class="rental-schedule-note" style="font-size:8px;color:#555;margin-top:2px;line-height:1.3;">' +
+      parts.join(' · ') +
+      '</div>'
+    );
+  }
+
   function buildOrDetailRows(rightsPayment, rentalPayment) {
     return (
       '<tr>' +
@@ -373,7 +395,9 @@
       '<span>Monthly Rental:</span><span class="num">₱ ' +
       fmt(rn.monthly_rental) +
       '</span>' +
-      '</div></td>' +
+      '</div>' +
+      buildScheduleNoteHtml(rn.schedule_row) +
+      '</td>' +
       '</tr>' +
       '<tr><td colspan="4">&nbsp;</td>' +
       '<td class="rental-col"><div class="rental-line">' +

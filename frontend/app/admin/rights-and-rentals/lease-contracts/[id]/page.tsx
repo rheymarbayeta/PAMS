@@ -8,6 +8,8 @@ import Layout from '@/components/Layout';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import LesseePaymentDetails from '@/components/LesseePaymentDetails';
 import LeaseContractInsights from '@/components/LeaseContractInsights';
+import RentalScheduleTable from '@/components/RentalScheduleTable';
+import type { RentalScheduleRow } from '@/components/RentalScheduleEditor';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { showAlert, showConfirm } from '@/utils/modal';
@@ -39,6 +41,7 @@ interface LeaseContract {
   created_at: string;
   updated_at: string;
   property_units: { id: number; stall_number: string; floor_level: string; unit_description: string; area_sqm: number | null; status: string }[];
+  rental_schedule?: RentalScheduleRow[];
 }
 
 export default function ViewLeaseContractPage() {
@@ -394,6 +397,12 @@ export default function ViewLeaseContractPage() {
               status={contract.status}
             />
           </div>
+
+          {Array.isArray(contract.rental_schedule) && contract.rental_schedule.length > 0 && (
+            <div className="mb-6">
+              <RentalScheduleTable rows={contract.rental_schedule} />
+            </div>
+          )}
 
           {/* Main Content: left contract info + right payment panel */}
           <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 items-start">

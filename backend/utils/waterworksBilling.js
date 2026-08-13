@@ -221,7 +221,8 @@ async function getRateTiersForSupply(connection, supplyId) {
 
 async function getSupplyBillingConfig(connection, supplyId) {
   const [rows] = await connection.query(
-    `SELECT billing_model, rate_per_cubic_meter, minimum_charge
+    `SELECT billing_model, rate_per_cubic_meter, minimum_charge,
+            reading_day_from, reading_day_to, billing_day
      FROM ww_water_supplies WHERE supply_id = ?`,
     [supplyId]
   );
@@ -231,7 +232,99 @@ async function getSupplyBillingConfig(connection, supplyId) {
     billingModel: supply.billing_model || 'progressive',
     baseUnitRate: parseFloat(supply.rate_per_cubic_meter) || 0,
     minimumCharge: parseFloat(supply.minimum_charge) || 0,
+    readingDayFrom: supply.reading_day_from != null ? Number(supply.reading_day_from) : null,
+    readingDayTo: supply.reading_day_to != null ? Number(supply.reading_day_to) : null,
+    billingDay: supply.billing_day != null ? Number(supply.billing_day) : null,
     tiers,
+  };
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function daysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function clampDayOfMonth(year, month, day) {
+  return Math.min(Math.max(1, day), daysInMonth(year, month));
+}
+
+function formatLongDate(year, month, day) {
+  return `${MONTH_NAMES[month - 1]} ${day}, ${year}`;
+}
+
+/**
+ * Build Period Covered + Collection Date for a billing month using supply schedule.
+ *
+ * Period Covered (when reading days are set): previous month's reading_day_from
+ * through the billing month's reading_day_to (e.g. 20/07/2026 – 22/08/2026).
+ * Otherwise: full calendar month of the billing period.
+ *
+ * Collection Date: billing_day of the month after the billing period
+ * (e.g. August bill → September collection). Falls back to last day if unset.
+ */
+function resolveBillingPeriodMeta(billingMonth, billingYear, schedule = {}) {
+  const month = parseInt(billingMonth, 10);
+  const year = parseInt(billingYear, 10);
+  const lastDay = daysInMonth(year, month);
+  const readingFrom = schedule.readingDayFrom || schedule.reading_day_from;
+  const readingTo = schedule.readingDayTo || schedule.reading_day_to;
+  const billingDay = schedule.billingDay || schedule.billing_day;
+
+  let periodCovered;
+  let periodStart;
+  let periodEnd;
+
+  if (readingFrom || readingTo) {
+    let prevMonth = month - 1;
+    let prevYear = year;
+    if (prevMonth < 1) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+    const fromDay = clampDayOfMonth(
+      prevYear,
+      prevMonth,
+      parseInt(readingFrom, 10) || parseInt(readingTo, 10) || 1
+    );
+    const toDay = clampDayOfMonth(
+      year,
+      month,
+      parseInt(readingTo, 10) || parseInt(readingFrom, 10) || lastDay
+    );
+    periodStart = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(fromDay).padStart(2, '0')}`;
+    periodEnd = `${year}-${String(month).padStart(2, '0')}-${String(toDay).padStart(2, '0')}`;
+    periodCovered = `${formatLongDate(prevYear, prevMonth, fromDay)} – ${formatLongDate(year, month, toDay)}`;
+  } else {
+    periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    periodEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    periodCovered = `${MONTH_NAMES[month - 1]} 1–${lastDay}, ${year}`;
+  }
+
+  let collectMonth = month + 1;
+  let collectYear = year;
+  if (collectMonth > 12) {
+    collectMonth = 1;
+    collectYear += 1;
+  }
+  const collectLastDay = daysInMonth(collectYear, collectMonth);
+  const collectionDay = clampDayOfMonth(
+    collectYear,
+    collectMonth,
+    billingDay ? parseInt(billingDay, 10) : collectLastDay
+  );
+  const collectionDate = `${collectYear}-${String(collectMonth).padStart(2, '0')}-${String(collectionDay).padStart(2, '0')}`;
+
+  return {
+    period_covered: periodCovered,
+    period_start: periodStart,
+    period_end: periodEnd,
+    collection_date: collectionDate,
+    collection_date_label: formatLongDate(collectYear, collectMonth, collectionDay),
+    billing_period_label: `${MONTH_NAMES[month - 1]} ${year}`,
   };
 }
 
@@ -241,4 +334,5 @@ module.exports = {
   calculateBillAmounts,
   getRateTiersForSupply,
   getSupplyBillingConfig,
+  resolveBillingPeriodMeta,
 };

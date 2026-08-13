@@ -109,6 +109,10 @@ export interface WaterBill {
   account_number?: string;
   consumer_name?: string;
   supply_name?: string;
+  period_covered?: string;
+  collection_date?: string;
+  collection_date_label?: string;
+  billing_period_label?: string;
 }
 
 export interface WaterPayment {

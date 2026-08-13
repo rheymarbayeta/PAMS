@@ -77,6 +77,23 @@ export default function WaterworksBillingPage() {
     );
   };
 
+  const openBulkPrint = () => {
+    if (!bills.length) {
+      showAlert('No bills to print for this period', 'Info');
+      return;
+    }
+    const token = localStorage.getItem('token') || '';
+    const params = new URLSearchParams({
+      month: filters.billing_month,
+      year: filters.billing_year,
+      token,
+      _v: String(Date.now()),
+    });
+    if (filters.supply_id) params.set('supply_id', filters.supply_id);
+    if (filters.status) params.set('status', filters.status);
+    window.open(`/waterworks-bulk-billing-statements.html?${params.toString()}`, '_blank');
+  };
+
   return (
     <ProtectedRoute allowedRoles={WW_ROLES}>
       <Layout>
@@ -86,13 +103,22 @@ export default function WaterworksBillingPage() {
               <h1 className="text-2xl font-bold">Billing</h1>
               <p className="text-gray-600 text-sm">Generate and view water billing statements</p>
             </div>
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              {generating ? 'Generating...' : 'Generate Bills for Period'}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={openBulkPrint}
+                disabled={!bills.length}
+                className="px-4 py-2 border border-blue-600 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50"
+              >
+                Print Bulk (2 / A4)
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {generating ? 'Generating...' : 'Generate Bills for Period'}
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-3 mb-4">
@@ -131,7 +157,8 @@ export default function WaterworksBillingPage() {
                   <tr>
                     <th className="px-4 py-3 text-left">Account</th>
                     <th className="px-4 py-3 text-left">Supply</th>
-                    <th className="px-4 py-3 text-left">Period</th>
+                    <th className="px-4 py-3 text-left">Period Covered</th>
+                    <th className="px-4 py-3 text-left">Collection Date</th>
                     <th className="px-4 py-3 text-right">Consumption</th>
                     <th className="px-4 py-3 text-right">Total Due</th>
                     <th className="px-4 py-3 text-right">Paid</th>
@@ -147,7 +174,11 @@ export default function WaterworksBillingPage() {
                         <div className="text-xs text-gray-500">{b.consumer_name}</div>
                       </td>
                       <td className="px-4 py-3">{b.supply_name}</td>
-                      <td className="px-4 py-3">{b.billing_month}/{b.billing_year}</td>
+                      <td className="px-4 py-3">
+                        <div>{b.period_covered || `${b.billing_month}/${b.billing_year}`}</div>
+                        <div className="text-xs text-gray-500">{b.billing_period_label || `${b.billing_month}/${b.billing_year}`}</div>
+                      </td>
+                      <td className="px-4 py-3">{b.collection_date_label || '—'}</td>
                       <td className="px-4 py-3 text-right">{b.consumption} m³</td>
                       <td className="px-4 py-3 text-right">{formatPeso(b.total_due)}</td>
                       <td className="px-4 py-3 text-right">{formatPeso(b.total_paid || 0)}</td>
@@ -157,7 +188,7 @@ export default function WaterworksBillingPage() {
                       </td>
                     </tr>
                   ))}
-                  {!bills.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No bills for this period</td></tr>}
+                  {!bills.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No bills for this period</td></tr>}
                 </tbody>
               </table>
             </div>

@@ -4,6 +4,7 @@ const { recordLedgerEntry } = require('../../utils/paymentLedger');
 const {
   calculateBillAmounts,
   getRateTiersForSupply,
+  resolveBillingPeriodMeta,
 } = require('../../utils/waterworksBilling');
 const billingRepo = require('./billingRepository');
 const accountsService = require('./accountsService');
@@ -23,7 +24,16 @@ function parseDate(dateValue) {
 }
 
 async function listBills(query) {
-  return billingRepo.listBills(query);
+  const result = await billingRepo.listBills(query);
+  result.data = (result.data || []).map((bill) => {
+    const meta = resolveBillingPeriodMeta(bill.billing_month, bill.billing_year, {
+      readingDayFrom: bill.reading_day_from,
+      readingDayTo: bill.reading_day_to,
+      billingDay: bill.billing_day,
+    });
+    return { ...bill, ...meta };
+  });
+  return result;
 }
 
 async function listPayments(query) {
