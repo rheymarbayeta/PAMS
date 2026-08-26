@@ -48,6 +48,7 @@ export const MODULE_NAV: NavItem[] = [
   { id: 'chat', href: '/chat', label: 'Chat', section: 'main', permissions: ['chat'], hideWhenOnly: ['waterworks', 'rentals'], order: 80 },
   { id: 'price', href: '/price-monitoring', label: 'Price Monitoring', section: 'main', permissions: ['price_monitoring'], hideWhenOnly: ['waterworks', 'rentals'], order: 90 },
   { id: 'solar', href: '/solar', label: 'Solar Designer', section: 'main', permissions: ['solar_designer'], order: 100 },
+  { id: 'help', href: '/help', label: 'Help', section: 'main', order: 110 },
   {
     id: 'permit-setup',
     href: '/admin/permit-types',
@@ -129,6 +130,13 @@ export const PAGE_GROUPS: PageGroup[] = [
       { href: '/admin/portal-payments', label: 'Portal Intents' },
       { href: '/admin/payments-ledger', label: 'Ledger' },
       { href: '/citations/payments', label: 'Citation Payments' },
+    ],
+  },
+  {
+    id: 'help',
+    paths: ['/help'],
+    tabs: [
+      { href: '/help', label: 'Revenue Code' },
     ],
   },
   {
