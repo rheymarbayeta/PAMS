@@ -7,6 +7,42 @@ import Pagination from '@/components/Pagination';
 
 const PAGE_SIZE = 5;
 
+const MONTH_OPTIONS = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+];
+
+interface PaymentPreview {
+  billing_month: number;
+  billing_year: number;
+  has_schedule: boolean;
+  schedule_row: {
+    period_label: string;
+    rent_type: string;
+    basic_monthly_rent: number;
+    vat_amount: number;
+    total_monthly_rent: number;
+    wht_amount: number;
+    net_monthly_rent: number;
+  } | null;
+  monthly_rights_amount: number;
+  this_month_rental: number;
+  paid_this_month: number;
+  remaining_this_month: number;
+  suggested_rental_amount: number;
+  outstanding_balance: number;
+}
+
 interface PaymentRecord {
   id: number;
   lease_contract_id: number;
@@ -79,13 +115,18 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Form state
+  const now = new Date();
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [formData, setFormData] = useState({
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: now.toISOString().split('T')[0],
+    period_month: String(now.getMonth() + 1),
+    period_year: String(now.getFullYear()),
     rights_amount: '',
     rental_amount: '',
     or_number: '',
   });
+  const [paymentPreview, setPaymentPreview] = useState<PaymentPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [rightsPage, setRightsPage] = useState(1);
@@ -97,6 +138,51 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
       fetchBalanceAndPayments(selectedContractId);
     }
   }, [selectedContractId]);
+
+  // Load schedule-based preview when billing month/year changes
+  useEffect(() => {
+    if (!selectedContractId || !showPaymentForm) {
+      setPaymentPreview(null);
+      return;
+    }
+    const month = parseInt(formData.period_month, 10);
+    const year = parseInt(formData.period_year, 10);
+    if (!month || !year) return;
+
+    let cancelled = false;
+    const loadPreview = async () => {
+      setPreviewLoading(true);
+      try {
+        const response = await api.get(
+          `/api/rights-and-rentals/lease-contracts/${selectedContractId}/payment-preview`,
+          { params: { month, year } }
+        );
+        if (cancelled) return;
+        const preview = response.data as PaymentPreview;
+        setPaymentPreview(preview);
+        setFormData((prev) => ({
+          ...prev,
+          rental_amount: String(preview.suggested_rental_amount ?? 0),
+          rights_amount:
+            preview.monthly_rights_amount > 0 && !prev.rights_amount
+              ? String(preview.monthly_rights_amount)
+              : prev.rights_amount,
+        }));
+      } catch (err: any) {
+        if (!cancelled) {
+          setPaymentPreview(null);
+          console.error('Payment preview error:', err);
+        }
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    };
+
+    loadPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedContractId, showPaymentForm, formData.period_month, formData.period_year]);
 
   const fetchBalanceAndPayments = async (contractId: number) => {
     setLoading(true);
@@ -138,9 +224,23 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const openPaymentForm = () => {
+    const today = new Date();
+    setFormData({
+      payment_date: today.toISOString().split('T')[0],
+      period_month: String(today.getMonth() + 1),
+      period_year: String(today.getFullYear()),
+      rights_amount: '',
+      rental_amount: '',
+      or_number: '',
+    });
+    setPaymentPreview(null);
+    setShowPaymentForm(true);
   };
 
   const handleSubmitPayment = async (e: React.FormEvent) => {
@@ -149,6 +249,13 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
 
     if (!formData.payment_date) {
       setError('Payment date is required');
+      return;
+    }
+
+    const periodMonth = parseInt(formData.period_month, 10);
+    const periodYear = parseInt(formData.period_year, 10);
+    if (!periodMonth || periodMonth < 1 || periodMonth > 12 || !periodYear) {
+      setError('Billing month and year are required');
       return;
     }
 
@@ -166,18 +273,23 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
     try {
       await api.post(`/api/rights-and-rentals/lease-contracts/${selectedContractId}/payments/record`, {
         payment_date: formData.payment_date,
+        period_month: periodMonth,
+        period_year: periodYear,
         rights_amount: rightsAmt > 0 ? rightsAmt : null,
         rental_amount: rentalAmt > 0 ? rentalAmt : null,
         or_number: formData.or_number || null,
       });
 
-      // Reset form and refresh data
+      const today = new Date();
       setFormData({
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: today.toISOString().split('T')[0],
+        period_month: String(today.getMonth() + 1),
+        period_year: String(today.getFullYear()),
         rights_amount: '',
         rental_amount: '',
         or_number: '',
       });
+      setPaymentPreview(null);
       setShowPaymentForm(false);
       setRightsPage(1);
       setRentalPage(1);
@@ -318,7 +430,14 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
               {canRecordPayment && (
                 <div className="mb-6">
                   <button
-                    onClick={() => setShowPaymentForm(!showPaymentForm)}
+                    onClick={() => {
+                      if (showPaymentForm) {
+                        setShowPaymentForm(false);
+                        setPaymentPreview(null);
+                      } else {
+                        openPaymentForm();
+                      }
+                    }}
                     className={`px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition ${
                       isSidebar ? 'w-full sm:w-auto' : ''
                     }`}
@@ -365,6 +484,92 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                     <div className={formGridClass}>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Billing Month *
+                        </label>
+                        <select
+                          name="period_month"
+                          value={formData.period_month}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {MONTH_OPTIONS.map((m) => (
+                            <option key={m.value} value={m.value}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Billing Year *
+                        </label>
+                        <input
+                          type="number"
+                          name="period_year"
+                          value={formData.period_year}
+                          onChange={handleInputChange}
+                          required
+                          min="2000"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {previewLoading && (
+                      <p className="text-xs text-gray-500">Loading schedule amounts...</p>
+                    )}
+
+                    {paymentPreview && (
+                      <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-950 space-y-1.5">
+                        {paymentPreview.has_schedule ? (
+                          <p>
+                            <span className="font-semibold">Schedule:</span>{' '}
+                            {paymentPreview.schedule_row?.period_label || 'Matched period'}
+                            {paymentPreview.schedule_row?.rent_type
+                              ? ` (${paymentPreview.schedule_row.rent_type})`
+                              : ''}
+                          </p>
+                        ) : (
+                          <p>
+                            <span className="font-semibold">No rental schedule</span> — using contract monthly rental.
+                          </p>
+                        )}
+                        {paymentPreview.has_schedule && paymentPreview.schedule_row && (
+                          <p className="text-indigo-800">
+                            <span className="font-semibold">Net Monthly Rent due to LESSOR + VAT:</span>{' '}
+                            ₱ {(paymentPreview.schedule_row.net_monthly_rent || paymentPreview.this_month_rental).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <span className="block text-xs text-indigo-700 mt-0.5">
+                              Basic ₱ {paymentPreview.schedule_row.basic_monthly_rent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {' + VAT ₱ '}
+                              {paymentPreview.schedule_row.vat_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {' − WHT ₱ '}
+                              {paymentPreview.schedule_row.wht_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </p>
+                        )}
+                        <p>
+                          <span className="font-semibold">This month rental due:</span>{' '}
+                          ₱ {paymentPreview.this_month_rental.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {paymentPreview.paid_this_month > 0 && (
+                            <span className="text-indigo-700">
+                              {' '}
+                              · Paid ₱ {paymentPreview.paid_this_month.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {' · '}
+                              Remaining ₱ {paymentPreview.remaining_this_month.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Outstanding balance (prior periods):</span>{' '}
+                          ₱ {paymentPreview.outstanding_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className={formGridClass}>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
                           Rights Payment Amount (₱)
                         </label>
                         <input
@@ -381,6 +586,11 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Rental Payment Amount (₱)
+                          {paymentPreview?.has_schedule && (
+                            <span className="ml-1 text-xs font-normal text-indigo-600">
+                              (Net to LESSOR + VAT)
+                            </span>
+                          )}
                         </label>
                         <input
                           type="number"
@@ -405,14 +615,17 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setShowPaymentForm(false)}
+                        onClick={() => {
+                          setShowPaymentForm(false);
+                          setPaymentPreview(null);
+                        }}
                         className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
                       >
                         Cancel
                       </button>
                     </div>
                     <p className="text-xs text-gray-500">
-                      You can record multiple payments for the same billing month (e.g. partial payments).
+                      Billing month is stored on the payment (can differ from payment date). Multiple payments for the same billing month are allowed.
                     </p>
                   </form>
                 </div>

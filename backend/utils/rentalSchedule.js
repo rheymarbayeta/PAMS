@@ -147,7 +147,15 @@ function findScheduleRowForMonth(scheduleRows, year, month) {
 function billableAmountFromRow(row, fallbackMonthly) {
   if (!row) return parseMoney(fallbackMonthly);
   if ((row.rent_type || '').toLowerCase() === 'free') return 0;
-  return parseMoney(row.total_monthly_rent);
+  // Net Monthly Rent due to LESSOR + VAT (basic + VAT − WHT)
+  if (row.net_monthly_rent !== undefined && row.net_monthly_rent !== null && row.net_monthly_rent !== '') {
+    return parseMoney(row.net_monthly_rent);
+  }
+  // Fallback for older rows missing net
+  const total = parseMoney(row.total_monthly_rent);
+  const wht = parseMoney(row.wht_amount);
+  if (total > 0) return parseFloat((total - wht).toFixed(2));
+  return parseMoney(fallbackMonthly);
 }
 
 /**

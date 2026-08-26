@@ -2263,6 +2263,22 @@ router.post('/lease-contracts/:contract_id/payments/record', async (req, res) =>
   }
 });
 
+// Preview payment amounts for a billing month (schedule + outstanding)
+router.get('/lease-contracts/:contract_id/payment-preview', async (req, res) => {
+  try {
+    const month = parseInt(req.query.month, 10);
+    const year = parseInt(req.query.year, 10);
+    const preview = await rentalsService.getPaymentPreview(req.params.contract_id, month, year);
+    res.json(preview);
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    console.error('Payment preview error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ========== REPORTS ==========
 
 const NO_FLOOR_LABEL = 'No Floor Assigned';

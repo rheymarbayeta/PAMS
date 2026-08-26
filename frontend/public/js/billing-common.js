@@ -264,7 +264,7 @@
       parts.push('WHT ₱ ' + fmt(scheduleRow.wht_amount));
     }
     if (scheduleRow.net_monthly_rent != null) {
-      parts.push('Net ₱ ' + fmt(scheduleRow.net_monthly_rent));
+      parts.push('Net to LESSOR + VAT ₱ ' + fmt(scheduleRow.net_monthly_rent));
     }
     if (!parts.length) return '';
     return (
