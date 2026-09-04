@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<script src="/js/qrcode.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap');
   * {
@@ -193,6 +194,27 @@
   .continuation-header h3 {
     font-size: 13px;
     color: #666;
+  }
+  .report-header-wrap {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .report-header-qr {
+    position: absolute;
+    top: 0;
+    right: 0;
+    text-align: center;
+  }
+  .report-header-qr canvas,
+  .report-header-qr img {
+    width: 56px;
+    height: 56px;
+    display: block;
+  }
+  .report-header-qr .qr-label {
+    font-size: 7px;
+    color: #555;
+    margin-top: 2px;
   }
 
   /* Summary section */
@@ -414,6 +436,27 @@ async function renderReport(citations, settings, currentUserName) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('report-content').classList.remove('hidden');
   updatePageNumbers();
+  await renderReportQR(citations.length);
+}
+
+async function renderReportQR(totalRecords) {
+  const slots = document.querySelectorAll('.report-header-qr');
+  if (!slots.length || typeof QRCode === 'undefined') return;
+  const qrData = `PAMS-REPORT:citations:${new Date().toISOString()}:${totalRecords}`;
+  try {
+    const dataUrl = await QRCode.toDataURL(qrData, {
+      width: 56,
+      margin: 1,
+      color: { dark: '#000000', light: '#ffffff' },
+    });
+    slots.forEach((slot) => {
+      slot.innerHTML =
+        `<img src="${dataUrl}" alt="QR" width="56" height="56" />` +
+        `<div class="qr-label">Scan to verify</div>`;
+    });
+  } catch (err) {
+    console.warn('Citation report QR render failed:', err);
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -518,13 +561,16 @@ function buildHeaderHTML(settings) {
   `;
 
   return `
-    <div style="text-align:center;margin-bottom:16px;">
-      <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:6px;">
-        ${logoLeftUrl ? `<img src="${logoLeftUrl}" alt="Logo" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
-        <div style="text-align:center;line-height:1.2;">${headerTextLines}</div>
-        ${logoRightUrl ? `<img src="${logoRightUrl}" alt="Logo 2" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+    <div class="report-header-wrap">
+      <div class="report-header-qr" title="Verification QR Code"></div>
+      <div style="text-align:center;">
+        <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:6px;">
+          ${logoLeftUrl ? `<img src="${logoLeftUrl}" alt="Logo" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+          <div style="text-align:center;line-height:1.2;">${headerTextLines}</div>
+          ${logoRightUrl ? `<img src="${logoRightUrl}" alt="Logo 2" style="height:${hLogoH}px;width:auto;object-fit:contain;">` : ''}
+        </div>
+        <div style="border-bottom:2px solid #333;margin-top:6px;"></div>
       </div>
-      <div style="border-bottom:2px solid #333;margin-top:6px;"></div>
     </div>
   `;
 }

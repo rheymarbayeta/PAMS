@@ -36,6 +36,12 @@ router.get('/assessment-rules/:ruleId/quantity-fee', authorize('SuperAdmin', 'Ad
         config.additional_charges = [];
       }
     }
+    if (config.fee_name && !config.selected_fee_name) {
+      config.selected_fee_name = config.fee_name;
+    }
+    if (!config.calculation_mode) {
+      config.calculation_mode = 'quantity';
+    }
 
     res.json(config);
   } catch (error) {
@@ -57,6 +63,8 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
     const {
       rule_id,
       selected_fee_id,
+      calculation_mode,
+      percent_rate,
       is_enabled,
       quantity_label,
       quantity_description,
@@ -65,10 +73,24 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       max_quantity
     } = req.body;
 
-    if (!rule_id || !quantity_label || !selected_fee_id) {
+    const mode = String(calculation_mode || 'quantity').toLowerCase() === 'percent'
+      ? 'percent'
+      : 'quantity';
+
+    const label = (quantity_label && String(quantity_label).trim())
+      || (mode === 'percent' ? 'Percent' : '');
+
+    if (!rule_id || !selected_fee_id || !label) {
       return res.status(400).json({ 
-        error: 'rule_id, quantity_label, and selected_fee_id are required' 
+        error: mode === 'percent'
+          ? 'rule_id, selected_fee_id, and percent_rate are required'
+          : 'rule_id, quantity_label, and selected_fee_id are required'
       });
+    }
+
+    const percentRate = mode === 'percent' ? parseFloat(percent_rate) : null;
+    if (mode === 'percent' && (Number.isNaN(percentRate) || percentRate == null || percentRate < 0)) {
+      return res.status(400).json({ error: 'A valid percent rate is required' });
     }
 
     // Check if rule exists
@@ -106,14 +128,16 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       await pool.execute(
         `UPDATE assessment_rule_quantity_fees 
          SET is_enabled = ?, quantity_label = ?, quantity_description = ?, 
-             selected_fee_id = ?, base_rate = ?, additional_charges = ?, 
+             selected_fee_id = ?, calculation_mode = ?, percent_rate = ?, base_rate = ?, additional_charges = ?, 
              min_quantity = ?, max_quantity = ?, updated_at = CURRENT_TIMESTAMP
          WHERE rule_id = ?`,
         [
           is_enabled ?? 1,
-          quantity_label,
+          label,
           quantity_description,
           selected_fee_id,
+          mode,
+          percentRate,
           0,
           additionalChargesJson,
           min_quantity ?? 1,
@@ -131,15 +155,17 @@ router.post('/', authorize('SuperAdmin', 'Admin'), async (req, res) => {
       await pool.execute(
         `INSERT INTO assessment_rule_quantity_fees 
          (quantity_fee_id, rule_id, is_enabled, quantity_label, quantity_description, 
-          selected_fee_id, base_rate, additional_charges, min_quantity, max_quantity)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          selected_fee_id, calculation_mode, percent_rate, base_rate, additional_charges, min_quantity, max_quantity)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           quantity_fee_id,
           rule_id,
           is_enabled ?? 1,
-          quantity_label,
+          label,
           quantity_description,
           selected_fee_id,
+          mode,
+          percentRate,
           0,
           additionalChargesJson,
           min_quantity ?? 1,

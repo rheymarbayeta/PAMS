@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Business Permit / Mayor's Permit</title>
+<script src="/js/qrcode.min.js"></script>
 <style>
   :root {
     --etracs-green: #00a328;
@@ -95,7 +96,7 @@
   /* ── Header ── */
   .bp-header {
     display: grid;
-    grid-template-columns: 72px 1fr 72px;
+    grid-template-columns: 72px 1fr;
     align-items: center;
     gap: 8px;
     margin-bottom: 0;
@@ -106,10 +107,17 @@
     object-fit: contain;
   }
   .bp-qr-slot {
-    width: 68px;
-    height: 68px;
-    border: 1px dashed #bbb;
-    background: #fafafa;
+    position: absolute;
+    right: 0.5in;
+    bottom: 0.62in;
+    width: 66px;
+    height: 66px;
+    z-index: 2;
+  }
+  .bp-qr-slot canvas {
+    width: 66px !important;
+    height: 66px !important;
+    display: block;
   }
   .bp-header-center {
     text-align: center;
@@ -724,7 +732,6 @@ function renderPermit(application, settings, payments) {
           <div class="province">PROVINCE OF CEBU</div>
           <div class="office">OFFICE OF THE MAYOR</div>
         </div>
-        <div class="bp-qr-slot" title="QR code placeholder" aria-label="QR code placeholder"></div>
       </div>
 
       <div class="bp-title-wrap">
@@ -838,6 +845,10 @@ function renderPermit(application, settings, payments) {
         `}
       </div>
 
+      <div class="bp-qr-slot" aria-label="Permit QR Code">
+        <canvas id="bpQrCanvas" width="66" height="66"></canvas>
+      </div>
+
       <div class="bp-footer">
         <div>Enhanced Tax Revenue Assessment and Collection System (ETRACS 2.5)</div>
         <div>Date Printed: ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
@@ -850,6 +861,24 @@ function renderPermit(application, settings, payments) {
   document.getElementById('report-content').classList.remove('hidden');
   wirePlateNumberInput();
   renderBinBarcode(binBarcodeValue);
+  renderPermitQR(permitNo || binBarcodeValue);
+}
+
+function renderPermitQR(value) {
+  const canvas = document.getElementById('bpQrCanvas');
+  if (!canvas || typeof QRCode === 'undefined') return;
+  try {
+    QRCode.toCanvas(canvas, `PAMS-PERMIT:${value || 'PERMIT'}`, {
+      width: 66,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+  } catch (err) {
+    console.warn('Permit QR render failed:', err);
+  }
 }
 
 function wirePlateNumberInput() {

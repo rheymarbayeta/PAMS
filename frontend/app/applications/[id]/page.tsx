@@ -234,21 +234,28 @@ export default function ApplicationDetailPage() {
       const response = await api.get(`/api/quantity-fees/assessment-rules/${application.rule_id}/quantity-fee`);
       
       if (response.data && response.data.is_enabled) {
-        // Quantity-based fees configured - show modal
-        // Convert selected_fee_amount to number
+        // Quantity/percent-based fees configured - show modal
         const config = {
           ...response.data,
-          selected_fee_amount: parseFloat(response.data.selected_fee_amount || '0') || 0
+          selected_fee_amount: parseFloat(response.data.selected_fee_amount || '0') || 0,
+          calculation_mode: response.data.calculation_mode === 'percent' ? 'percent' : 'quantity',
         };
         setQuantityFeeConfig(config);
 
-        const days = countDaysFromParameters(application.parameters || []);
-        if (days != null && days > 0) {
+        const isPercent = config.calculation_mode === 'percent';
+        const days = !isPercent ? countDaysFromParameters(application.parameters || []) : null;
+
+        if (isPercent) {
+          setQuantityInput('');
+          setQuantityFromDates(false);
+          setQuantityPreview(null);
+          setShowQuantityModal(true);
+        } else if (days != null && days > 0) {
           setQuantityInput(String(days));
           setQuantityFromDates(true);
           setShowQuantityModal(true);
-          // Preview after config is set — compute inline to avoid stale state
-          const baseFeeAmount = (config.selected_fee_amount || 0) * days;
+          const feeAmount = config.selected_fee_amount || 0;
+          const baseFeeAmount = feeAmount * days;
           let additionalTotal = 0;
           if (config.additional_charges && Array.isArray(config.additional_charges)) {
             additionalTotal = config.additional_charges.reduce(
@@ -286,10 +293,14 @@ export default function ApplicationDetailPage() {
     if (!quantityFeeConfig) return;
 
     try {
-      // Use the selected_fee_amount directly from the config (convert to number)
-      const baseFeeAmount = (parseFloat(quantityFeeConfig.selected_fee_amount || '0') || 0) * qty;
+      const feeAmount = parseFloat(quantityFeeConfig.selected_fee_amount || '0') || 0;
+      const isPercent = quantityFeeConfig.calculation_mode === 'percent';
+      const percentRate = parseFloat(quantityFeeConfig.percent_rate || '0') || 0;
+      // percent: assessor base amount × fixed % | quantity: schedule fee × qty
+      const baseFeeAmount = isPercent
+        ? qty * (percentRate / 100)
+        : feeAmount * qty;
 
-      // Calculate additional charges
       let additionalTotal = 0;
       if (quantityFeeConfig.additional_charges && Array.isArray(quantityFeeConfig.additional_charges)) {
         additionalTotal = quantityFeeConfig.additional_charges.reduce((sum: number, charge: any) => 
@@ -318,11 +329,16 @@ export default function ApplicationDetailPage() {
   };
 
   const handleAssessWithQuantity = async () => {
-    if (!quantityInput || !application) return;
+    if (!application) return;
 
     const qty = parseFloat(quantityInput);
     if (isNaN(qty) || qty <= 0) {
-      showAlert('Please enter a valid quantity', 'Validation Error');
+      showAlert(
+        quantityFeeConfig?.calculation_mode === 'percent'
+          ? 'Please enter a valid base amount'
+          : 'Please enter a valid quantity',
+        'Validation Error'
+      );
       return;
     }
 
@@ -1109,7 +1125,7 @@ export default function ApplicationDetailPage() {
           </div>
         )}
 
-        {/* Quantity-Based Fee Assessment Modal */}
+        {/* Quantity / Percent Fee Assessment Modal */}
         {showQuantityModal && quantityFeeConfig && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
@@ -1118,15 +1134,21 @@ export default function ApplicationDetailPage() {
                   Assess {application?.permit_type_id}
                 </h2>
                 <p className="text-sm text-gray-500 mb-6">
-                  {quantityFromDates
+                  {quantityFeeConfig.calculation_mode === 'percent'
+                    ? `Enter the base amount to apply the configured ${Number(quantityFeeConfig.percent_rate || 0).toFixed(2)}% rate`
+                    : quantityFromDates
                     ? 'Days computed from the selected permit dates'
                     : `Enter the ${quantityFeeConfig.quantity_label?.toLowerCase() || 'quantity'} to calculate fees`}
                 </p>
 
-                {/* Quantity Input */}
+                {/* Quantity / Base Amount Input */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {quantityFeeConfig.quantity_label || 'Quantity'} 
+                    {quantityFeeConfig.calculation_mode === 'percent'
+                      ? (quantityFeeConfig.quantity_label && quantityFeeConfig.quantity_label !== 'Percent'
+                          ? quantityFeeConfig.quantity_label
+                          : 'Base Amount')
+                      : (quantityFeeConfig.quantity_label || 'Quantity')}
                     <span className="text-red-500">*</span>
                   </label>
                   {quantityFeeConfig.quantity_description && (
@@ -1138,19 +1160,32 @@ export default function ApplicationDetailPage() {
                       You can adjust if needed.
                     </p>
                   )}
-                  <input
-                    type="number"
-                    min={quantityFeeConfig.min_quantity || 0}
-                    max={quantityFeeConfig.max_quantity}
-                    value={quantityInput}
-                    onChange={(e) => {
-                      setQuantityFromDates(false);
-                      handleQuantityInputChange(e.target.value);
-                    }}
-                    placeholder="Enter quantity"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                  />
-                  {(quantityFeeConfig.min_quantity || quantityFeeConfig.max_quantity) && (
+                  <div className="relative">
+                    {quantityFeeConfig.calculation_mode === 'percent' && (
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
+                    )}
+                    <input
+                      type="number"
+                      min={quantityFeeConfig.calculation_mode === 'percent' ? 0 : (quantityFeeConfig.min_quantity || 0)}
+                      max={quantityFeeConfig.calculation_mode === 'percent' ? undefined : quantityFeeConfig.max_quantity}
+                      step={quantityFeeConfig.calculation_mode === 'percent' ? '0.01' : '1'}
+                      value={quantityInput}
+                      onChange={(e) => {
+                        setQuantityFromDates(false);
+                        handleQuantityInputChange(e.target.value);
+                      }}
+                      placeholder={
+                        quantityFeeConfig.calculation_mode === 'percent'
+                          ? 'Enter base amount'
+                          : 'Enter quantity'
+                      }
+                      className={`w-full py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${
+                        quantityFeeConfig.calculation_mode === 'percent' ? 'pl-8 pr-4' : 'px-4'
+                      }`}
+                    />
+                  </div>
+                  {quantityFeeConfig.calculation_mode !== 'percent' &&
+                    (quantityFeeConfig.min_quantity || quantityFeeConfig.max_quantity) && (
                     <p className="text-xs text-gray-500 mt-1">
                       {quantityFeeConfig.min_quantity && `Min: ${quantityFeeConfig.min_quantity}`}
                       {quantityFeeConfig.min_quantity && quantityFeeConfig.max_quantity && ' • '}
@@ -1165,12 +1200,14 @@ export default function ApplicationDetailPage() {
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">Fee Breakdown</h3>
                     
                     {/* Base Fee */}
-                    <div className="flex justify-between text-sm mb-2">
+                    <div className="flex justify-between text-sm mb-2 gap-3">
                       <span className="text-gray-600">
-                        {quantityFeeConfig.selected_fee_name || 'Base Fee'} (₱{quantityFeeConfig.selected_fee_amount?.toFixed(2)} × {quantityInput})
+                        {quantityFeeConfig.calculation_mode === 'percent'
+                          ? `${quantityFeeConfig.selected_fee_name || 'Fee'} (₱${Number(quantityInput || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × ${Number(quantityFeeConfig.percent_rate || 0).toFixed(2)}%)`
+                          : `${quantityFeeConfig.selected_fee_name || 'Base Fee'} (₱${Number(quantityFeeConfig.selected_fee_amount || 0).toFixed(2)} × ${quantityInput})`}
                       </span>
-                      <span className="text-gray-900 font-medium">
-                        ₱{quantityPreview.baseAmount.toFixed(2)}
+                      <span className="text-gray-900 font-medium whitespace-nowrap">
+                        ₱{quantityPreview.baseAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
 
@@ -1181,7 +1218,7 @@ export default function ApplicationDetailPage() {
                           <div key={idx} className="flex justify-between text-sm mb-2">
                             <span className="text-gray-600">{charge.charge_name}</span>
                             <span className="text-gray-900 font-medium">
-                              ₱{parseFloat(charge.amount || 0).toFixed(2)}
+                              ₱{parseFloat(charge.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </div>
                         ))}
@@ -1195,7 +1232,7 @@ export default function ApplicationDetailPage() {
                     <div className="flex justify-between">
                       <span className="font-semibold text-gray-900">Total</span>
                       <span className="font-bold text-lg text-indigo-600">
-                        ₱{quantityPreview.totalAmount.toFixed(2)}
+                        ₱{quantityPreview.totalAmount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -1217,7 +1254,7 @@ export default function ApplicationDetailPage() {
                   </button>
                   <button
                     onClick={handleAssessWithQuantity}
-                    disabled={!quantityInput || assessingWithQuantity}
+                    disabled={assessingWithQuantity || !quantityInput}
                     className="flex-1 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {assessingWithQuantity ? 'Processing...' : 'Assess'}

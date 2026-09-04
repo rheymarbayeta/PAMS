@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import { QRCodeImage } from '@/components/QRCodeImage';
 import api from '@/services/api';
 import etracsService from '@/services/etracsService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -422,6 +423,19 @@ export default function CitationsPage() {
   const reportStartIndex = (reportCurrentPage - 1) * reportRecordsPerPage;
   const reportEndIndex = reportStartIndex + reportRecordsPerPage;
   const paginatedReportCitations = reportFilteredCitations.slice(reportStartIndex, reportEndIndex);
+  const citationsReportQrValue = useMemo(
+    () =>
+      `PAMS-REPORT:citations:${new Date().toISOString()}:${reportFilteredCitations.length}`,
+    // Regenerate when filter criteria or result count change — not every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      reportFilters.paymentStatus,
+      reportFilters.dateFrom,
+      reportFilters.dateTo,
+      reportFilters.violations,
+      reportFilteredCitations.length,
+    ]
+  );
 
   // Ensure report current page doesn't exceed total pages
   if (reportCurrentPage > reportTotalPages && reportTotalPages > 0) {
@@ -898,10 +912,31 @@ export default function CitationsPage() {
 
               {/* Filtered Citations Table */}
               <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                <div className="bg-slate-50 p-4 border-b border-slate-200">
-                  <h3 className="font-semibold text-slate-800">
-                    Filtered Citations ({reportFilteredCitations.length})
-                  </h3>
+                <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-slate-800">
+                      Filtered Citations ({reportFilteredCitations.length})
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 print:hidden">
+                      Print this page or use Preview Report for a formal printable layout.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handlePrint}
+                      className="mt-2 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors print:hidden"
+                    >
+                      Print list
+                    </button>
+                  </div>
+                  <div className="flex flex-col items-center gap-0.5 shrink-0">
+                    <QRCodeImage
+                      value={citationsReportQrValue}
+                      size={64}
+                      alt="Citations report QR"
+                      className="border border-slate-200 rounded bg-white"
+                    />
+                    <span className="text-[10px] text-slate-500 print:text-black">Scan to verify</span>
+                  </div>
                 </div>
                 {reportFilteredCitations.length === 0 ? (
                   <div className="p-8 text-center text-slate-600">

@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
+import { QRCodeImage } from '@/components/QRCodeImage';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
@@ -509,7 +510,7 @@ export default function CitationDetailsPage() {
           <div className="bg-white rounded-lg border border-slate-200 p-5">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+                <div className="h-12 w-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 print:hidden">
                   <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -542,35 +543,46 @@ export default function CitationDetailsPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => router.back()}
-                  className="px-3 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium"
-                >
-                  ← Back
-                </button>
-                {isAdmin && !isEditing && (
+              <div className="flex items-start gap-3 flex-wrap">
+                <div className="flex flex-col items-center gap-0.5 order-first sm:order-none ml-auto sm:ml-0">
+                  <QRCodeImage
+                    value={`PAMS-CITATION:${citation.citation_id || citationId}`}
+                    size={72}
+                    alt="Citation verification QR"
+                    className="border border-slate-200 rounded bg-white"
+                  />
+                  <span className="text-[10px] text-slate-500 print:text-black">Scan to verify</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap print:hidden">
                   <button
-                    onClick={() => setIsEditing(true)}
-                    className="px-3 py-2 text-sm bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium"
+                    onClick={() => router.back()}
+                    className="px-3 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium"
                   >
-                    Edit
+                    ← Back
                   </button>
-                )}
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                  Print
-                </button>
-                {canDelete && !isEditing && (
+                  {isAdmin && !isEditing && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="px-3 py-2 text-sm bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium"
+                    >
+                      Edit
+                    </button>
+                  )}
                   <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                    onClick={() => window.print()}
+                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                   >
-                    Delete
+                    Print
                   </button>
-                )}
+                  {canDelete && !isEditing && (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

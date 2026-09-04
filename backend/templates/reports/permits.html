@@ -22,8 +22,14 @@
   .report-header {
     background-color: #1F4788;
     color: #fff;
-    padding: 14px 18px;
+    padding: 12px 18px;
     margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .report-header .header-info {
+    flex: 1;
   }
   .report-header h1 {
     font-size: 18px;
@@ -34,6 +40,16 @@
     font-size: 11px;
     margin-top: 4px;
     opacity: 0.85;
+  }
+  .report-header .header-qr {
+    background: #fff;
+    padding: 3px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   }
   /* Meta row */
   .report-meta {
@@ -117,8 +133,11 @@
 <body>
 <div class="page">
   <div class="report-header">
-    <h1>Permit Issuance Report</h1>
-    <div class="subtitle">Permit and Business Application Management System (PAMS)</div>
+    <div class="header-info">
+      <h1>Permit Issuance Report</h1>
+      <div class="subtitle">Permit and Business Application Management System (PAMS)</div>
+    </div>
+    {{qrCode}}
   </div>
 
   <div class="report-meta">

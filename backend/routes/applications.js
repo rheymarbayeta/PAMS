@@ -903,25 +903,17 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
     const app = apps[0];
 
-    // Prefer day count from permitted_dates when quantity was not supplied
+    // Prefer day count from permitted_dates when quantity was not supplied (quantity mode only)
     const [parametersForQty] = await connection.execute(
       'SELECT param_name, param_value FROM application_parameters WHERE application_id = ?',
       [applicationId]
     );
-    const daysFromDates = countDaysFromParameters(parametersForQty);
-    if (
-      (quantity_entered == null || Number.isNaN(quantity_entered) || quantity_entered <= 0) &&
-      daysFromDates != null &&
-      daysFromDates > 0
-    ) {
-      quantity_entered = daysFromDates;
-    }
 
-    // Check for quantity-based fee configuration
+    // Load quantity/percent fee config early so we know the calculation mode
     let quantityFeeConfig = null;
     let feesCalculatedFromQuantity = false;
 
-    if (app.rule_id && quantity_entered) {
+    if (app.rule_id) {
       const [quantityConfigs] = await connection.execute(
         'SELECT * FROM assessment_rule_quantity_fees WHERE rule_id = ? AND is_enabled = 1 LIMIT 1',
         [app.rule_id]
@@ -929,11 +921,21 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
 
       if (quantityConfigs.length > 0) {
         quantityFeeConfig = quantityConfigs[0];
-        // Parse JSON fields
         if (quantityFeeConfig.additional_charges && typeof quantityFeeConfig.additional_charges === 'string') {
           quantityFeeConfig.additional_charges = JSON.parse(quantityFeeConfig.additional_charges);
         }
       }
+    }
+
+    const calcModeEarly = String(quantityFeeConfig?.calculation_mode || 'quantity').toLowerCase();
+    const daysFromDates = countDaysFromParameters(parametersForQty);
+    if (
+      calcModeEarly !== 'percent' &&
+      (quantity_entered == null || Number.isNaN(quantity_entered) || quantity_entered <= 0) &&
+      daysFromDates != null &&
+      daysFromDates > 0
+    ) {
+      quantity_entered = daysFromDates;
     }
 
     // Get assessed fees
@@ -954,21 +956,27 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
       [applicationId]
     );
 
-    // If quantity-based fees are configured, recalculate fees
+    // If quantity/percent fees are configured, recalculate fees
+    // Percent mode: assessor-entered base amount × fixed percent_rate
     if (quantityFeeConfig && quantity_entered) {
-      // Validate quantity
-      const minQty = quantityFeeConfig.min_quantity || 1;
-      const maxQty = quantityFeeConfig.max_quantity || 999;
-      
-      if (quantity_entered < minQty || quantity_entered > maxQty) {
+      const calcMode = String(quantityFeeConfig.calculation_mode || 'quantity').toLowerCase();
+
+      if (calcMode !== 'percent') {
+        const minQty = quantityFeeConfig.min_quantity || 1;
+        const maxQty = quantityFeeConfig.max_quantity || 999;
+        if (quantity_entered < minQty || quantity_entered > maxQty) {
+          await connection.rollback();
+          return res.status(400).json({
+            error: `Quantity must be between ${minQty} and ${maxQty}`
+          });
+        }
+      } else if (quantity_entered <= 0) {
         await connection.rollback();
-        return res.status(400).json({ 
-          error: `Quantity must be between ${minQty} and ${maxQty}` 
-        });
+        return res.status(400).json({ error: 'Base amount must be greater than zero' });
       }
 
       try {
-        // Get the selected fee's amount from assessment_rule_fees
+        // Get the selected fee row (used as the assessed fee line item)
         const [selectedFee] = await connection.execute(
           'SELECT fee_id, amount FROM assessment_rule_fees WHERE fee_id = ? AND rule_id = ? LIMIT 1',
           [quantityFeeConfig.selected_fee_id, app.rule_id]
@@ -979,7 +987,14 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
           return res.status(400).json({ error: 'Selected fee not found' });
         }
 
-        const baseFeeAmount = parseFloat(selectedFee[0].amount) * quantity_entered;
+        const feeAmount = parseFloat(selectedFee[0].amount) || 0;
+        const percentRate = parseFloat(quantityFeeConfig.percent_rate) || 0;
+        // quantity: schedule fee × qty | percent: assessor base amount × (percent_rate / 100)
+        const baseFeeAmount = calcMode === 'percent'
+          ? quantity_entered * (percentRate / 100)
+          : feeAmount * quantity_entered;
+        const unitAmount = calcMode === 'percent' ? quantity_entered : feeAmount;
+        const storedQuantity = calcMode === 'percent' ? 1 : quantity_entered;
         
         // Delete existing assessed fees for this application (they'll be recalculated)
         await connection.execute(
@@ -987,7 +1002,7 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
           [applicationId]
         );
 
-        // Create assessed fee for the quantity-based fee
+        // Create assessed fee for the quantity/percent-based fee
         const baseFeeInsertId = generateId(ID_PREFIXES.ASSESSED_FEE);
         await connection.execute(
           `INSERT INTO assessed_fees (
@@ -998,8 +1013,8 @@ router.put('/:id/assess', authorize('SuperAdmin', 'Admin', 'Assessor'), async (r
             applicationId,
             quantityFeeConfig.selected_fee_id,
             baseFeeAmount.toFixed(2),
-            selectedFee[0].amount,
-            quantity_entered,
+            unitAmount,
+            storedQuantity,
             req.user.user_id
           ]
         );

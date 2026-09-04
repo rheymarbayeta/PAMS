@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const pool = require('../config/database');
+const { generateQRCodeBuffer, generateQRCodeDataURL } = require('./qrCodeGenerator');
 
 /**
  * Build a display address from application parameters.
@@ -96,6 +97,15 @@ const generatePermitPDF = async (applicationId) => {
       doc.on('data', (chunk) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
+
+      // QR Code on top-right
+      try {
+        const qrCodeData = app.application_number ? `PAMS-PERMIT:${app.application_number}` : `PAMS-PERMIT:${applicationId}`;
+        const qrBuffer = await generateQRCodeBuffer(qrCodeData, { width: 70 });
+        doc.image(qrBuffer, doc.page.width - 50 - 70, 50, { width: 70, height: 70 });
+      } catch (qrErr) {
+        console.error('Error generating QR code for permit:', qrErr);
+      }
 
       // Header with logo
       const logoPath = path.join(__dirname, '..', 'assets', 'dalaguete-logo.png');
@@ -437,6 +447,14 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
         }
       }
 
+      // QR Code on top-right
+      try {
+        const qrBuffer = await generateQRCodeBuffer(barcodeId, { width: 55 });
+        doc.image(qrBuffer, doc.page.width - 36 - 55, 20, { width: 55, height: 55 });
+      } catch (qrErr) {
+        console.error('Error generating QR code for assessment PDF:', qrErr);
+      }
+
       // Start positioning from top
       let yPos = 50;
 
@@ -455,14 +473,13 @@ const generateAssessmentReportPDF = async (applicationId, printedBy = 'System') 
       yPos += 12;
 
       // Right side - Application No, Type, and Date
-      const rightX = 468;
-      doc.font('Helvetica').fontSize(8);
-      doc.text('Application No :', 412, 50);
-      doc.text(assessment.app_number || `#${applicationId}`, rightX, 50);
-      doc.text('Type :', 446, 62);
-      doc.text(`${appType}  (${year})`, rightX, 62);
-      doc.text('Date :', 446, 74);
-      doc.text(assessmentDateFormatted, rightX, 74);
+      doc.font('Helvetica').fontSize(7.5);
+      doc.text('Application No :', 365, 46);
+      doc.text(assessment.app_number || `#${applicationId}`, 430, 46);
+      doc.text('Type :', 365, 58);
+      doc.text(`${appType}  (${year})`, 430, 58);
+      doc.text('Date :', 365, 70);
+      doc.text(assessmentDateFormatted, 430, 70);
 
       // Assessment Record Title
       doc.font('Helvetica-Bold').fontSize(10);
@@ -888,6 +905,13 @@ const generateAssessmentReportHTML = async (applicationId, printedBy = 'System',
     const apiBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const backendUrl = process.env.BACKEND_URL || process.env.FRONTEND_URL?.replace(':3000', ':5000') || 'http://localhost:5000';
 
+    let qrCodeDataURL = '';
+    try {
+      qrCodeDataURL = await generateQRCodeDataURL(data.barcodeId, { width: 90 });
+    } catch (qrErr) {
+      console.error('Error generating QR code for HTML assessment:', qrErr);
+    }
+
     const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -914,8 +938,26 @@ const generateAssessmentReportHTML = async (applicationId, printedBy = 'System',
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .header {
+            position: relative;
             text-align: center;
             margin-bottom: 30px;
+        }
+        .header .qr-code {
+            position: absolute;
+            right: 0;
+            top: 0;
+            text-align: center;
+        }
+        .header .qr-code img {
+            width: 80px;
+            height: 80px;
+            display: block;
+        }
+        .header .qr-code span {
+            font-size: 8px;
+            color: #666;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
         .header h1 {
             font-size: 14px;
@@ -979,6 +1021,11 @@ const generateAssessmentReportHTML = async (applicationId, printedBy = 'System',
         </div>
         <div id="content" style="display: none;">
             <div class="header">
+                ${qrCodeDataURL ? `
+                <div class="qr-code">
+                    <img src="${qrCodeDataURL}" alt="QR Code" />
+                    <span>Scan to Verify</span>
+                </div>` : ''}
                 <h1>REPUBLIC OF THE PHILIPPINES</h1>
                 <h2>MUNICIPALITY OF ${data.municipality.toUpperCase()}</h2>
                 <h2>PROVINCE OF ${data.province.toUpperCase()}</h2>

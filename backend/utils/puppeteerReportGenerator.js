@@ -3,6 +3,7 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+const { generateQRCodeDataURL } = require('./qrCodeGenerator');
 
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates', 'reports');
 
@@ -280,12 +281,22 @@ ${recordsXml}
     ? buildPermitsRows(records)
     : buildApplicationsRows(records);
 
+  let qrCodeHtml = '';
+  try {
+    const qrData = `PAMS-REPORT:${name.toUpperCase()}:${new Date(generatedAt).toISOString()}:${totalRecords}`;
+    const qrDataURL = await generateQRCodeDataURL(qrData, { width: 70, margin: 1 });
+    qrCodeHtml = `<div class="header-qr"><img src="${qrDataURL}" alt="QR" style="width: 52px; height: 52px; display: block;" /></div>`;
+  } catch (qrErr) {
+    console.error('Error generating report QR code:', qrErr);
+  }
+
   const html = renderTemplate(name, {
     generatedAt: escapeHtml(new Date(generatedAt).toLocaleString('en-PH')),
     generatedBy: escapeHtml(generatedBy),
     totalRecords: String(totalRecords),
     totalAmount: formatCurrency(totalAmount),
     rows,
+    qrCode: qrCodeHtml,
   });
 
   if (fmt === 'html') {

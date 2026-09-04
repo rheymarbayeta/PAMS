@@ -26,6 +26,8 @@ interface QuantityFeeConfig {
   selected_fee_id: string;
   selected_fee_name?: string;
   selected_fee_amount?: number;
+  calculation_mode?: 'quantity' | 'percent';
+  percent_rate?: number | null;
   is_enabled: boolean;
   quantity_label: string;
   quantity_description?: string;
@@ -44,7 +46,9 @@ export default function QuantityFeesPage() {
   const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
+    calculation_mode: 'quantity' as 'quantity' | 'percent',
     selected_fee_id: '',
+    percent_rate: '',
     quantity_label: '',
     quantity_description: '',
     min_quantity: '1',
@@ -113,7 +117,12 @@ export default function QuantityFeesPage() {
 
     if (existingConfig) {
       setFormData({
+        calculation_mode: existingConfig.calculation_mode === 'percent' ? 'percent' : 'quantity',
         selected_fee_id: existingConfig.selected_fee_id,
+        percent_rate:
+          existingConfig.percent_rate != null && existingConfig.percent_rate !== undefined
+            ? String(existingConfig.percent_rate)
+            : '',
         quantity_label: existingConfig.quantity_label,
         quantity_description: existingConfig.quantity_description || '',
         min_quantity: existingConfig.min_quantity.toString(),
@@ -123,7 +132,9 @@ export default function QuantityFeesPage() {
       });
     } else {
       setFormData({
+        calculation_mode: 'quantity',
         selected_fee_id: '',
+        percent_rate: '',
         quantity_label: '',
         quantity_description: '',
         min_quantity: '1',
@@ -139,9 +150,22 @@ export default function QuantityFeesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedRule || !formData.selected_fee_id || !formData.quantity_label) {
+    if (!selectedRule || !formData.selected_fee_id) {
       alert('Please fill in all required fields');
       return;
+    }
+
+    if (formData.calculation_mode === 'quantity' && !formData.quantity_label.trim()) {
+      alert('Please enter a quantity label');
+      return;
+    }
+
+    if (formData.calculation_mode === 'percent') {
+      const rate = parseFloat(formData.percent_rate);
+      if (Number.isNaN(rate) || rate < 0) {
+        alert('Please enter a valid percent rate');
+        return;
+      }
     }
 
     try {
@@ -155,7 +179,13 @@ export default function QuantityFeesPage() {
       const payload = {
         rule_id: selectedRule,
         selected_fee_id: formData.selected_fee_id,
-        quantity_label: formData.quantity_label,
+        calculation_mode: formData.calculation_mode,
+        percent_rate:
+          formData.calculation_mode === 'percent' ? parseFloat(formData.percent_rate) : null,
+        quantity_label:
+          formData.calculation_mode === 'percent'
+            ? (formData.quantity_label.trim() || 'Percent')
+            : formData.quantity_label,
         quantity_description: formData.quantity_description,
         min_quantity: parseInt(formData.min_quantity) || 1,
         max_quantity: parseInt(formData.max_quantity) || 999,
@@ -203,6 +233,7 @@ export default function QuantityFeesPage() {
   const ruleList = rules.filter(r => ruleFees.has(r.rule_id) && ruleFees.get(r.rule_id)!.length > 0);
   const fees = selectedRule ? ruleFees.get(selectedRule) || [] : [];
   const selectedFeeInfo = fees.find(f => f.fee_id === formData.selected_fee_id);
+  const isPercent = formData.calculation_mode === 'percent';
 
   if (loading) {
     return (
@@ -229,8 +260,8 @@ export default function QuantityFeesPage() {
               <Link href="/dashboard" className="text-indigo-600 hover:text-indigo-700 font-medium text-sm">
                 ← Back to Dashboard
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900 mt-2">Quantity-Based Fee Configuration</h1>
-              <p className="text-gray-600 mt-1">Configure assessment rules to use quantity-based pricing</p>
+              <h1 className="text-3xl font-bold text-gray-900 mt-2">Quantity / Percent Fee Configuration</h1>
+              <p className="text-gray-600 mt-1">Configure assessment rules to use quantity-based or percent-based pricing</p>
             </div>
 
             {/* Rules List */}
@@ -256,8 +287,13 @@ export default function QuantityFeesPage() {
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                   ✓ Configured
                                 </span>
+                                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                                  {config.calculation_mode === 'percent' ? 'Percent' : 'Quantity'}
+                                </span>
                                 <span className="ml-2 text-gray-600">
-                                  {config.quantity_label} ({config.min_quantity}-{config.max_quantity})
+                                  {config.calculation_mode === 'percent'
+                                    ? `${Number(config.percent_rate || 0).toFixed(2)}% of base fee`
+                                    : `${config.quantity_label} (${config.min_quantity}-${config.max_quantity})`}
                                 </span>
                               </div>
                             )}
@@ -291,14 +327,67 @@ export default function QuantityFeesPage() {
               <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                   <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6">
-                    <h2 className="text-2xl font-bold">Quantity Fee Configuration</h2>
+                    <h2 className="text-2xl font-bold">Fee Configuration</h2>
+                    <p className="text-sm text-indigo-100 mt-1">Choose quantity-based or percent-based calculation</p>
                   </div>
 
                   <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                    {/* Calculation Mode */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Calculation Mode *
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            calculation_mode: 'quantity',
+                          })}
+                          className={`px-4 py-3 rounded-lg border-2 text-left transition-colors ${
+                            !isPercent
+                              ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
+                              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="font-semibold text-sm">Quantity Based</div>
+                          <div className="text-xs mt-0.5 opacity-80">Base fee × quantity entered</div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            calculation_mode: 'percent',
+                            quantity_label: formData.quantity_label === 'Percent' ? 'Contract Value' : (formData.quantity_label || 'Contract Value'),
+                            max_quantity: formData.max_quantity === '999' ? '999999999' : formData.max_quantity,
+                          })}
+                          className={`px-4 py-3 rounded-lg border-2 text-left transition-colors ${
+                            isPercent
+                              ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
+                              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="font-semibold text-sm">Percent</div>
+                          <div className="text-xs mt-0.5 opacity-80">Assessor base amount × fixed %</div>
+                        </button>
+                      </div>
+                      {isPercent && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">
+                          Tip: Contractor&apos;s Permit under the Revenue Code is <strong>1/10 of 1%</strong> (= <strong>0.1%</strong>) of contract price.
+                          Enter <strong>0.1</strong> in Percent Rate — not 10.
+                        </p>
+                      )}
+                    </div>
+
                     {/* Selected Fee */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Base Fee * <span className="text-xs text-gray-500">(Will be multiplied by quantity)</span>
+                        Fee to Charge *{' '}
+                        <span className="text-xs text-gray-500">
+                          {isPercent
+                            ? '(Fee line item — amount is entered by assessor as base)'
+                            : '(Will be multiplied by quantity)'}
+                        </span>
                       </label>
                       <select
                         value={formData.selected_fee_id}
@@ -313,73 +402,136 @@ export default function QuantityFeesPage() {
                           </option>
                         ))}
                       </select>
-                      {selectedFeeInfo && (
-                        <p className="text-sm text-indigo-600 mt-1">
-                          Example: 5 × ₱{selectedFeeInfo.amount.toFixed(2)} = ₱{(5 * selectedFeeInfo.amount).toFixed(2)}
-                        </p>
-                      )}
                     </div>
 
-                    {/* Quantity Label */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Quantity Label * <span className="text-xs text-gray-500">e.g., Days, Units, Machine</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Days, Units"
-                        value={formData.quantity_label}
-                        onChange={(e) => setFormData({ ...formData, quantity_label: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        required
-                      />
-                    </div>
+                    {/* Percent Rate — only for percent mode */}
+                    {isPercent && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Percent Rate * <span className="text-xs text-gray-500">(Fixed rate applied to assessor-entered base amount)</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="e.g., 10"
+                              value={formData.percent_rate}
+                              onChange={(e) => setFormData({ ...formData, percent_rate: e.target.value })}
+                              className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              required
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">%</span>
+                          </div>
+                          {formData.percent_rate && !Number.isNaN(parseFloat(formData.percent_rate)) && (
+                            <p className="text-sm text-indigo-600 mt-1">
+                              Example: ₱4,800,000 × {parseFloat(formData.percent_rate).toFixed(2)}% = ₱
+                              {(4800000 * parseFloat(formData.percent_rate) / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          )}
+                        </div>
 
-                    {/* Description */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Description <span className="text-xs text-gray-500">(Optional - shown to assessor)</span>
-                      </label>
-                      <textarea
-                        placeholder="e.g., Enter the number of days the permit is needed for"
-                        value={formData.quantity_description}
-                        onChange={(e) => setFormData({ ...formData, quantity_description: e.target.value })}
-                        rows={2}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Base Amount Label <span className="text-xs text-gray-500">e.g., Contract Value, Project Cost</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Contract Value"
+                            value={formData.quantity_label === 'Percent' ? '' : formData.quantity_label}
+                            onChange={(e) => setFormData({ ...formData, quantity_label: e.target.value || 'Percent' })}
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
 
-                    {/* Min/Max Quantity */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Minimum Quantity</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={formData.min_quantity}
-                          onChange={(e) => setFormData({ ...formData, min_quantity: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Maximum Quantity</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={formData.max_quantity}
-                          onChange={(e) => setFormData({ ...formData, max_quantity: e.target.value })}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                    </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Description <span className="text-xs text-gray-500">(Optional - shown to assessor)</span>
+                          </label>
+                          <textarea
+                            placeholder="e.g., Enter the contract or project cost"
+                            value={formData.quantity_description}
+                            onChange={(e) => setFormData({ ...formData, quantity_description: e.target.value })}
+                            rows={2}
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Quantity fields — only for quantity mode */}
+                    {!isPercent && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Quantity Label * <span className="text-xs text-gray-500">e.g., Days, Units, Machine</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Days, Units"
+                            value={formData.quantity_label}
+                            onChange={(e) => setFormData({ ...formData, quantity_label: e.target.value })}
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            required
+                          />
+                          {selectedFeeInfo && (
+                            <p className="text-sm text-indigo-600 mt-1">
+                              Example: 5 × ₱{selectedFeeInfo.amount.toFixed(2)} = ₱{(5 * selectedFeeInfo.amount).toFixed(2)}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Description <span className="text-xs text-gray-500">(Optional - shown to assessor)</span>
+                          </label>
+                          <textarea
+                            placeholder="e.g., Enter the number of days the permit is needed for"
+                            value={formData.quantity_description}
+                            onChange={(e) => setFormData({ ...formData, quantity_description: e.target.value })}
+                            rows={2}
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Minimum Quantity</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={formData.min_quantity}
+                              onChange={(e) => setFormData({ ...formData, min_quantity: e.target.value })}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Maximum Quantity</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={formData.max_quantity}
+                              onChange={(e) => setFormData({ ...formData, max_quantity: e.target.value })}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     {/* Additional Charges */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-3">
-                        Additional Charges <span className="text-xs text-gray-500">(Fixed charges not multiplied by quantity)</span>
+                        Additional Charges{' '}
+                        <span className="text-xs text-gray-500">
+                          {isPercent
+                            ? '(Fixed charges added on top of the percent fee)'
+                            : '(Fixed charges not multiplied by quantity)'}
+                        </span>
                       </label>
                       <p className="text-xs text-gray-600 mb-3">
-                        Select which other fees should be added as fixed charges (not based on quantity):
+                        Select which other fees should be added as fixed charges:
                       </p>
                       {fees.length === 0 ? (
                         <p className="text-sm text-gray-500">No fees available</p>
@@ -419,9 +571,15 @@ export default function QuantityFeesPage() {
                                 <div className="flex-1">
                                   <p className="text-sm font-medium text-gray-900">
                                     {fee.fee_name}
-                                    {isSelected && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">(Base Fee)</span>}
+                                    {isSelected && (
+                                      <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                                        (Base Fee)
+                                      </span>
+                                    )}
                                   </p>
-                                  <p className="text-xs text-gray-600">₱{(typeof fee.amount === 'number' ? fee.amount : parseFloat(fee.amount || '0')).toFixed(2)}</p>
+                                  <p className="text-xs text-gray-600">
+                                    ₱{(typeof fee.amount === 'number' ? fee.amount : parseFloat(fee.amount || '0')).toFixed(2)}
+                                  </p>
                                 </div>
                               </div>
                             );
@@ -440,7 +598,7 @@ export default function QuantityFeesPage() {
                         className="w-4 h-4 text-indigo-600 rounded"
                       />
                       <label htmlFor="is_enabled" className="text-sm font-medium text-gray-700">
-                        Enable Quantity-Based Fees
+                        {isPercent ? 'Enable Percent-Based Fees' : 'Enable Quantity-Based Fees'}
                       </label>
                     </div>
 

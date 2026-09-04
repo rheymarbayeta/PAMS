@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, orientation=landscape">
     <title>Citation Ticket - Municipality of Dalaguete</title>
+    <script src="/js/qrcode.min.js"></script>
     <script src="frontend/public/js/modal-dialog.js"></script>
     <style>
         @page {
@@ -52,24 +53,46 @@
             position: relative;
         }
 
-        .header::before {
-            content: '';
-            background-image: url('https://via.placeholder.com/80x80?text=Municipality+Logo');
+        .header-logo {
+            width: 76px;
+            height: 76px;
+            background-image: url('frontend/public/dalaguete-logo.png');
             background-size: contain;
             background-repeat: no-repeat;
-            width: 80px;
-            height: 80px;
+            background-position: center;
+        }
+
+        .header-title-box {
+            text-align: center;
+            flex: 1;
+        }
+
+        .header-qr-container {
+            width: 82px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            padding: 3px;
+            border-radius: 6px;
+            border: 1.5px solid #8e44ad;
+            box-shadow: 0 2px 8px rgba(142, 68, 173, 0.15);
+        }
+
+        .header-qr-container canvas {
+            width: 74px !important;
+            height: 74px !important;
             display: block;
         }
 
-        .header::after {
-            content: '';
-            background-image: url('https://via.placeholder.com/80x80?text=Laban+Pilipinas');
-            background-size: contain;
-            background-repeat: no-repeat;
-            width: 80px;
-            height: 80px;
-            display: block;
+        .header-qr-container .qr-subtext {
+            font-size: 7.5px;
+            font-weight: 700;
+            color: #6c3fb8;
+            letter-spacing: 0.3px;
+            margin-top: 1px;
+            text-transform: uppercase;
         }
 
         .header h1 {
@@ -727,9 +750,16 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>� OFFICIAL CITATION TICKET</h1>
-            <p><strong>Municipality of Dalaguete</strong></p>
-            <p>Dalaguete, Cebu, Philippines</p>
+            <div class="header-logo"></div>
+            <div class="header-title-box">
+                <h1>OFFICIAL CITATION TICKET</h1>
+                <p><strong>Municipality of Dalaguete</strong></p>
+                <p>Dalaguete, Cebu, Philippines</p>
+            </div>
+            <div class="header-qr-container" title="Verification QR Code">
+                <canvas id="headerQRCode" width="74" height="74"></canvas>
+                <span class="qr-subtext">Scan to Verify</span>
+            </div>
         </div>
 
         <div id="successMessage" class="success-message">
@@ -1021,9 +1051,28 @@
             return prefix + '-' + random;
         }
 
+        // Update Header QR Code
+        function updateTicketQR(ticketNo) {
+            const canvas = document.getElementById('headerQRCode');
+            if (!canvas || typeof QRCode === 'undefined') return;
+            const currentTicket = ticketNo || document.getElementById('ticketNo').value || 'PAMS-TICKET';
+            QRCode.toCanvas(canvas, 'PAMS-CITATION:' + currentTicket, {
+                width: 74,
+                margin: 1,
+                color: {
+                    dark: '#6c3fb8',
+                    light: '#ffffff'
+                }
+            }, function (error) {
+                if (error) console.error('Error generating ticket QR:', error);
+            });
+        }
+
         // Initialize ticket number on page load
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('ticketNo').value = generateTicketNumber();
+            const ticketNo = generateTicketNumber();
+            document.getElementById('ticketNo').value = ticketNo;
+            updateTicketQR(ticketNo);
             
             // Set today's date as default
             const today = new Date().toISOString().split('T')[0];
@@ -1113,7 +1162,9 @@
         function newTicket() {
             modalConfirm('Generate a new ticket? Current data will be cleared.', 'Confirm', () => {
                 document.getElementById('citationForm').reset();
-                document.getElementById('ticketNo').value = generateTicketNumber();
+                const ticketNo = generateTicketNumber();
+                document.getElementById('ticketNo').value = ticketNo;
+                updateTicketQR(ticketNo);
                 const today = new Date().toISOString().split('T')[0];
                 document.getElementById('dateIssued').value = today;
             });
