@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
@@ -30,6 +31,11 @@ export default function PriceMonitoringPage() {
   const isAdmin = hasRole(['SuperAdmin', 'Admin']);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [showReportModal, setShowReportModal] = useState(false);
+
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab') as Tab | null;
+    if (tab && ['overview', 'commodities', 'markets', 'records', 'alerts', 'analysis'].includes(tab)) setActiveTab(tab);
+  }, []);
 
   const tabs: { key: Tab; label: string; icon: JSX.Element }[] = [
     { key: 'overview', label: 'Overview', icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> },
@@ -603,6 +609,11 @@ function RecordsTab({ isAdmin }: { isAdmin: boolean }) {
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
   const [form, setForm] = useState({ commodity_id: '', market_id: '', price: '', recorded_date: new Date().toISOString().split('T')[0], notes: '', source: 'field_survey' });
+  const emptyBulkForm = () => ({ market_id: '', recorded_date: new Date().toISOString().split('T')[0], source: 'field_survey', notes: '', category: '' });
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkForm, setBulkForm] = useState(emptyBulkForm);
+  const [bulkPrices, setBulkPrices] = useState<Record<string, string>>({});
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -639,6 +650,44 @@ function RecordsTab({ isAdmin }: { isAdmin: boolean }) {
     }
   };
 
+  const bulkCategories = Array.from(new Set(commodities.map(c => c.category_name))).sort();
+  const bulkCommodities = commodities.filter(c => !bulkForm.category || c.category_name === bulkForm.category);
+  const bulkFilledCount = Object.values(bulkPrices).filter(v => v.trim() !== '').length;
+
+  const closeBulk = () => {
+    setShowBulkModal(false);
+    setBulkForm(emptyBulkForm());
+    setBulkPrices({});
+  };
+
+  const submitBulk = async () => {
+    if (!bulkForm.market_id || !bulkForm.recorded_date)
+      return showAlert('Please select an establishment and date.', 'Validation Error');
+    const items = Object.entries(bulkPrices)
+      .filter(([, price]) => price.trim() !== '')
+      .map(([commodity_id, price]) => ({ commodity_id, price }));
+    if (items.length === 0)
+      return showAlert('Enter a price for at least one commodity.', 'Validation Error');
+    if (items.some(i => isNaN(parseFloat(i.price)) || parseFloat(i.price) < 0))
+      return showAlert('Prices must be non-negative numbers.', 'Validation Error');
+    setBulkSaving(true);
+    try {
+      const res = await api.post('/api/price-monitoring/records/bulk', {
+        market_id: bulkForm.market_id,
+        recorded_date: bulkForm.recorded_date,
+        source: bulkForm.source,
+        notes: bulkForm.notes,
+        items,
+      });
+      closeBulk();
+      load();
+      showAlert(`${res.data.created} price record(s) saved.`, 'Success');
+    } catch (e: any) {
+      showAlert(e.response?.data?.error || 'Failed to save records', 'Error');
+    }
+    setBulkSaving(false);
+  };
+
   const verify = async (id: string) => {
     try {
       await api.put(`/api/price-monitoring/records/${id}/verify`);
@@ -657,7 +706,7 @@ function RecordsTab({ isAdmin }: { isAdmin: boolean }) {
     <div className="space-y-4">
       {/* Filters */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
           <select value={filterCommodity} onChange={e => setFilterCommodity(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             <option value="">All Commodities</option>
             {commodities.map(c => <option key={c.commodity_id} value={c.commodity_id}>{c.commodity_name}</option>)}
@@ -671,6 +720,10 @@ function RecordsTab({ isAdmin }: { isAdmin: boolean }) {
           <button onClick={() => setShowModal(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             Add Record
+          </button>
+          <button onClick={() => setShowBulkModal(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-blue-600 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+            Bulk Add
           </button>
         </div>
       </div>
@@ -697,7 +750,9 @@ function RecordsTab({ isAdmin }: { isAdmin: boolean }) {
                       <p className="font-medium text-slate-800">{r.commodity_name}</p>
                       <p className="text-xs text-slate-400">{r.category_name} · per {r.unit}</p>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{r.market_name}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      <Link href={`/price-monitoring/establishments/${r.market_id}`} className="hover:text-blue-600 hover:underline">{r.market_name}</Link>
+                    </td>
                     <td className="px-4 py-3 font-semibold text-slate-800">{formatCurrency(r.price)}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(r.recorded_date).toLocaleDateString('en-PH')}</td>
                     <td className="px-4 py-3 text-slate-500 capitalize">{r.source?.replace(/_/g, ' ')}</td>
@@ -760,6 +815,80 @@ function RecordsTab({ isAdmin }: { isAdmin: boolean }) {
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
               <button onClick={submit} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Save Record</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Bulk Add Modal */}
+      {showBulkModal && (
+        <Modal title="Bulk Add Price Records" onClose={closeBulk}>
+          <div className="space-y-4">
+            <FormField label="Establishment *">
+              <select value={bulkForm.market_id} onChange={e => setBulkForm({ ...bulkForm, market_id: e.target.value })} className={inputClass}>
+                <option value="">Select establishment...</option>
+                {markets.filter(m => m.is_active).map(m => <option key={m.market_id} value={m.market_id}>{m.market_name}</option>)}
+              </select>
+            </FormField>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="Date *">
+                <input type="date" value={bulkForm.recorded_date} onChange={e => setBulkForm({ ...bulkForm, recorded_date: e.target.value })} className={inputClass} />
+              </FormField>
+              <FormField label="Source">
+                <select value={bulkForm.source} onChange={e => setBulkForm({ ...bulkForm, source: e.target.value })} className={inputClass}>
+                  {SOURCE_TYPES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+                </select>
+              </FormField>
+            </div>
+            <FormField label="Category">
+              <select value={bulkForm.category} onChange={e => setBulkForm({ ...bulkForm, category: e.target.value })} className={inputClass}>
+                <option value="">All categories</option>
+                {bulkCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </FormField>
+            <div className="border border-slate-200 rounded-lg max-h-72 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Commodity</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase w-36">Price (₱)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {bulkCommodities.length === 0 && (
+                    <tr><td colSpan={2} className="px-3 py-6 text-center text-slate-400">No commodities in this category.</td></tr>
+                  )}
+                  {bulkCommodities.map(c => (
+                    <tr key={c.commodity_id}>
+                      <td className="px-3 py-2">
+                        <p className="font-medium text-slate-800">{c.commodity_name}</p>
+                        <p className="text-xs text-slate-400">{c.category_name} · per {c.unit}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={bulkPrices[c.commodity_id] ?? ''}
+                          onChange={e => setBulkPrices({ ...bulkPrices, [c.commodity_id]: e.target.value })}
+                          placeholder="—"
+                          className={inputClass}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-500">Leave a price blank to skip that commodity. {bulkFilledCount} commodity(ies) will be saved.</p>
+            <FormField label="Notes">
+              <textarea value={bulkForm.notes} onChange={e => setBulkForm({ ...bulkForm, notes: e.target.value })} rows={2} placeholder="Optional notes applied to all records..." className={inputClass} />
+            </FormField>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={closeBulk} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
+              <button onClick={submitBulk} disabled={bulkSaving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {bulkSaving ? 'Saving...' : `Save ${bulkFilledCount || ''} Record${bulkFilledCount === 1 ? '' : 's'}`}
+              </button>
             </div>
           </div>
         </Modal>
@@ -1063,7 +1192,7 @@ function MarketsTab({ isAdmin }: { isAdmin: boolean }) {
           <div key={m.market_id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <div className="flex items-start justify-between mb-2">
               <div>
-                <h3 className="font-semibold text-slate-800">{m.market_name}</h3>
+                <Link href={`/price-monitoring/establishments/${m.market_id}`} className="font-semibold text-slate-800 hover:text-blue-600">{m.market_name}</Link>
                 {m.barangay && <p className="text-sm text-slate-400 mt-0.5">{m.barangay}</p>}
               </div>
               <span className={`text-xs font-medium px-2 py-1 rounded-full ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
@@ -1074,12 +1203,15 @@ function MarketsTab({ isAdmin }: { isAdmin: boolean }) {
               {formatMarketType(m.market_type)}
             </span>
             {m.address && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{m.address}</p>}
-            {isAdmin && (
-              <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
-                <button onClick={() => openEdit(m)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Edit</button>
-                <button onClick={() => remove(m.market_id, m.market_name)} className="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>
-              </div>
-            )}
+            <div className="flex gap-3 mt-4 pt-3 border-t border-slate-100">
+              <Link href={`/price-monitoring/establishments/${m.market_id}`} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">View Details</Link>
+              {isAdmin && (
+                <>
+                  <button onClick={() => openEdit(m)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                  <button onClick={() => remove(m.market_id, m.market_name)} className="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>

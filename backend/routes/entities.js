@@ -193,6 +193,20 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Appli
       return res.status(400).json({ error: 'Entity name is required' });
     }
 
+    // eTracs Entity ID must be unique — return a clear conflict instead of a 500
+    if (etracs_objid) {
+      const [existing] = await pool.execute(
+        'SELECT entity_id, entity_name FROM entities WHERE etracs_objid = ? LIMIT 1',
+        [etracs_objid]
+      );
+      if (existing.length > 0) {
+        return res.status(409).json({
+          error: `This eTracs entity is already linked to "${existing[0].entity_name}". Open the existing record instead of creating a duplicate.`,
+          existing_entity_id: existing[0].entity_id
+        });
+      }
+    }
+
     const entity_id = generateId(ID_PREFIXES.ENTITY);
 
     const [result] = await pool.execute(
@@ -244,6 +258,11 @@ router.post('/', authorize('SuperAdmin', 'Admin', 'Assessor', 'Approver', 'Appli
     });
   } catch (error) {
     console.error('Create entity error:', error);
+    if (error.code === 'ER_DUP_ENTRY' && String(error.sqlMessage || '').includes('etracs_objid')) {
+      return res.status(409).json({
+        error: 'This eTracs entity is already linked to an existing PAMS entity. Open the existing record instead of creating a duplicate.'
+      });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

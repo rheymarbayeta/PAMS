@@ -16,7 +16,10 @@ const PM = {
   RECORD: 'pmrec',
   ALERT: 'pmalert',
   TRIGGER: 'pmtrig',
+  INSPECTION: 'pminsp',
 };
+
+const STATION_PROFILE_FIELDS = ['dealer_operator', 'contact_number', 'supplier', 'oil_company', 'gps_lat', 'gps_lng'];
 
 function pmId(prefix) {
   const { randomBytes } = require('crypto');
@@ -361,6 +364,61 @@ router.get('/markets', async (req, res) => {
   }
 });
 
+router.get('/markets/:id', async (req, res) => {
+  try {
+    const marketId = req.params.id;
+    const [[market]] = await pool.execute('SELECT * FROM pm_markets WHERE market_id=?', [marketId]);
+    if (!market) return res.status(404).json({ error: 'Establishment not found' });
+
+    const [[stats]] = await pool.execute(
+      `SELECT COUNT(*) AS total_records,
+         COUNT(DISTINCT commodity_id) AS commodities_monitored,
+         SUM(is_verified = 0) AS pending_records,
+         MIN(recorded_date) AS first_recorded,
+         MAX(recorded_date) AS last_recorded
+       FROM pm_price_records WHERE market_id=?`,
+      [marketId]
+    );
+
+    const [latestPrices] = await pool.execute(
+      `SELECT com.commodity_id, com.commodity_name, com.unit, cat.category_name,
+         r1.price AS current_price, r1.recorded_date, r1.is_verified,
+         r2.price AS prev_price, r2.recorded_date AS prev_date,
+         (SELECT MIN(price) FROM pm_price_records WHERE market_id = ? AND commodity_id = com.commodity_id) AS min_price,
+         (SELECT MAX(price) FROM pm_price_records WHERE market_id = ? AND commodity_id = com.commodity_id) AS max_price
+       FROM pm_commodities com
+       JOIN pm_commodity_categories cat ON cat.category_id = com.category_id
+       JOIN pm_price_records r1 ON r1.record_id = (
+         SELECT record_id FROM pm_price_records
+         WHERE market_id = ? AND commodity_id = com.commodity_id
+         ORDER BY recorded_date DESC, created_at DESC LIMIT 1
+       )
+       LEFT JOIN pm_price_records r2 ON r2.record_id = (
+         SELECT record_id FROM pm_price_records
+         WHERE market_id = ? AND commodity_id = com.commodity_id AND recorded_date < r1.recorded_date
+         ORDER BY recorded_date DESC, created_at DESC LIMIT 1
+       )
+       ORDER BY cat.category_name, com.commodity_name`,
+      [marketId, marketId, marketId, marketId]
+    );
+
+    const [alerts] = await pool.execute(
+      `SELECT a.alert_id, a.alert_name, a.alert_type, a.threshold_value, a.is_active, a.last_triggered_at,
+         com.commodity_name, com.unit
+       FROM pm_price_alerts a
+       JOIN pm_commodities com ON com.commodity_id = a.commodity_id
+       WHERE a.market_id = ?
+       ORDER BY a.created_at DESC`,
+      [marketId]
+    );
+
+    res.json({ market, stats, latest_prices: latestPrices, alerts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/markets', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   try {
     const { market_name, barangay, address, market_type } = req.body;
@@ -381,10 +439,16 @@ router.post('/markets', authorize('SuperAdmin', 'Admin'), async (req, res) => {
 router.put('/markets/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
   try {
     const { market_name, barangay, address, market_type, is_active } = req.body;
-    const [r] = await pool.execute(
-      'UPDATE pm_markets SET market_name=?, barangay=?, address=?, market_type=?, is_active=? WHERE market_id=?',
-      [market_name, barangay || null, address || null, market_type || 'public_market', is_active !== undefined ? is_active : 1, req.params.id]
-    );
+    const sets = ['market_name=?', 'barangay=?', 'address=?', 'market_type=?', 'is_active=?'];
+    const params = [market_name, barangay || null, address || null, market_type || 'public_market', is_active !== undefined ? is_active : 1];
+    for (const field of STATION_PROFILE_FIELDS) {
+      if (req.body[field] !== undefined) {
+        sets.push(`${field}=?`);
+        params.push(req.body[field] || null);
+      }
+    }
+    params.push(req.params.id);
+    const [r] = await pool.execute(`UPDATE pm_markets SET ${sets.join(', ')} WHERE market_id=?`, params);
     if (r.affectedRows === 0) return res.status(404).json({ error: 'Market not found' });
     await logAction(req.user.user_id, 'UPDATE_PM_MARKET', `Updated market: ${market_name}`);
     res.json({ message: 'Updated successfully' });
@@ -399,6 +463,122 @@ router.delete('/markets/:id', authorize('SuperAdmin', 'Admin'), async (req, res)
     const [r] = await pool.execute('DELETE FROM pm_markets WHERE market_id=?', [req.params.id]);
     if (r.affectedRows === 0) return res.status(404).json({ error: 'Market not found' });
     await logAction(req.user.user_id, 'DELETE_PM_MARKET', `Deleted market ${req.params.id}`);
+    res.json({ message: 'Deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOE FUEL INSPECTION REPORTS
+// ─────────────────────────────────────────────────────────────────────────────
+const INSPECTION_FIELDS = [
+  'inspection_date', 'time_in', 'time_out', 'special_assignment_no', 'business_name',
+  'dealer_operator', 'business_address', 'contact_number', 'supplier', 'oil_company',
+  'gps_lat', 'gps_lng', 'remarks', 'inspected_by', 'outlet_official',
+];
+
+function parseInspection(row) {
+  let products = [];
+  try { products = row.products ? JSON.parse(row.products) : []; } catch { products = []; }
+  return { ...row, products };
+}
+
+async function saveStationProfile(marketId, body) {
+  const sets = [];
+  const params = [];
+  for (const field of STATION_PROFILE_FIELDS) {
+    if (body[field] !== undefined && body[field] !== '') {
+      sets.push(`${field}=?`);
+      params.push(body[field]);
+    }
+  }
+  if (!sets.length) return;
+  params.push(marketId);
+  await pool.execute(`UPDATE pm_markets SET ${sets.join(', ')} WHERE market_id=?`, params);
+}
+
+router.get('/markets/:id/inspections', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT i.inspection_id, i.inspection_date, i.time_in, i.time_out, i.special_assignment_no,
+         i.inspected_by, i.remarks, i.created_at, u.full_name AS created_by_name
+       FROM pm_fuel_inspections i
+       LEFT JOIN users u ON u.user_id = i.created_by
+       WHERE i.market_id=? ORDER BY i.inspection_date DESC, i.created_at DESC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/markets/:id/inspections', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
+  try {
+    const body = req.body;
+    if (!body.inspection_date || !body.business_name)
+      return res.status(400).json({ error: 'Business name and date of inspection are required' });
+    const [[market]] = await pool.execute('SELECT market_id FROM pm_markets WHERE market_id=?', [req.params.id]);
+    if (!market) return res.status(404).json({ error: 'Establishment not found' });
+
+    const id = pmId(PM.INSPECTION);
+    await pool.execute(
+      `INSERT INTO pm_fuel_inspections (inspection_id, market_id, ${INSPECTION_FIELDS.join(', ')}, products, created_by)
+       VALUES (?, ?, ${INSPECTION_FIELDS.map(() => '?').join(', ')}, ?, ?)`,
+      [id, req.params.id, ...INSPECTION_FIELDS.map(f => body[f] || null),
+       JSON.stringify(Array.isArray(body.products) ? body.products : []), req.user.user_id]
+    );
+    await saveStationProfile(req.params.id, body);
+    await logAction(req.user.user_id, 'CREATE_PM_FUEL_INSPECTION', `Created DOE fuel inspection for ${body.business_name} on ${body.inspection_date}`);
+    res.status(201).json({ inspection_id: id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/inspections/:id', async (req, res) => {
+  try {
+    const [[row]] = await pool.execute('SELECT * FROM pm_fuel_inspections WHERE inspection_id=?', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Inspection not found' });
+    res.json(parseInspection(row));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/inspections/:id', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
+  try {
+    const body = req.body;
+    if (!body.inspection_date || !body.business_name)
+      return res.status(400).json({ error: 'Business name and date of inspection are required' });
+    const [[row]] = await pool.execute('SELECT market_id FROM pm_fuel_inspections WHERE inspection_id=?', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Inspection not found' });
+
+    await pool.execute(
+      `UPDATE pm_fuel_inspections SET ${INSPECTION_FIELDS.map(f => `${f}=?`).join(', ')}, products=?
+       WHERE inspection_id=?`,
+      [...INSPECTION_FIELDS.map(f => body[f] || null),
+       JSON.stringify(Array.isArray(body.products) ? body.products : []), req.params.id]
+    );
+    await saveStationProfile(row.market_id, body);
+    await logAction(req.user.user_id, 'UPDATE_PM_FUEL_INSPECTION', `Updated DOE fuel inspection ${req.params.id}`);
+    res.json({ message: 'Updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/inspections/:id', authorize('SuperAdmin', 'Admin'), async (req, res) => {
+  try {
+    const [r] = await pool.execute('DELETE FROM pm_fuel_inspections WHERE inspection_id=?', [req.params.id]);
+    if (r.affectedRows === 0) return res.status(404).json({ error: 'Inspection not found' });
+    await logAction(req.user.user_id, 'DELETE_PM_FUEL_INSPECTION', `Deleted DOE fuel inspection ${req.params.id}`);
     res.json({ message: 'Deleted successfully' });
   } catch (err) {
     console.error(err);
@@ -443,6 +623,56 @@ router.post('/records', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+router.post('/records/bulk', authorize('SuperAdmin', 'Admin', 'Assessor'), async (req, res) => {
+  const { market_id, recorded_date, source, notes, items } = req.body;
+  if (!market_id || !recorded_date)
+    return res.status(400).json({ error: 'market_id and recorded_date are required' });
+  if (!Array.isArray(items) || items.length === 0)
+    return res.status(400).json({ error: 'Enter a price for at least one commodity' });
+
+  const seen = new Set();
+  for (const item of items) {
+    const price = parseFloat(item?.price);
+    if (!item?.commodity_id || isNaN(price) || price < 0)
+      return res.status(400).json({ error: 'Each item needs a commodity and a non-negative price' });
+    if (seen.has(item.commodity_id))
+      return res.status(400).json({ error: 'A commodity can only appear once per bulk entry' });
+    seen.add(item.commodity_id);
+  }
+
+  const connection = await pool.getConnection();
+  const created = [];
+  try {
+    await connection.beginTransaction();
+    for (const item of items) {
+      const id = pmId(PM.RECORD);
+      const price = parseFloat(item.price);
+      await connection.execute(
+        `INSERT INTO pm_price_records (record_id, commodity_id, market_id, price, recorded_date, recorder_id, notes, source)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [id, item.commodity_id, market_id, price, recorded_date, req.user.user_id,
+         item.notes || notes || null, source || 'field_survey']
+      );
+      created.push({ record_id: id, commodity_id: item.commodity_id, price });
+    }
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    connection.release();
+  }
+
+  for (const rec of created) {
+    await checkAlertsForRecord({ ...rec, market_id, recorded_date });
+  }
+
+  await logAction(req.user.user_id, 'CREATE_PM_PRICE_RECORD',
+    `Bulk recorded ${created.length} price(s) for market ${market_id} on ${recorded_date}`);
+  res.status(201).json({ created: created.length, records: created });
 });
 
 router.put('/records/:id/verify', authorize('SuperAdmin', 'Admin'), async (req, res) => {
