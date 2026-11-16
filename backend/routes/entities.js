@@ -68,9 +68,15 @@ router.get('/', async (req, res) => {
     let where = '';
     const params = [];
     if (search) {
-      where = ' WHERE entity_name LIKE ? OR contact_person LIKE ? OR phone LIKE ?';
+      where = ` WHERE entity_name LIKE ? OR contact_person LIKE ? OR phone LIKE ?
+        OR email LIKE ? OR firstname LIKE ? OR middlename LIKE ? OR lastname LIKE ?
+        OR etracs_objid LIKE ? OR etracs_entityno LIKE ?`;
       const searchPattern = `%${search}%`;
-      params.push(searchPattern, searchPattern, searchPattern);
+      params.push(
+        searchPattern, searchPattern, searchPattern,
+        searchPattern, searchPattern, searchPattern, searchPattern,
+        searchPattern, searchPattern
+      );
     }
 
     const [countRows] = await pool.execute(

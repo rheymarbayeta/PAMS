@@ -312,6 +312,13 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
   const paymentDetailHref = (payment: PaymentRecord) =>
     `/admin/rights-and-rentals/lease-contracts/${selectedContractId}/payments/${payment.payment_type}/${payment.id}`;
 
+  const openPaymentHistoryPrint = (type: 'rights' | 'rental') => {
+    if (!selectedContractId) return;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const url = `/lease-payment-history.html?id=${selectedContractId}&type=${type}&token=${encodeURIComponent(token)}&_v=${Date.now()}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const formatPeriod = (month?: number | null, year?: number | null) => {
     if (!month || !year) return '—';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -674,151 +681,169 @@ const LesseePaymentDetails: React.FC<LesseePaymentDetailsProps> = ({
                   </div>
                 </div>
 
-                {payments.length === 0 ? (
-                  <div className="text-center py-8 bg-gray-50 rounded-lg text-gray-500">
-                    No payments recorded yet
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Rights Payments */}
-                    <div>
-                      <h4 className="text-sm font-semibold text-green-700 uppercase tracking-wide mb-2 flex items-center gap-2">
+                <div className="space-y-6">
+                  {/* Rights Payments */}
+                  <div>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-green-700 uppercase tracking-wide flex items-center gap-2">
                         <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>
                         Rights Payments
                         <span className="text-gray-400 font-normal normal-case tracking-normal">
                           ({rightsPayments.length} record{rightsPayments.length !== 1 ? 's' : ''})
                         </span>
                       </h4>
-                      {rightsPayments.length === 0 ? (
-                        <div className="text-center py-4 bg-green-50 rounded-lg text-gray-500 text-sm">
-                          No rights payments recorded yet
-                        </div>
-                      ) : (
-                        <>
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse min-w-[520px]">
-                              <thead>
-                                <tr className="bg-green-50 border border-green-200">
-                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
-                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
-                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
-                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Balance</th>
-                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
-                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {paginatedRights.map((payment) => (
-                                  <tr key={`rights-${payment.id}`} className="border border-gray-200 hover:bg-green-50/50">
-                                    <td className="px-3 py-2 text-sm text-gray-700">
-                                      {new Date(payment.payment_date).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-3 py-2 text-sm text-gray-600">
-                                      {formatPeriod(payment.period_month, payment.period_year)}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
-                                      ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-sm text-gray-700">
-                                      ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="px-3 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
-                                    <td className="px-3 py-2 text-right text-sm">
-                                      <Link
-                                        href={paymentDetailHref(payment)}
-                                        className="text-indigo-600 hover:text-indigo-800 font-medium"
-                                      >
-                                        View
-                                      </Link>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {rightsPayments.length > PAGE_SIZE && (
-                            <div className="mt-3">
-                              <Pagination
-                                currentPage={Math.min(rightsPage, rightsTotalPages)}
-                                totalPages={rightsTotalPages}
-                                onPageChange={setRightsPage}
-                              />
-                            </div>
-                          )}
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => openPaymentHistoryPrint('rights')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-green-300 text-green-700 rounded-lg bg-white hover:bg-green-50 transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Print Preview
+                      </button>
                     </div>
+                    {rightsPayments.length === 0 ? (
+                      <div className="text-center py-4 bg-green-50 rounded-lg text-gray-500 text-sm">
+                        No rights payments recorded yet
+                      </div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse min-w-[520px]">
+                            <thead>
+                              <tr className="bg-green-50 border border-green-200">
+                                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
+                                <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
+                                <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Balance</th>
+                                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paginatedRights.map((payment) => (
+                                <tr key={`rights-${payment.id}`} className="border border-gray-200 hover:bg-green-50/50">
+                                  <td className="px-3 py-2 text-sm text-gray-700">
+                                    {new Date(payment.payment_date).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">
+                                    {formatPeriod(payment.period_month, payment.period_year)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
+                                    ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-sm text-gray-700">
+                                    ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                  <td className="px-3 py-2 text-right text-sm">
+                                    <Link
+                                      href={paymentDetailHref(payment)}
+                                      className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                    >
+                                      View
+                                    </Link>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {rightsPayments.length > PAGE_SIZE && (
+                          <div className="mt-3">
+                            <Pagination
+                              currentPage={Math.min(rightsPage, rightsTotalPages)}
+                              totalPages={rightsTotalPages}
+                              onPageChange={setRightsPage}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
 
-                    {/* Rental Payments */}
-                    <div>
-                      <h4 className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-2 flex items-center gap-2">
+                  {/* Rental Payments */}
+                  <div>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-blue-700 uppercase tracking-wide flex items-center gap-2">
                         <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span>
                         Rental Payments
                         <span className="text-gray-400 font-normal normal-case tracking-normal">
                           ({rentalPayments.length} record{rentalPayments.length !== 1 ? 's' : ''})
                         </span>
                       </h4>
-                      {rentalPayments.length === 0 ? (
-                        <div className="text-center py-4 bg-blue-50 rounded-lg text-gray-500 text-sm">
-                          No rental payments recorded yet
-                        </div>
-                      ) : (
-                        <>
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse min-w-[520px]">
-                              <thead>
-                                <tr className="bg-blue-50 border border-blue-200">
-                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
-                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
-                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
-                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Total Collected</th>
-                                  <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
-                                  <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {paginatedRentals.map((payment) => (
-                                  <tr key={`rental-${payment.id}`} className="border border-gray-200 hover:bg-blue-50/50">
-                                    <td className="px-3 py-2 text-sm text-gray-700">
-                                      {new Date(payment.payment_date).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-3 py-2 text-sm text-gray-600">
-                                      {formatPeriod(payment.period_month, payment.period_year)}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
-                                      ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-sm text-gray-700">
-                                      ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="px-3 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
-                                    <td className="px-3 py-2 text-right text-sm">
-                                      <Link
-                                        href={paymentDetailHref(payment)}
-                                        className="text-indigo-600 hover:text-indigo-800 font-medium"
-                                      >
-                                        View
-                                      </Link>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {rentalPayments.length > PAGE_SIZE && (
-                            <div className="mt-3">
-                              <Pagination
-                                currentPage={Math.min(rentalPage, rentalTotalPages)}
-                                totalPages={rentalTotalPages}
-                                onPageChange={setRentalPage}
-                              />
-                            </div>
-                          )}
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => openPaymentHistoryPrint('rental')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-blue-300 text-blue-700 rounded-lg bg-white hover:bg-blue-50 transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Print Preview
+                      </button>
                     </div>
+                    {rentalPayments.length === 0 ? (
+                      <div className="text-center py-4 bg-blue-50 rounded-lg text-gray-500 text-sm">
+                        No rental payments recorded yet
+                      </div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse min-w-[520px]">
+                            <thead>
+                              <tr className="bg-blue-50 border border-blue-200">
+                                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">Period</th>
+                                <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Amount Paid</th>
+                                <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Total Collected</th>
+                                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">OR Number</th>
+                                <th className="px-3 py-2 text-right text-sm font-semibold text-gray-700">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paginatedRentals.map((payment) => (
+                                <tr key={`rental-${payment.id}`} className="border border-gray-200 hover:bg-blue-50/50">
+                                  <td className="px-3 py-2 text-sm text-gray-700">
+                                    {new Date(payment.payment_date).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">
+                                    {formatPeriod(payment.period_month, payment.period_year)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
+                                    ₱ {parseFloat(payment.amount_paid).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-sm text-gray-700">
+                                    ₱ {parseFloat(payment.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">{payment.or_number || '—'}</td>
+                                  <td className="px-3 py-2 text-right text-sm">
+                                    <Link
+                                      href={paymentDetailHref(payment)}
+                                      className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                    >
+                                      View
+                                    </Link>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {rentalPayments.length > PAGE_SIZE && (
+                          <div className="mt-3">
+                            <Pagination
+                              currentPage={Math.min(rentalPage, rentalTotalPages)}
+                              totalPages={rentalTotalPages}
+                              onPageChange={setRentalPage}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </>
           )}

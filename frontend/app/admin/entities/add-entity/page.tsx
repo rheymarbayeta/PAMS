@@ -7,7 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { showAlert } from '@/utils/modal';
+import { showAlert, showConfirm } from '@/utils/modal';
 
 interface Entity {
   entity_id: string;
@@ -256,7 +256,18 @@ export default function AddEntityPage() {
 
       router.push('/admin/entities');
     } catch (error: any) {
-      showAlert(error.response?.data?.error || 'Error saving entity', 'Error');
+      const existingId = error.response?.data?.existing_entity_id;
+      if (error.response?.status === 409 && existingId) {
+        showConfirm(
+          `${error.response.data.error}\n\nOpen the existing record now?`,
+          'Entity Already Exists',
+          () => router.push(`/admin/entities/${existingId}`),
+          undefined,
+          { okText: 'Open Existing' }
+        );
+      } else {
+        showAlert(error.response?.data?.error || 'Error saving entity', 'Error');
+      }
     } finally {
       setSubmitting(false);
     }

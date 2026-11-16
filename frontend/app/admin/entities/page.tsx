@@ -26,9 +26,11 @@ export default function EntitiesPage() {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [recordsPerPage, setRecordsPerPage] = useState<number>(10);
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'table'>('grid');
+  const [totalCount, setTotalCount] = useState<number>(0);
 
   useEffect(() => {
     const saved = localStorage.getItem('entitiesViewMode') as 'list' | 'grid' | 'table' | null;
@@ -36,19 +38,40 @@ export default function EntitiesPage() {
   }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
   }, [searchTerm]);
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, recordsPerPage]);
+
+  useEffect(() => {
     fetchEntities();
-  }, []);
+  }, [debouncedSearch, currentPage, recordsPerPage]);
 
   const fetchEntities = async () => {
+    setLoading(true);
     try {
-      const response = await api.get('/api/entities');
-      setEntities(response.data);
+      const response = await api.get('/api/entities', {
+        params: {
+          search: debouncedSearch || undefined,
+          page: currentPage,
+          limit: recordsPerPage,
+        },
+      });
+      const payload = response.data;
+      const list = Array.isArray(payload) ? payload : (payload?.data || []);
+      setEntities(list);
+      setTotalCount(
+        Array.isArray(payload)
+          ? list.length
+          : (payload?.pagination?.total ?? list.length)
+      );
     } catch (error) {
       console.error('Error fetching entities:', error);
+      setEntities([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -76,28 +99,12 @@ export default function EntitiesPage() {
   const userRoles = user?.roles || [user?.role_name];
   const canEdit = userRoles.some(role => role && role !== 'Viewer');
 
-  // Filter entities by search term
-  const filteredEntities = entities.filter(e => 
-    e.entity_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (e.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-    (e.email?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-    (e.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-    (e.firstname?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-    (e.lastname?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
-  );
+  // Server already filters + paginates; keep local aliases for existing render code
+  const filteredEntities = entities;
+  const paginatedEntities = entities;
+  const totalPages = Math.max(1, Math.ceil(totalCount / recordsPerPage) || 1);
 
-  // Pagination logic
-  const totalPages = Math.ceil(filteredEntities.length / recordsPerPage);
-  const startIndex = (currentPage - 1) * recordsPerPage;
-  const endIndex = startIndex + recordsPerPage;
-  const paginatedEntities = filteredEntities.slice(startIndex, endIndex);
-
-  // Ensure current page doesn't exceed total pages
-  if (currentPage > totalPages && totalPages > 0) {
-    setCurrentPage(1);
-  }
-
-  if (loading) {
+  if (loading && entities.length === 0 && !debouncedSearch) {
     return (
       <ProtectedRoute>
         <Layout>
@@ -131,7 +138,7 @@ export default function EntitiesPage() {
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
                   Entities
                 </h1>
-                <p className="text-xs sm:text-sm text-gray-500">{filteredEntities.length} {filteredEntities.length === 1 ? 'result' : 'results'}</p>
+                <p className="text-xs sm:text-sm text-gray-500">{totalCount} {totalCount === 1 ? 'result' : 'results'}{debouncedSearch ? ` for “${debouncedSearch}”` : ''}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -187,12 +194,12 @@ export default function EntitiesPage() {
           </div>
 
           {/* Pagination and records info - BEFORE entities list */}
-          {filteredEntities.length > 0 && (
+          {totalCount > 0 && (
             <div className="flex flex-col gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
               {/* Records per page selector */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="text-sm text-gray-600">
-                  Showing <span className="font-semibold">{Math.min(recordsPerPage, filteredEntities.length)}</span> records per page out of <span className="font-semibold">{filteredEntities.length}</span> total
+                  Showing <span className="font-semibold">{entities.length}</span> on this page out of <span className="font-semibold">{totalCount}</span> total
                 </div>
                 <div className="flex items-center gap-3">
                   <label htmlFor="records-per-page-selector" className="text-sm font-medium text-gray-700">
