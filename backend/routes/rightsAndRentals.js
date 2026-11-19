@@ -8,6 +8,7 @@ const {
   getRentalTotalCollected,
   getRentalRunningTotalStart,
   normalizeLegacyAccountInput,
+  isLegacyAccount,
 } = require('../utils/leaseContractBalances');
 const {
   normalizeScheduleRows,
@@ -1915,6 +1916,30 @@ function isBillableRentalMonth(contractEffectiveDate, month, year) {
   return countBillableRentalMonthsThrough(contractEffectiveDate, month, year) > 0;
 }
 
+/** Rights installments start the month AFTER the contract effective date. */
+function getRightsStartMonth(contractEffectiveDate) {
+  const effective = new Date(contractEffectiveDate);
+  let month = effective.getMonth() + 2; // next month
+  let year = effective.getFullYear();
+  if (month > 12) {
+    month = 1;
+    year += 1;
+  }
+  return { month, year };
+}
+
+function countBillableRightsMonthsThrough(contractEffectiveDate, throughMonth, throughYear) {
+  const start = getRightsStartMonth(contractEffectiveDate);
+  if (throughYear < start.year || (throughYear === start.year && throughMonth < start.month)) {
+    return 0;
+  }
+  return (throughYear - start.year) * 12 + (throughMonth - start.month) + 1;
+}
+
+function isBillableRightsMonth(contractEffectiveDate, month, year) {
+  return countBillableRightsMonthsThrough(contractEffectiveDate, month, year) > 0;
+}
+
 async function getRentalPaymentsTotalThrough(connection, contractId, throughMonth, throughYear, openingRentalPaid = 0) {
   const [rows] = await connection.query(`
     SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
@@ -1937,6 +1962,70 @@ async function getRentalPaymentsForPeriod(connection, contractId, month, year) {
   `, [contractId, month, year]);
 
   return parseFloat(rows[0].total_paid) || 0;
+}
+
+async function getRightsPaymentsTotalThrough(connection, contractId, throughMonth, throughYear) {
+  const [rows] = await connection.query(`
+    SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
+    FROM payment_history_rights
+    WHERE lease_contract_id = ?
+      AND (
+        period_year < ?
+        OR (period_year = ? AND period_month <= ?)
+      )
+  `, [contractId, throughYear, throughYear, throughMonth]);
+
+  return parseFloat(rows[0].total_paid) || 0;
+}
+
+async function getRightsPaymentsForPeriod(connection, contractId, month, year) {
+  const [rows] = await connection.query(`
+    SELECT COALESCE(SUM(amount_paid), 0) AS total_paid
+    FROM payment_history_rights
+    WHERE lease_contract_id = ? AND period_month = ? AND period_year = ?
+  `, [contractId, month, year]);
+
+  return parseFloat(rows[0].total_paid) || 0;
+}
+
+/**
+ * Unpaid monthly rights through the previous billing month (arrears),
+ * capped by the remaining rights obligation.
+ */
+function calculateRightsPreviousBalance(contract, monthlyRights, paidThroughPrev, throughMonth, throughYear) {
+  const monthly = parseFloat(monthlyRights) || 0;
+  if (monthly <= 0) {
+    return { previous_balance: 0, previous_month_balance: 0, total_rights_due_through_prev: 0, total_rights_paid_through_prev: 0 };
+  }
+
+  const billableMonths = countBillableRightsMonthsThrough(
+    contract.contract_effective_date,
+    throughMonth,
+    throughYear
+  );
+  const openingPaid = parseFloat(contract.opening_rights_paid) || 0;
+  const openingBalance = parseFloat(contract.opening_rights_balance) || 0;
+  const netPrincipal = Math.max(
+    0,
+    (parseFloat(contract.principal_amount) || 0) - (parseFloat(contract.downpayment) || 0)
+  );
+  const maxObligation = isLegacyAccount(contract)
+    ? openingPaid + openingBalance
+    : netPrincipal;
+
+  const uncappedDue = parseFloat((billableMonths * monthly).toFixed(2));
+  const totalDueThroughPrev = Math.min(uncappedDue, maxObligation);
+  const totalPaidThroughPrev = openingPaid + (parseFloat(paidThroughPrev) || 0);
+  const previousBalance = Math.max(
+    0,
+    parseFloat((totalDueThroughPrev - totalPaidThroughPrev).toFixed(2))
+  );
+
+  return {
+    previous_balance: previousBalance,
+    total_rights_due_through_prev: totalDueThroughPrev,
+    total_rights_paid_through_prev: parseFloat(totalPaidThroughPrev.toFixed(2)),
+  };
 }
 
 function calculateRentalBillingBalances({
@@ -2153,8 +2242,52 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
         };
       };
 
+      // Rights arrears: unpaid monthly rights through previous month
+      const rightsPaidThroughPrev = await getRightsPaymentsTotalThrough(
+        connection,
+        contract_id,
+        prevMonth,
+        prevYear
+      );
+      const rightsPrevMonthPaid = await getRightsPaymentsForPeriod(
+        connection,
+        contract_id,
+        prevMonth,
+        prevYear
+      );
+      const rightsArrears = calculateRightsPreviousBalance(
+        contract,
+        monthlyRights,
+        rightsPaidThroughPrev,
+        prevMonth,
+        prevYear
+      );
+      const rightsPreviousBalance = rightsArrears.previous_balance;
+      let rightsPreviousMonthBalance = 0;
+      if (monthlyRights > 0 && isBillableRightsMonth(contract.contract_effective_date, prevMonth, prevYear)) {
+        rightsPreviousMonthBalance = Math.max(
+          0,
+          parseFloat((monthlyRights - rightsPrevMonthPaid).toFixed(2))
+        );
+      }
+
+      // Cap current-month rights charge by remaining principal obligation.
+      // Rights collection starts the month after contract effective date.
+      const remainingBeforeCurrentPay = Math.max(0, rightsBalance + rightsPaymentAmount);
+      const rightsBillableThisMonth = isBillableRightsMonth(
+        contract.contract_effective_date,
+        billingMonth,
+        billingYear
+      );
+      const rightsThisMonth = (monthlyRights > 0 && rightsBillableThisMonth)
+        ? Math.min(monthlyRights, remainingBeforeCurrentPay)
+        : 0;
+
       const rentalDues = parseFloat((previousBalance + surcharge + monthlyRental - rentalPaymentAmount).toFixed(2));
-      const rightsDues = parseFloat((monthlyRights - rightsPaymentAmount).toFixed(2));
+      const rightsDuesRaw = parseFloat(
+        (rightsPreviousBalance + rightsThisMonth - rightsPaymentAmount).toFixed(2)
+      );
+      const rightsDues = Math.max(0, Math.min(rightsDuesRaw, remainingBeforeCurrentPay));
       const totalDue   = parseFloat((rightsDues + rentalDues).toFixed(2));
 
       // Billing statement number: {property_code}-{year}-{mm}-{contractId padded}
@@ -2181,7 +2314,12 @@ router.get('/lease-contracts/:contract_id/billing', async (req, res) => {
             balance:    rightsBalance,
             opening_rights_paid: rightsSnapshot.openingPaid,
             opening_rights_balance: rightsSnapshot.openingBalance,
+            previous_balance: rightsPreviousBalance,
+            previous_month_balance: rightsPreviousMonthBalance,
+            total_rights_due_through_prev: rightsArrears.total_rights_due_through_prev,
+            total_rights_paid_through_prev: rightsArrears.total_rights_paid_through_prev,
             monthly_amount: monthlyRights,
+            this_month: rightsThisMonth,
             dues:       rightsDues,
             latest_payment: formatPaymentRecord(latestRightsPayment)
           },

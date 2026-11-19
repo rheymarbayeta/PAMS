@@ -355,9 +355,13 @@
       '</div></td>' +
       '</tr>' +
       '<tr>' +
-      '<td colspan="3" class="monthly-label">Monthly Rights:</td>' +
-      '<td class="num">₱ ' +
-      fmt(r.monthly_amount) +
+      '<td colspan="3" class="monthly-label">BALANCE (' +
+      prevMonthName.toUpperCase() +
+      ' ' +
+      prevYear +
+      '):</td>' +
+      '<td class="num">' +
+      ((r.previous_balance || 0) > 0 ? '₱ ' + fmt(r.previous_balance) : '-') +
       '</td>' +
       '<td class="rental-col">' +
       (surchargeConfig.enabled
@@ -370,13 +374,13 @@
       '</td>' +
       '</tr>' +
       '<tr>' +
-      '<td colspan="3" class="dues-label">Dues (' +
+      '<td colspan="3" class="monthly-label">This Month (' +
       monthName +
       ' ' +
       b.billing_year +
       '):</td>' +
-      '<td class="num dues-amount">₱ ' +
-      fmt(r.dues) +
+      '<td class="num">₱ ' +
+      fmt(r.this_month != null ? r.this_month : r.monthly_amount) +
       '</td>' +
       '<td class="rental-col"><div class="rental-line">' +
       '<span>This Month (' +
@@ -389,8 +393,11 @@
       '</span>' +
       '</div></td>' +
       '</tr>' +
-      (isShowLastPaymentEnabled(showLastPayment) ? buildOrDetailRows(rightsPayment, rentalPayment) : '') +
-      '<tr><td colspan="4">&nbsp;</td>' +
+      '<tr>' +
+      '<td colspan="3" class="monthly-label">Monthly Rights:</td>' +
+      '<td class="num">₱ ' +
+      fmt(r.monthly_amount) +
+      '</td>' +
       '<td class="rental-col"><div class="rental-line monthly-rental-line">' +
       '<span>Monthly Rental:</span><span class="num">₱ ' +
       fmt(rn.monthly_rental) +
@@ -399,7 +406,16 @@
       buildScheduleNoteHtml(rn.schedule_row) +
       '</td>' +
       '</tr>' +
-      '<tr><td colspan="4">&nbsp;</td>' +
+      (isShowLastPaymentEnabled(showLastPayment) ? buildOrDetailRows(rightsPayment, rentalPayment) : '') +
+      '<tr>' +
+      '<td colspan="3" class="dues-label">Dues (' +
+      monthName +
+      ' ' +
+      b.billing_year +
+      '):</td>' +
+      '<td class="num dues-amount">₱ ' +
+      fmt(r.dues) +
+      '</td>' +
       '<td class="rental-col"><div class="rental-line">' +
       '<span>Dues (' +
       monthName +

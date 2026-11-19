@@ -20,6 +20,9 @@ interface LeaseContract {
   monthly_rental_amount: number;
   downpayment: number;
   status: string;
+  total_rights_paid?: number;
+  total_rental_paid?: number;
+  total_paid?: number;
   property_units?: { id: number; stall_number: string; floor_level: string; unit_description: string; area_sqm: number | null; status: string }[];
 }
 
@@ -363,6 +366,7 @@ export default function LeaseContractsPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Property</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Effective Date</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Monthly Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Total Paid</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -386,6 +390,19 @@ export default function LeaseContractsPage() {
                           </div>
                           <div className="text-sm text-gray-600">
                             Rental: {formatCurrency(contract.monthly_rental_amount)}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col gap-1">
+                          <div className="text-sm text-green-700">
+                            Rights: {formatCurrency(contract.total_rights_paid ?? 0)}
+                          </div>
+                          <div className="text-sm text-blue-700">
+                            Rental: {formatCurrency(contract.total_rental_paid ?? 0)}
+                          </div>
+                          <div className="text-xs font-semibold text-gray-800 pt-0.5 border-t border-gray-100">
+                            Total: {formatCurrency(contract.total_paid ?? ((contract.total_rights_paid ?? 0) + (contract.total_rental_paid ?? 0)))}
                           </div>
                         </div>
                       </td>
