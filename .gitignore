@@ -5,4 +5,4 @@ mobile/node_modules/
 mobile/waterworks-meter-reader/node_modules
 .next/
 build/
-dist/
+dist/.env
