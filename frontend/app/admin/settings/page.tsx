@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import Link from 'next/link';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
 interface Setting {
   value: string;
@@ -29,7 +30,7 @@ function SignatureUploadField({
   onClear: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const apiBase = getApiBaseUrl();
   const displayUrl = previewUrl || (savedUrl ? (savedUrl.startsWith('http') ? savedUrl : `${apiBase}${savedUrl}`) : null);
 
   return (

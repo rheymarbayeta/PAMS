@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useI18n } from '@/i18n/LocaleProvider';
 import { StatusBadge } from '@/components/ui/Primitives';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
 interface TrackResult {
   application_number: string;
@@ -18,7 +19,7 @@ interface TrackResult {
   payment_eligible?: boolean;
 }
 
-const apiBase = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const apiBase = () => getApiBaseUrl();
 
 export default function PortalTrackPage() {
   const { t } = useI18n();

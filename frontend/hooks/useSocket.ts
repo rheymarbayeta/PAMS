@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '@/contexts/AuthContext';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
 export const useSocket = () => {
   const { user, token } = useAuth();
@@ -9,7 +10,7 @@ export const useSocket = () => {
   useEffect(() => {
     if (!user || !token) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    const apiUrl = getApiBaseUrl();
     // userId is derived server-side from the JWT — do not send a client-supplied userId
     const socket = io(apiUrl, {
       auth: {

@@ -7,6 +7,7 @@ import { PageHeader, Button } from '@/components/ui/Primitives';
 import { LoadingSpinner, EmptyState } from '@/components/ui/PageStates';
 import Pagination from '@/components/Pagination';
 import api from '@/services/api';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
 export default function AuditLogPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -44,13 +45,13 @@ export default function AuditLogPage() {
             description="System activity trail with export"
             actions={
               <a
-                href={`${process.env.NEXT_PUBLIC_API_URL || ''}/api/audit/export.csv`}
+                href={`${getApiBaseUrl()}/api/audit/export.csv`}
                 className="inline-flex items-center px-4 py-2 text-sm rounded-lg text-white"
                 style={{ backgroundColor: 'var(--primary)' }}
                 onClick={(e) => {
                   e.preventDefault();
                   const token = localStorage.getItem('token');
-                  fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/audit/export.csv`, {
+                  fetch(`${getApiBaseUrl()}/api/audit/export.csv`, {
                     headers: { Authorization: `Bearer ${token}` },
                   })
                     .then((r) => r.blob())

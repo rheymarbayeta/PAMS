@@ -56,7 +56,13 @@ const server = http.createServer(app);
 
 // Socket.IO CORS configuration
 const socketCorsOptions = {
-  origin: ['http://localhost:6070', 'http://127.0.0.1:6070', 'http://192.168.11.17:6070', process.env.FRONTEND_URL || 'http://localhost:3000'],
+  origin: [
+    'http://localhost:6070',
+    'http://127.0.0.1:6070',
+    'http://192.168.11.17:6070',
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    ...(process.env.CORS_ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  ],
   methods: ['GET', 'POST']
 };
 

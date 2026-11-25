@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/services/api';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
 export function AttachmentsPanel({
   module,
@@ -53,7 +54,7 @@ export function AttachmentsPanel({
 
   const download = async (id: string, name: string) => {
     const token = localStorage.getItem('token');
-    const base = process.env.NEXT_PUBLIC_API_URL || '';
+    const base = getApiBaseUrl();
     const res = await fetch(`${base}/api/attachments/${id}/download`, {
       headers: { Authorization: `Bearer ${token}` },
     });

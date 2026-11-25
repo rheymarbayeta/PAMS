@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import api from '@/services/api';
 import Link from 'next/link';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
 // ─── Crop Modal ───────────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ function LogoUploadCard({ label, settingKey, savedUrl, previewDataUrl, uploading
   onClear: (key: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const apiBase = getApiBaseUrl();
 
   const displayUrl = previewDataUrl
     || (savedUrl ? (savedUrl.startsWith('http') ? savedUrl : `${apiBase}${savedUrl}`) : null);
@@ -256,7 +257,7 @@ export default function PermitHeaderSettingsPage() {
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [cropModal, setCropModal] = useState<{ dataUrl: string; key: string } | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const apiBase = getApiBaseUrl();
 
   useEffect(() => {
     api.get('/api/settings').then(r => {
