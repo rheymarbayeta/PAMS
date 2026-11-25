@@ -147,14 +147,14 @@
   }
   table.bill td {
     border: 1px solid #1e293b;
-    padding: 6px 8px;
+    padding: 7px 8px;
     vertical-align: middle;
   }
   table.bill .lbl {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    font-size: 10pt;
+    font-size: 9.5pt;
   }
   table.bill .center { text-align: center; }
   table.bill .subhead {
@@ -173,17 +173,81 @@
     padding-top: 5px;
     padding-bottom: 5px;
   }
-  table.bill .field-label { background: #f8fafc; white-space: nowrap; }
-  table.bill .field-value { font-size: 11.5pt; font-weight: 600; }
-  table.bill .meter-no-cell { background: #f8fafc; line-height: 1.35; }
-  table.bill .meter-no-value {
-    font-weight: 600;
-    font-size: 12pt;
-    margin-top: 6px;
+  table.bill .field-label {
+    background: #f8fafc;
+    white-space: nowrap;
+    width: 24%;
+    padding-right: 10px;
   }
-  table.bill .collection-cell { background: #f8fafc; }
-  table.bill .collection-label { font-weight: 700; text-transform: none; letter-spacing: 0; }
-  table.bill .collection-value { float: right; font-weight: 700; font-size: 11.5pt; }
+  table.bill .field-value {
+    font-size: 11.5pt;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  table.bill .meter-no-cell {
+    background: #f8fafc;
+    line-height: 1.3;
+    padding: 6px 6px;
+    overflow: visible;
+  }
+  table.bill .meter-no-label {
+    font-size: 9pt;
+    letter-spacing: 0.04em;
+  }
+  table.bill .meter-no-value {
+    font-weight: 700;
+    font-size: 11pt;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: visible;
+  }
+  table.bill .collection-cell { background: #f8fafc; vertical-align: middle; }
+  table.bill .collection-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: nowrap;
+  }
+  table.bill .collection-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+  table.bill .collection-label {
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 10pt;
+  }
+  table.bill .collection-month {
+    font-weight: 700;
+    font-size: 15pt;
+    line-height: 1.15;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: #0f172a;
+  }
+  table.bill .collection-value {
+    font-weight: 700;
+    font-size: 11.5pt;
+    text-align: right;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding-top: 1px;
+  }
+  table.bill .surcharge-pct {
+    display: inline-block;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-top: 1px;
+  }
   table.bill .date-value {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -193,16 +257,18 @@
   table.bill .reading-cell {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    font-size: 11.5pt;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    font-size: 10.5pt;
+    padding: 10px 5px;
+    white-space: nowrap;
   }
-  table.bill .total-cell { font-weight: 700; font-size: 12.5pt; background: #f8fafc; }
+  table.bill .total-cell { font-weight: 700; font-size: 11.5pt; background: #f8fafc; }
   table.bill .col-head {
     background: #f1f5f9;
-    font-size: 9pt;
-    line-height: 1.25;
-    letter-spacing: 0.03em;
+    font-size: 8.5pt;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    padding: 6px 4px;
+    vertical-align: middle;
   }
   .rate-cell {
     font-size: 10pt;
@@ -284,8 +350,12 @@
   .billing-doc-compact table.bill .field-value { font-size: 8pt; }
   .billing-doc-compact table.bill .subhead { font-size: 6.5pt; margin-bottom: 0; }
   .billing-doc-compact table.bill .section-title { font-size: 7pt; padding-top: 2px; padding-bottom: 2px; }
+  .billing-doc-compact table.bill .meter-no-label { font-size: 6.5pt; }
   .billing-doc-compact table.bill .meter-no-value { font-size: 8pt; margin-top: 2px; }
+  .billing-doc-compact table.bill .collection-label { font-size: 7pt; }
+  .billing-doc-compact table.bill .collection-month { font-size: 11pt; }
   .billing-doc-compact table.bill .collection-value { font-size: 8pt; }
+  .billing-doc-compact table.bill .surcharge-pct { font-size: 6.5pt; }
   .billing-doc-compact table.bill .date-value { font-size: 7.5pt; }
   .billing-doc-compact table.bill .col-head { font-size: 6.5pt; }
   .billing-doc-compact table.bill .amount-cell,

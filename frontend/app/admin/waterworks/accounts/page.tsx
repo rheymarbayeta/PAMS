@@ -59,6 +59,47 @@ function accountTypeCode(type?: AccountType): string {
   return ACCOUNT_TYPE_OPTIONS.find((t) => t.value === type)?.code || 'R';
 }
 
+type AccountSortKey =
+  | 'account_number'
+  | 'account_type'
+  | 'consumer_name'
+  | 'supply_name'
+  | 'meter_number'
+  | 'last_reading'
+  | 'status'
+  | 'created_at';
+
+type ColumnFilters = {
+  account_number: string;
+  account_type: string;
+  consumer_name: string;
+  meter_number: string;
+  status: string;
+  created_from: string;
+  created_to: string;
+};
+
+const EMPTY_COLUMN_FILTERS: ColumnFilters = {
+  account_number: '',
+  account_type: '',
+  consumer_name: '',
+  meter_number: '',
+  status: '',
+  created_from: '',
+  created_to: '',
+};
+
+function formatEncodedDate(value?: string) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+  return d.toLocaleDateString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  });
+}
+
 function buildAccountsListQuery(page: number, search: string, supplyId: string) {
   const params = new URLSearchParams();
   if (page > 1) params.set('page', String(page));
@@ -84,6 +125,10 @@ function AccountsContent() {
   const [supplyFilter, setSupplyFilter] = useState(initialSupply);
   const [page, setPage] = useState(initialPage);
   const [totalPages, setTotalPages] = useState(1);
+  const [sortBy, setSortBy] = useState<AccountSortKey>('account_number');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({ ...EMPTY_COLUMN_FILTERS });
+  const [draftFilters, setDraftFilters] = useState<ColumnFilters>({ ...EMPTY_COLUMN_FILTERS });
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ConsumerAccount | null>(null);
   const editBaselineRef = useRef<{
@@ -192,9 +237,21 @@ function AccountsContent() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const params: Record<string, string | number> = { page, limit: 15 };
+      const params: Record<string, string | number> = {
+        page,
+        limit: 15,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+      };
       if (search) params.search = search;
       if (supplyFilter) params.supply_id = supplyFilter;
+      if (columnFilters.account_number) params.account_number = columnFilters.account_number;
+      if (columnFilters.account_type) params.account_type = columnFilters.account_type;
+      if (columnFilters.consumer_name) params.consumer_name = columnFilters.consumer_name;
+      if (columnFilters.meter_number) params.meter_number = columnFilters.meter_number;
+      if (columnFilters.status) params.status = columnFilters.status;
+      if (columnFilters.created_from) params.created_from = columnFilters.created_from;
+      if (columnFilters.created_to) params.created_to = columnFilters.created_to;
       const [accRes, supRes] = await Promise.all([
         waterworksService.getAccounts(params),
         waterworksService.getSupplies({ limit: 100 }),
@@ -211,7 +268,42 @@ function AccountsContent() {
 
   useEffect(() => {
     fetchData();
-  }, [search, supplyFilter, page]);
+  }, [search, supplyFilter, page, sortBy, sortDir, columnFilters]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setColumnFilters((prev) => {
+        const unchanged = JSON.stringify(prev) === JSON.stringify(draftFilters);
+        if (unchanged) return prev;
+        setPage(1);
+        return draftFilters;
+      });
+    }, 350);
+    return () => clearTimeout(timeoutId);
+  }, [draftFilters]);
+
+  const toggleSort = (key: AccountSortKey) => {
+    if (sortBy === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(key);
+      setSortDir(key === 'created_at' || key === 'last_reading' ? 'desc' : 'asc');
+    }
+    setPage(1);
+  };
+
+  const sortIndicator = (key: AccountSortKey) => {
+    if (sortBy !== key) return '↕';
+    return sortDir === 'asc' ? '↑' : '↓';
+  };
+
+  const clearColumnFilters = () => {
+    setDraftFilters({ ...EMPTY_COLUMN_FILTERS });
+    setColumnFilters({ ...EMPTY_COLUMN_FILTERS });
+    setPage(1);
+  };
+
+  const hasActiveColumnFilters = Object.values(columnFilters).some(Boolean);
 
   // Keep list page / filters in the URL so Back from account detail can restore them
   useEffect(() => {
@@ -440,7 +532,7 @@ function AccountsContent() {
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-wrap items-end gap-3 mb-4">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Search</label>
           <input
@@ -464,6 +556,15 @@ function AccountsContent() {
             ))}
           </select>
         </div>
+        {hasActiveColumnFilters && (
+          <button
+            type="button"
+            onClick={clearColumnFilters}
+            className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Clear column filters
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -473,14 +574,118 @@ function AccountsContent() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account #</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Consumer</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supply</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Meter</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Last Reading</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                {([
+                  ['account_number', 'Account #', 'left'],
+                  ['account_type', 'Type', 'left'],
+                  ['consumer_name', 'Consumer', 'left'],
+                  ['supply_name', 'Supply', 'left'],
+                  ['meter_number', 'Meter', 'left'],
+                  ['last_reading', 'Last Reading', 'right'],
+                  ['status', 'Status', 'center'],
+                  ['created_at', 'Date Encoded', 'left'],
+                ] as Array<[AccountSortKey, string, string]>).map(([key, label, align]) => (
+                  <th
+                    key={key}
+                    className={`px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide ${
+                      align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(key)}
+                      className="inline-flex items-center gap-1 hover:text-gray-800"
+                      title={`Sort by ${label}`}
+                    >
+                      <span>{label}</span>
+                      <span className="text-[10px] text-gray-400">{sortIndicator(key)}</span>
+                    </button>
+                  </th>
+                ))}
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+              <tr className="bg-white border-t border-gray-100">
+                <th className="px-2 py-2">
+                  <input
+                    value={draftFilters.account_number}
+                    onChange={(e) => setDraftFilters((f) => ({ ...f, account_number: e.target.value }))}
+                    placeholder="Filter..."
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-normal"
+                  />
+                </th>
+                <th className="px-2 py-2">
+                  <select
+                    value={draftFilters.account_type}
+                    onChange={(e) => setDraftFilters((f) => ({ ...f, account_type: e.target.value }))}
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-normal"
+                  >
+                    <option value="">All</option>
+                    {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                      <option key={t.value} value={t.value}>{t.code}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-2 py-2">
+                  <input
+                    value={draftFilters.consumer_name}
+                    onChange={(e) => setDraftFilters((f) => ({ ...f, consumer_name: e.target.value }))}
+                    placeholder="Filter..."
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-normal"
+                  />
+                </th>
+                <th className="px-2 py-2">
+                  <select
+                    value={supplyFilter}
+                    onChange={(e) => { setSupplyFilter(e.target.value); setPage(1); }}
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-normal"
+                  >
+                    <option value="">All</option>
+                    {supplies.map((s) => (
+                      <option key={s.supply_id} value={s.supply_id}>{s.supply_name}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-2 py-2">
+                  <input
+                    value={draftFilters.meter_number}
+                    onChange={(e) => setDraftFilters((f) => ({ ...f, meter_number: e.target.value }))}
+                    placeholder="Filter..."
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-normal"
+                  />
+                </th>
+                <th className="px-2 py-2 text-right">
+                  <span className="text-[10px] font-normal text-gray-400">Sort only</span>
+                </th>
+                <th className="px-2 py-2">
+                  <select
+                    value={draftFilters.status}
+                    onChange={(e) => setDraftFilters((f) => ({ ...f, status: e.target.value }))}
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs font-normal"
+                  >
+                    <option value="">All</option>
+                    <option value="active">active</option>
+                    <option value="disconnected">disconnected</option>
+                    <option value="suspended">suspended</option>
+                  </select>
+                </th>
+                <th className="px-2 py-2">
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="date"
+                      value={draftFilters.created_from}
+                      onChange={(e) => setDraftFilters((f) => ({ ...f, created_from: e.target.value }))}
+                      className="w-full px-2 py-1 border border-gray-200 rounded text-xs font-normal"
+                      title="Encoded from"
+                    />
+                    <input
+                      type="date"
+                      value={draftFilters.created_to}
+                      onChange={(e) => setDraftFilters((f) => ({ ...f, created_to: e.target.value }))}
+                      className="w-full px-2 py-1 border border-gray-200 rounded text-xs font-normal"
+                      title="Encoded to"
+                    />
+                  </div>
+                </th>
+                <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -508,6 +713,9 @@ function AccountsContent() {
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs ${a.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{a.status}</span>
                   </td>
+                  <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                    {formatEncodedDate(a.created_at)}
+                  </td>
                   <td className="px-4 py-3 text-right text-sm space-x-2">
                     <Link
                       href={`/admin/waterworks/accounts/${a.account_id}${listQuery ? `?${listQuery}` : ''}`}
@@ -523,7 +731,7 @@ function AccountsContent() {
                 </tr>
               ))}
               {!accounts.length && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No accounts found</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No accounts found</td></tr>
               )}
             </tbody>
           </table>
@@ -701,7 +909,7 @@ function AccountsContent() {
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Prior unpaid balance carried into the next bill as unpaid dues
+                  Payables carried when the account is created; shown on billing until settled
                   {parseFloat(form.unpaid_dues) > 0 ? ` (${formatPeso(parseFloat(form.unpaid_dues) || 0)})` : ''}.
                 </p>
               </div>

@@ -89,11 +89,13 @@
     settings = settings || {};
     var officeRaw = (settings.assessment_header_line_4 && settings.assessment_header_line_4.value)
       || "MUNICIPAL TREASURER'S OFFICE";
-    var officeLine = officeRaw;
+    var officeLine = String(officeRaw || '').trim();
     if (officeLine && !/^office\b/i.test(officeLine)) {
       officeLine = 'OFFICE OF THE ' + officeLine;
     }
-    officeLine = officeLine.replace(/OFFICE OF THE\s+OFFICE OF THE/i, 'OFFICE OF THE');
+    officeLine = officeLine
+      .replace(/OFFICE OF THE\s+OFFICE OF THE/ig, 'OFFICE OF THE')
+      .replace(/OFFICE OF THE\s+MUNICIPAL TREASURER'?S?\s+OFFICE/ig, 'OFFICE OF THE MUNICIPAL TREASURER');
     return {
       muniLine: (settings.assessment_header_line_2 && settings.assessment_header_line_2.value)
         || 'Municipality of DALAGUETE',
@@ -110,6 +112,23 @@
    * @param {object} settings - /api/settings map
    * @param {{ compact?: boolean, billingMonth?: number, billingYear?: number }} options
    */
+  function resolveSurchargePercent(bill, data) {
+    var prev = parseFloat(bill && bill.previous_balance) || 0;
+    var sur = parseFloat(bill && bill.surcharge_amount) || 0;
+    if (prev > 0 && sur > 0) {
+      return Math.round((sur / prev) * 1000) / 10;
+    }
+    if (data && data.surcharge && data.surcharge.percentage != null) {
+      return parseFloat(data.surcharge.percentage);
+    }
+    return null;
+  }
+
+  function formatSurchargePercent(pct) {
+    if (pct == null || !Number.isFinite(pct)) return '';
+    return Number.isInteger(pct) ? String(pct) : String(pct);
+  }
+
   function renderStatement(payload, settings, options) {
     options = options || {};
     var data = payload && payload.data ? payload.data : payload;
@@ -123,6 +142,12 @@
     var periodFrom = formatDMY(data.period_start);
     var periodTo = formatDMY(data.period_end);
     var docClass = options.compact ? 'billing-doc billing-doc-compact' : 'billing-doc';
+    var billingMonthName = MONTHS[month - 1] || '';
+    var surchargePct = resolveSurchargePercent(bill, data);
+    var surchargePctLabel = formatSurchargePercent(surchargePct);
+    var surchargeHead = surchargePctLabel
+      ? ('SURCHARGE<br><span class="surcharge-pct">(' + esc(surchargePctLabel) + '%)</span>')
+      : 'SURCHARGE';
 
     return (
       '<div class="' + docClass + '">' +
@@ -137,30 +162,36 @@
         '</div>' +
         '<table class="bill">' +
           '<colgroup>' +
+            '<col style="width:11%">' +
+            '<col style="width:11%">' +
             '<col style="width:14%">' +
-            '<col style="width:14%">' +
-            '<col style="width:12%">' +
-            '<col style="width:14%">' +
-            '<col style="width:14%">' +
-            '<col style="width:14%">' +
-            '<col style="width:18%">' +
+            '<col style="width:13%">' +
+            '<col style="width:15%">' +
+            '<col style="width:13%">' +
+            '<col style="width:23%">' +
           '</colgroup>' +
           '<tr>' +
-            '<td class="lbl field-label">CONSUMER NAME:</td>' +
-            '<td colspan="6" class="field-value">' + blank(acc.consumer_name) + '</td>' +
+            '<td class="lbl field-label" colspan="2">CONSUMER NAME:</td>' +
+            '<td colspan="5" class="field-value">' + blank(acc.consumer_name) + '</td>' +
           '</tr>' +
           '<tr>' +
-            '<td class="lbl field-label">ADDRESS:</td>' +
-            '<td colspan="6" class="field-value">' + blank(acc.address) + '</td>' +
+            '<td class="lbl field-label" colspan="2">ADDRESS:</td>' +
+            '<td colspan="5" class="field-value">' + blank(acc.address) + '</td>' +
           '</tr>' +
           '<tr>' +
             '<td colspan="2" class="center lbl section-title">PERIOD COVERED</td>' +
-            '<td class="center lbl meter-no-cell" rowspan="2">METER NO.' +
+            '<td class="center lbl meter-no-cell" rowspan="2">' +
+              '<div class="meter-no-label">METER NO.</div>' +
               '<div class="meter-no-value">' + blank(acc.meter_number) + '</div>' +
             '</td>' +
             '<td colspan="4" rowspan="2" class="collection-cell">' +
-              '<span class="collection-label">Collection Date:</span>' +
-              '<span class="collection-value">' + blank(collectionDate) + '</span>' +
+              '<div class="collection-inner">' +
+                '<div class="collection-left">' +
+                  '<div class="collection-label">Collection Date:</div>' +
+                  '<div class="collection-month">Month of ' + esc(billingMonthName) + '</div>' +
+                '</div>' +
+                '<span class="collection-value">' + blank(collectionDate) + '</span>' +
+              '</div>' +
             '</td>' +
           '</tr>' +
           '<tr>' +
@@ -172,7 +203,8 @@
             '<td class="center lbl col-head" rowspan="2">CONSUMED<br>(cum)</td>' +
             '<td class="center lbl col-head" rowspan="2">MONTHLY<br>DUES</td>' +
             '<td class="center lbl col-head" rowspan="2">UNPAID<br>DUES</td>' +
-            '<td class="center lbl col-head" rowspan="2" colspan="2">TOTAL AMOUNT<br>DUE</td>' +
+            '<td class="center lbl col-head" rowspan="2">' + surchargeHead + '</td>' +
+            '<td class="center lbl col-head" rowspan="2">TOTAL AMOUNT<br>DUE</td>' +
           '</tr>' +
           '<tr>' +
             '<td class="center lbl col-head">PREVIOUS</td>' +
@@ -182,9 +214,14 @@
             '<td class="center reading-cell">' + (hasBill ? blank(bill.previous_reading) : '&nbsp;') + '</td>' +
             '<td class="center reading-cell">' + (hasBill ? blank(bill.current_reading) : '&nbsp;') + '</td>' +
             '<td class="center reading-cell">' + (hasBill ? blank(bill.consumption) : '&nbsp;') + '</td>' +
-            '<td class="center amount-cell">' + (hasBill ? ('Php' + fmt(bill.amount_due)) : '&nbsp;') + '</td>' +
-            '<td class="center amount-cell">' + (hasBill ? ('Php' + fmt(bill.previous_balance || 0)) : '&nbsp;') + '</td>' +
-            '<td class="center amount-cell total-cell" colspan="2">' + (hasBill ? ('Php' + fmt(bill.total_due)) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell">' + (hasBill ? ('Php ' + fmt(bill.amount_due)) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell">' + (hasBill ? ('Php ' + fmt(bill.previous_balance || 0)) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell">' + (hasBill ? ('Php ' + fmt(bill.surcharge_amount || 0)) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell total-cell">' + (hasBill ? ('Php ' + fmt(
+              (parseFloat(bill.amount_due) || 0) +
+              (parseFloat(bill.previous_balance) || 0) +
+              (parseFloat(bill.surcharge_amount) || 0)
+            )) : '&nbsp;') + '</td>' +
           '</tr>' +
           '<tr>' +
             '<td colspan="2" class="rate-cell"><span class="rate-title">RATE</span>' + buildRateLines(data.rate_tiers, bill) + '</td>' +

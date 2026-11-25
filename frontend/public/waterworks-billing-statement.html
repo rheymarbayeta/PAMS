@@ -95,14 +95,14 @@
   }
   table.bill td {
     border: 1px solid #1e293b;
-    padding: 6px 8px;
+    padding: 7px 8px;
     vertical-align: middle;
   }
   table.bill .lbl {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    font-size: 10pt;
+    font-size: 9.5pt;
   }
   table.bill .center { text-align: center; }
   table.bill .subhead {
@@ -121,28 +121,98 @@
     padding-top: 5px;
     padding-bottom: 5px;
   }
-  table.bill .field-label { width: 18%; background: #f8fafc; white-space: nowrap; }
-  table.bill .field-value { font-size: 11.5pt; font-weight: 600; }
-  table.bill .meter-no-cell { background: #f8fafc; line-height: 1.35; }
-  table.bill .meter-no-value { font-weight: 600; font-size: 12pt; margin-top: 6px; }
-  table.bill .collection-cell { background: #f8fafc; }
-  table.bill .collection-label { font-weight: 700; text-transform: none; letter-spacing: 0; }
-  table.bill .collection-value { float: right; font-weight: 700; font-size: 11.5pt; }
+  table.bill .field-label {
+    background: #f8fafc;
+    white-space: nowrap;
+    width: 24%;
+    padding-right: 10px;
+  }
+  table.bill .field-value {
+    font-size: 11.5pt;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  table.bill .meter-no-cell {
+    background: #f8fafc;
+    line-height: 1.3;
+    padding: 6px 6px;
+    overflow: visible;
+  }
+  table.bill .meter-no-label {
+    font-size: 9pt;
+    letter-spacing: 0.04em;
+  }
+  table.bill .meter-no-value {
+    font-weight: 700;
+    font-size: 11pt;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: visible;
+  }
+  table.bill .collection-cell { background: #f8fafc; vertical-align: middle; }
+  table.bill .collection-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: nowrap;
+  }
+  table.bill .collection-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+  table.bill .collection-label {
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 10pt;
+  }
+  table.bill .collection-month {
+    font-weight: 700;
+    font-size: 15pt;
+    line-height: 1.15;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: #0f172a;
+  }
+  table.bill .collection-value {
+    font-weight: 700;
+    font-size: 11.5pt;
+    text-align: right;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding-top: 1px;
+  }
+  table.bill .surcharge-pct {
+    display: inline-block;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-top: 1px;
+  }
   table.bill .date-value { font-weight: 600; font-variant-numeric: tabular-nums; font-size: 11pt; }
   table.bill .amount-cell,
   table.bill .reading-cell {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    font-size: 11.5pt;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    font-size: 10.5pt;
+    padding: 10px 5px;
+    white-space: nowrap;
   }
-  table.bill .total-cell { font-weight: 700; font-size: 12.5pt; background: #f8fafc; }
+  table.bill .total-cell { font-weight: 700; font-size: 11.5pt; background: #f8fafc; }
   table.bill .col-head {
     background: #f1f5f9;
-    font-size: 9pt;
-    line-height: 1.25;
-    letter-spacing: 0.03em;
+    font-size: 8.5pt;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    padding: 6px 4px;
+    vertical-align: middle;
   }
   .rate-cell {
     font-size: 10pt;
@@ -195,6 +265,22 @@
     color: #64748b;
   }
 
+  body.embed-mode {
+    background: #fff;
+  }
+  body.embed-mode .controls {
+    position: static;
+  }
+  body.embed-mode #bill-wrap {
+    padding: 12px 8px 20px;
+  }
+  body.embed-mode .billing-doc {
+    width: 100%;
+    max-width: 8.5in;
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+  }
+
   @media print {
     .controls { display: none !important; }
     body { background: #fff; }
@@ -234,8 +320,13 @@
   var month = parseInt(params.get('month')) || (new Date().getMonth() + 1);
   var year = parseInt(params.get('year')) || new Date().getFullYear();
   var token = params.get('token') || localStorage.getItem('token');
+  var embed = params.get('embed') === '1';
   var WW = window.WaterworksBillingCommon;
   var api = WW.resolveApiBase();
+
+  if (embed) {
+    document.body.classList.add('embed-mode');
+  }
 
   if (!accountId || !token) {
     document.getElementById('loadStatus').textContent = 'Missing account_id or token';

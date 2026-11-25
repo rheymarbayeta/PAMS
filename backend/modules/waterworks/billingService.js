@@ -88,10 +88,22 @@ async function generateBills(body, userId) {
     const generated = [];
 
     for (const reading of readings) {
-      const previousBalance = await billingRepo.getAccountOutstandingBalance(
+      // Unpaid dues stay on the account until paid; snapshot onto at most one open bill
+      const accountUnpaidDues = await billingRepo.getAccountUnpaidDues(
         connection,
         reading.account_id
       );
+      const [openWithDues] = await connection.query(
+        `SELECT COUNT(*) AS cnt
+         FROM ww_bills
+         WHERE account_id = ?
+           AND status IN ('unpaid', 'partial')
+           AND previous_balance > 0`,
+        [reading.account_id]
+      );
+      const previousBalance =
+        parseFloat(openWithDues[0]?.cnt) > 0 ? 0 : accountUnpaidDues;
+
       const rate = parseFloat(reading.rate_per_cubic_meter) || 0;
       const minimumCharge = parseFloat(reading.minimum_charge) || 100.6;
       const consumption = parseFloat(reading.consumption) || 0;
@@ -135,17 +147,6 @@ async function generateBills(body, userId) {
       );
 
       generated.push({ bill_id: billId, account_id: reading.account_id, total_due: totalDue });
-
-      const [acctRows] = await connection.query(
-        'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
-        [reading.account_id]
-      );
-      if (parseFloat(acctRows[0]?.unpaid_dues) > 0) {
-        await connection.query(
-          'UPDATE ww_consumer_accounts SET unpaid_dues = 0 WHERE account_id = ?',
-          [reading.account_id]
-        );
-      }
     }
 
     await connection.commit();
@@ -198,6 +199,7 @@ async function recordPayment(accountId, body, userId) {
 
     if (bill_id) {
       await billingRepo.updateBillStatus(connection, bill_id);
+      await billingRepo.syncUnpaidDuesAfterBillPayment(connection, accountId, bill_id);
     } else {
       const [acctRows] = await connection.query(
         'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',

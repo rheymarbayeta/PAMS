@@ -127,30 +127,53 @@ async function getBillingSurchargeSettings(connection) {
   return { enabled, percentage, rate: percentage / 100 };
 }
 
-async function getAccountOutstandingBalance(connection, accountId) {
+async function getAccountUnpaidDues(connection, accountId) {
   const [accounts] = await connection.query(
     'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
     [accountId]
   );
-  const openingDues = parseFloat(accounts[0]?.unpaid_dues) || 0;
+  return parseFloat(accounts[0]?.unpaid_dues) || 0;
+}
+
+/**
+ * Outstanding = Unpaid Dues (account) + Surcharge + Period Consumption − payments
+ * applied to open bills (capped at amount_due + surcharge so dues are not double-counted).
+ * Account unpaid_dues remain until paid down; bill.previous_balance is a preview snapshot only.
+ */
+async function getAccountOutstandingBalance(connection, accountId) {
+  const unpaidDues = await getAccountUnpaidDues(connection, accountId);
 
   const [rows] = await connection.query(
     `
-    SELECT b.bill_id, b.total_due, COALESCE(SUM(p.amount_paid), 0) AS total_paid
+    SELECT
+      b.bill_id,
+      b.amount_due,
+      b.surcharge_amount,
+      COALESCE(SUM(p.amount_paid), 0) AS total_paid
     FROM ww_bills b
     LEFT JOIN ww_payments p ON p.bill_id = b.bill_id
     WHERE b.account_id = ? AND b.status IN ('unpaid', 'partial')
-    GROUP BY b.bill_id, b.total_due
+    GROUP BY b.bill_id, b.amount_due, b.surcharge_amount
   `,
     [accountId]
   );
 
-  let billBalance = 0;
+  let periodAndSurcharge = 0;
+  let paymentsTowardPeriod = 0;
+
   for (const row of rows) {
-    billBalance += parseFloat(row.total_due) - parseFloat(row.total_paid);
+    const amountDue = parseFloat(row.amount_due) || 0;
+    const surcharge = parseFloat(row.surcharge_amount) || 0;
+    const paid = parseFloat(row.total_paid) || 0;
+    const periodTotal = amountDue + surcharge;
+    periodAndSurcharge += periodTotal;
+    paymentsTowardPeriod += Math.min(paid, periodTotal);
   }
 
-  return Math.max(0, parseFloat((billBalance + openingDues).toFixed(2)));
+  return Math.max(
+    0,
+    parseFloat((unpaidDues + periodAndSurcharge - paymentsTowardPeriod).toFixed(2))
+  );
 }
 
 async function updateBillStatus(connection, billId) {
@@ -171,6 +194,47 @@ async function updateBillStatus(connection, billId) {
   await connection.query('UPDATE ww_bills SET status = ? WHERE bill_id = ?', [status, billId]);
 }
 
+/**
+ * Reduce account unpaid_dues by the portion of bill payments that cover previous_balance.
+ * Amounts paid are applied to amount_due + surcharge first; excess reduces unpaid dues.
+ */
+async function syncUnpaidDuesAfterBillPayment(connection, accountId, billId) {
+  const [bills] = await connection.query(
+    `SELECT amount_due, surcharge_amount, previous_balance
+     FROM ww_bills WHERE bill_id = ? AND account_id = ?`,
+    [billId, accountId]
+  );
+  if (!bills.length) return;
+
+  const prevBal = parseFloat(bills[0].previous_balance) || 0;
+  if (prevBal <= 0) return;
+
+  const [payments] = await connection.query(
+    'SELECT COALESCE(SUM(amount_paid), 0) AS total FROM ww_payments WHERE bill_id = ?',
+    [billId]
+  );
+  const totalPaid = parseFloat(payments[0].total) || 0;
+  const amountDue = parseFloat(bills[0].amount_due) || 0;
+  const surcharge = parseFloat(bills[0].surcharge_amount) || 0;
+  const towardDues = Math.min(prevBal, Math.max(0, totalPaid - amountDue - surcharge));
+  const remainingDuesOnBill = prevBal - towardDues;
+
+  const [accounts] = await connection.query(
+    'SELECT unpaid_dues FROM ww_consumer_accounts WHERE account_id = ?',
+    [accountId]
+  );
+  const currentDues = parseFloat(accounts[0]?.unpaid_dues) || 0;
+
+  // Keep account unpaid_dues in sync with what is still unpaid on this bill's snapshot
+  const nextDues = Math.min(currentDues, remainingDuesOnBill + Math.max(0, currentDues - prevBal));
+  if (nextDues !== currentDues) {
+    await connection.query(
+      'UPDATE ww_consumer_accounts SET unpaid_dues = ? WHERE account_id = ?',
+      [parseFloat(nextDues.toFixed(2)), accountId]
+    );
+  }
+}
+
 async function findAccountForPayment(accountId) {
   const [rows] = await pool.execute(
     'SELECT account_id, entity_id FROM ww_consumer_accounts WHERE account_id = ?',
@@ -183,7 +247,9 @@ module.exports = {
   listBills,
   listPayments,
   getBillingSurchargeSettings,
+  getAccountUnpaidDues,
   getAccountOutstandingBalance,
   updateBillStatus,
+  syncUnpaidDuesAfterBillPayment,
   findAccountForPayment,
 };

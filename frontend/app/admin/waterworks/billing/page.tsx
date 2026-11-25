@@ -180,7 +180,7 @@ export default function WaterworksBillingPage() {
                       </td>
                       <td className="px-4 py-3">{b.collection_date_label || '—'}</td>
                       <td className="px-4 py-3 text-right">{b.consumption} m³</td>
-                      <td className="px-4 py-3 text-right">{formatPeso(b.total_due)}</td>
+                      <td className="px-4 py-3 text-right">{formatPeso(b.amount_due)}</td>
                       <td className="px-4 py-3 text-right">{formatPeso(b.total_paid || 0)}</td>
                       <td className="px-4 py-3 text-center capitalize">{b.status}</td>
                       <td className="px-4 py-3 text-right">

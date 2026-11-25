@@ -82,7 +82,7 @@ async function resolveAccountConsumerFields(body) {
 
 const waterworksAccounts = require('../modules/waterworks/accountsService');
 const waterworksBilling = require('../modules/waterworks/billingService');
-const { getAccountOutstandingBalance } = waterworksBilling;
+const { getAccountOutstandingBalance, getBillingSurchargeSettings } = waterworksBilling;
 
 const ACCOUNT_SELECT = waterworksAccounts.ACCOUNT_SELECT;
 const ACCOUNT_FROM = waterworksAccounts.ACCOUNT_FROM;
@@ -1603,6 +1603,7 @@ router.get('/accounts/:id/billing', async (req, res) => {
     const connection = await pool.getConnection();
     try {
       const outstandingBalance = await getAccountOutstandingBalance(connection, accountId);
+      const surchargeSettings = await getBillingSurchargeSettings(connection);
       const billingConfig = await getSupplyBillingConfig(connection, accounts[0].supply_id);
       const tiers = billingConfig.tiers;
       const periodMeta = resolveBillingPeriodMeta(billingMonth, billingYear, {
@@ -1629,6 +1630,7 @@ router.get('/accounts/:id/billing', async (req, res) => {
           rate_tiers: tiers,
           billing_model: billingConfig.billingModel,
           outstanding_balance: outstandingBalance,
+          surcharge: surchargeSettings,
           ...periodMeta,
         },
       });

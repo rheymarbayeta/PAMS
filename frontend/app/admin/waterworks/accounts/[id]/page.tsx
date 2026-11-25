@@ -34,6 +34,9 @@ function AccountDetailContent() {
   const [showReading, setShowReading] = useState(false);
   const [savingReading, setSavingReading] = useState(false);
   const now = new Date();
+  const [previewMonth, setPreviewMonth] = useState(now.getMonth() + 1);
+  const [previewYear, setPreviewYear] = useState(now.getFullYear());
+  const [previewKey, setPreviewKey] = useState(0);
   const [paymentForm, setPaymentForm] = useState({
     amount_paid: '',
     bill_id: '',
@@ -55,6 +58,12 @@ function AccountDetailContent() {
       setLoading(true);
       const data = await waterworksService.getAccountSummary(accountId);
       setSummary(data);
+      const latestBill = data?.bills?.[0];
+      if (latestBill?.billing_month && latestBill?.billing_year) {
+        setPreviewMonth(Number(latestBill.billing_month));
+        setPreviewYear(Number(latestBill.billing_year));
+      }
+      setPreviewKey((k) => k + 1);
     } catch (e) {
       console.error(e);
     } finally {
@@ -66,12 +75,35 @@ function AccountDetailContent() {
     if (accountId) load();
   }, [accountId]);
 
+  const billingPreviewUrl = useMemo(() => {
+    if (!accountId) return '';
+    const token = localStorage.getItem('token') || '';
+    const params = new URLSearchParams({
+      account_id: accountId,
+      month: String(previewMonth),
+      year: String(previewYear),
+      token,
+      embed: '1',
+      _v: String(previewKey),
+    });
+    return `/waterworks-billing-statement.html?${params.toString()}`;
+  }, [accountId, previewMonth, previewYear, previewKey]);
+
   const openPrint = (month: number, year: number) => {
     const token = localStorage.getItem('token');
     window.open(
       `/waterworks-billing-statement.html?account_id=${accountId}&month=${month}&year=${year}&token=${token}`,
       '_blank'
     );
+  };
+
+  const openBillingPreview = (month: number, year: number) => {
+    setPreviewMonth(month);
+    setPreviewYear(year);
+    setPreviewKey((k) => k + 1);
+    if (typeof document !== 'undefined') {
+      document.getElementById('billing-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   const submitPayment = async () => {
@@ -243,16 +275,99 @@ function AccountDetailContent() {
                     <tr key={b.bill_id} className="border-b">
                       <td className="px-4 py-2">{b.billing_month}/{b.billing_year}</td>
                       <td className="px-4 py-2 text-right">{b.consumption} m³</td>
-                      <td className="px-4 py-2 text-right">{formatPeso(b.total_due)}</td>
+                      <td className="px-4 py-2 text-right">{formatPeso(b.amount_due)}</td>
                       <td className="px-4 py-2 text-center capitalize">{b.status}</td>
-                      <td className="px-4 py-2 text-right">
-                        <button onClick={() => openPrint(b.billing_month, b.billing_year)} className="text-blue-600 hover:underline">Print</button>
+                      <td className="px-4 py-2 text-right space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => openBillingPreview(b.billing_month, b.billing_year)}
+                          className="text-sky-700 hover:underline"
+                        >
+                          Preview
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openPrint(b.billing_month, b.billing_year)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          Print
+                        </button>
                       </td>
                     </tr>
                   ))}
                   {!bills?.length && <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">No bills yet</td></tr>}
                 </tbody>
               </table>
+            </section>
+
+            <section id="billing-preview" className="bg-white rounded-xl border overflow-hidden">
+              <div className="px-4 py-3 font-semibold bg-gray-50 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h2>Billing Preview</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs font-medium text-gray-600">
+                    Month
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={previewMonth}
+                      onChange={(e) => {
+                        setPreviewMonth(Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)));
+                        setPreviewKey((k) => k + 1);
+                      }}
+                      className="ml-2 w-16 px-2 py-1 border rounded text-sm font-normal"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-gray-600">
+                    Year
+                    <input
+                      type="number"
+                      value={previewYear}
+                      onChange={(e) => {
+                        setPreviewYear(parseInt(e.target.value, 10) || now.getFullYear());
+                        setPreviewKey((k) => k + 1);
+                      }}
+                      className="ml-2 w-20 px-2 py-1 border rounded text-sm font-normal"
+                    />
+                  </label>
+                  {(bills || []).length > 0 && (
+                    <select
+                      value={`${previewMonth}-${previewYear}`}
+                      onChange={(e) => {
+                        const [m, y] = e.target.value.split('-').map(Number);
+                        openBillingPreview(m, y);
+                      }}
+                      className="px-2 py-1 border rounded text-sm font-normal"
+                    >
+                      {(bills || []).map((b: any) => (
+                        <option key={b.bill_id} value={`${b.billing_month}-${b.billing_year}`}>
+                          {b.billing_month}/{b.billing_year}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openPrint(previewMonth, previewYear)}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                  >
+                    Open / Print
+                  </button>
+                </div>
+              </div>
+              <div className="bg-slate-100 border-t">
+                {billingPreviewUrl ? (
+                  <iframe
+                    key={billingPreviewUrl}
+                    src={billingPreviewUrl}
+                    title="Waterworks billing statement preview"
+                    className="w-full border-0 bg-white"
+                    style={{ minHeight: '720px', height: '75vh' }}
+                  />
+                ) : (
+                  <div className="px-4 py-10 text-center text-gray-500 text-sm">Select a billing period to preview</div>
+                )}
+              </div>
             </section>
 
             <section className="bg-white rounded-xl border overflow-hidden">

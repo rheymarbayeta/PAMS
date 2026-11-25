@@ -70,6 +70,7 @@ export interface ConsumerAccount {
   supply_code?: string;
   rate_per_cubic_meter?: number;
   minimum_charge?: number;
+  created_at?: string;
 }
 
 export interface MeterReading {

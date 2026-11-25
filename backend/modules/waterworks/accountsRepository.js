@@ -11,9 +11,38 @@ function parsePagination(query) {
   return { page, limit, offset: (page - 1) * limit };
 }
 
+const ACCOUNT_SORT_COLUMNS = {
+  account_number: 'a.account_number',
+  account_type: 'a.account_type',
+  consumer_name: 'a.consumer_name',
+  supply_name: 's.supply_name',
+  meter_number: 'a.meter_number',
+  last_reading: 'COALESCE(a.last_reading, a.previous_reading)',
+  status: 'a.status',
+  created_at: 'a.created_at',
+};
+
+function resolveAccountSort(query = {}) {
+  const sortKey = String(query.sort_by || query.sort || 'account_number').trim();
+  const sortColumn = ACCOUNT_SORT_COLUMNS[sortKey] || ACCOUNT_SORT_COLUMNS.account_number;
+  const sortDir = String(query.sort_dir || query.order || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  return { sortKey, sortColumn, sortDir };
+}
+
 async function listAccounts(query = {}) {
-  const { supply_id, status, search } = query;
+  const {
+    supply_id,
+    status,
+    search,
+    account_number,
+    account_type,
+    consumer_name,
+    meter_number,
+    created_from,
+    created_to,
+  } = query;
   const { page, limit, offset } = parsePagination(query);
+  const { sortKey, sortColumn, sortDir } = resolveAccountSort(query);
 
   let where = 'WHERE 1=1';
   const params = [];
@@ -25,6 +54,31 @@ async function listAccounts(query = {}) {
   if (status) {
     where += ' AND a.status = ?';
     params.push(status);
+  }
+  if (account_type) {
+    where += ' AND a.account_type = ?';
+    params.push(account_type);
+  }
+  if (account_number) {
+    where += ' AND a.account_number LIKE ?';
+    params.push(`%${account_number}%`);
+  }
+  if (consumer_name) {
+    where += ' AND (a.consumer_name LIKE ? OR e.entity_name LIKE ?)';
+    const pattern = `%${consumer_name}%`;
+    params.push(pattern, pattern);
+  }
+  if (meter_number) {
+    where += ' AND a.meter_number LIKE ?';
+    params.push(`%${meter_number}%`);
+  }
+  if (created_from) {
+    where += ' AND DATE(a.created_at) >= ?';
+    params.push(String(created_from).slice(0, 10));
+  }
+  if (created_to) {
+    where += ' AND DATE(a.created_at) <= ?';
+    params.push(String(created_to).slice(0, 10));
   }
   if (search) {
     where +=
@@ -45,7 +99,7 @@ async function listAccounts(query = {}) {
     `${ACCOUNT_SELECT}
      ${ACCOUNT_FROM}
      ${where}
-     ORDER BY a.account_number ASC
+     ORDER BY ${sortColumn} ${sortDir}, a.account_number ASC
      LIMIT ${offset}, ${limit}`,
     params
   );
@@ -53,6 +107,7 @@ async function listAccounts(query = {}) {
   return {
     data: rows,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+    meta: { sort_by: sortKey, sort_dir: sortDir.toLowerCase() },
   };
 }
 
