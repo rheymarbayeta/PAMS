@@ -88,21 +88,13 @@ async function generateBills(body, userId) {
     const generated = [];
 
     for (const reading of readings) {
-      // Unpaid dues stay on the account until paid; snapshot onto at most one open bill
-      const accountUnpaidDues = await billingRepo.getAccountUnpaidDues(
+      // Prior unpaid/partial bills accumulate into this period's Unpaid Dues
+      const previousBalance = await billingRepo.getCarryForwardUnpaidBalance(
         connection,
-        reading.account_id
+        reading.account_id,
+        month,
+        year
       );
-      const [openWithDues] = await connection.query(
-        `SELECT COUNT(*) AS cnt
-         FROM ww_bills
-         WHERE account_id = ?
-           AND status IN ('unpaid', 'partial')
-           AND previous_balance > 0`,
-        [reading.account_id]
-      );
-      const previousBalance =
-        parseFloat(openWithDues[0]?.cnt) > 0 ? 0 : accountUnpaidDues;
 
       const rate = parseFloat(reading.rate_per_cubic_meter) || 0;
       const minimumCharge = parseFloat(reading.minimum_charge) || 100.6;
@@ -250,6 +242,8 @@ module.exports = {
   generateBills,
   recordPayment,
   getBillingSurchargeSettings: billingRepo.getBillingSurchargeSettings,
+  getAccountUnpaidDues: billingRepo.getAccountUnpaidDues,
+  getCarryForwardUnpaidBalance: billingRepo.getCarryForwardUnpaidBalance,
   getAccountOutstandingBalance: billingRepo.getAccountOutstandingBalance,
   updateBillStatus: billingRepo.updateBillStatus,
   listAccountsForUser: accountsService.listAccountsForUser,

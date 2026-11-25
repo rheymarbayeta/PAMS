@@ -82,7 +82,11 @@ async function resolveAccountConsumerFields(body) {
 
 const waterworksAccounts = require('../modules/waterworks/accountsService');
 const waterworksBilling = require('../modules/waterworks/billingService');
-const { getAccountOutstandingBalance, getBillingSurchargeSettings } = waterworksBilling;
+const {
+  getAccountOutstandingBalance,
+  getBillingSurchargeSettings,
+  getCarryForwardUnpaidBalance,
+} = waterworksBilling;
 
 const ACCOUNT_SELECT = waterworksAccounts.ACCOUNT_SELECT;
 const ACCOUNT_FROM = waterworksAccounts.ACCOUNT_FROM;
@@ -1621,12 +1625,31 @@ router.get('/accounts/:id/billing', async (req, res) => {
         }
       }
 
+      let projected = null;
+      if (!bill) {
+        const carryForward = await getCarryForwardUnpaidBalance(
+          connection,
+          accountId,
+          billingMonth,
+          billingYear
+        );
+        const projectedSurcharge = surchargeSettings.enabled
+          ? parseFloat((carryForward * surchargeSettings.rate).toFixed(2))
+          : 0;
+        projected = {
+          previous_balance: carryForward,
+          surcharge_amount: projectedSurcharge,
+          amount_due: null,
+        };
+      }
+
       res.json({
         data: {
           account: accounts[0],
           billing_month: billingMonth,
           billing_year: billingYear,
           bill,
+          projected,
           rate_tiers: tiers,
           billing_model: billingConfig.billingModel,
           outstanding_balance: outstandingBalance,

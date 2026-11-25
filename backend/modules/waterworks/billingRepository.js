@@ -136,43 +136,74 @@ async function getAccountUnpaidDues(connection, accountId) {
 }
 
 /**
- * Outstanding = Unpaid Dues (account) + Surcharge + Period Consumption − payments
- * applied to open bills (capped at amount_due + surcharge so dues are not double-counted).
- * Account unpaid_dues remain until paid down; bill.previous_balance is a preview snapshot only.
+ * Amount to carry into a new period's Unpaid Dues:
+ * sum of unpaid/partial prior bill remainders (total_due − paid).
+ * If there are no prior open bills, use account opening unpaid_dues.
+ */
+async function getCarryForwardUnpaidBalance(connection, accountId, beforeMonth, beforeYear) {
+  const month = parseInt(beforeMonth, 10);
+  const year = parseInt(beforeYear, 10);
+
+  const [rows] = await connection.query(
+    `
+    SELECT b.total_due, COALESCE(SUM(p.amount_paid), 0) AS total_paid
+    FROM ww_bills b
+    LEFT JOIN ww_payments p ON p.bill_id = b.bill_id
+    WHERE b.account_id = ?
+      AND b.status IN ('unpaid', 'partial')
+      AND (
+        b.billing_year < ?
+        OR (b.billing_year = ? AND b.billing_month < ?)
+      )
+    GROUP BY b.bill_id, b.total_due
+  `,
+    [accountId, year, year, month]
+  );
+
+  let fromBills = 0;
+  for (const row of rows) {
+    fromBills += Math.max(0, (parseFloat(row.total_due) || 0) - (parseFloat(row.total_paid) || 0));
+  }
+
+  if (fromBills > 0) {
+    return parseFloat(fromBills.toFixed(2));
+  }
+
+  return getAccountUnpaidDues(connection, accountId);
+}
+
+/**
+ * Outstanding balance for the account.
+ * When open bills exist, use the latest bill's remaining total_due (it already
+ * accumulates prior unpaid dues in previous_balance). Otherwise use account unpaid_dues.
  */
 async function getAccountOutstandingBalance(connection, accountId) {
-  const unpaidDues = await getAccountUnpaidDues(connection, accountId);
-
   const [rows] = await connection.query(
     `
     SELECT
       b.bill_id,
-      b.amount_due,
-      b.surcharge_amount,
+      b.billing_year,
+      b.billing_month,
+      b.total_due,
       COALESCE(SUM(p.amount_paid), 0) AS total_paid
     FROM ww_bills b
     LEFT JOIN ww_payments p ON p.bill_id = b.bill_id
     WHERE b.account_id = ? AND b.status IN ('unpaid', 'partial')
-    GROUP BY b.bill_id, b.amount_due, b.surcharge_amount
+    GROUP BY b.bill_id, b.billing_year, b.billing_month, b.total_due
+    ORDER BY b.billing_year DESC, b.billing_month DESC
+    LIMIT 1
   `,
     [accountId]
   );
 
-  let periodAndSurcharge = 0;
-  let paymentsTowardPeriod = 0;
-
-  for (const row of rows) {
-    const amountDue = parseFloat(row.amount_due) || 0;
-    const surcharge = parseFloat(row.surcharge_amount) || 0;
-    const paid = parseFloat(row.total_paid) || 0;
-    const periodTotal = amountDue + surcharge;
-    periodAndSurcharge += periodTotal;
-    paymentsTowardPeriod += Math.min(paid, periodTotal);
+  if (!rows.length) {
+    return getAccountUnpaidDues(connection, accountId);
   }
 
+  const latest = rows[0];
   return Math.max(
     0,
-    parseFloat((unpaidDues + periodAndSurcharge - paymentsTowardPeriod).toFixed(2))
+    parseFloat(((parseFloat(latest.total_due) || 0) - (parseFloat(latest.total_paid) || 0)).toFixed(2))
   );
 }
 
@@ -248,6 +279,7 @@ module.exports = {
   listPayments,
   getBillingSurchargeSettings,
   getAccountUnpaidDues,
+  getCarryForwardUnpaidBalance,
   getAccountOutstandingBalance,
   updateBillStatus,
   syncUnpaidDuesAfterBillPayment,

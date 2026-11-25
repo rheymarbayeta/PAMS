@@ -112,9 +112,9 @@
    * @param {object} settings - /api/settings map
    * @param {{ compact?: boolean, billingMonth?: number, billingYear?: number }} options
    */
-  function resolveSurchargePercent(bill, data) {
-    var prev = parseFloat(bill && bill.previous_balance) || 0;
-    var sur = parseFloat(bill && bill.surcharge_amount) || 0;
+  function resolveSurchargePercent(billOrProjected, data) {
+    var prev = parseFloat(billOrProjected && billOrProjected.previous_balance) || 0;
+    var sur = parseFloat(billOrProjected && billOrProjected.surcharge_amount) || 0;
     if (prev > 0 && sur > 0) {
       return Math.round((sur / prev) * 1000) / 10;
     }
@@ -137,17 +137,32 @@
     var header = parseHeaderSettings(settings);
     var acc = data.account || {};
     var bill = data.bill;
+    var projected = data.projected || null;
     var hasBill = !!bill;
+    var amounts = hasBill ? bill : projected;
+    var hasAmounts = !!(amounts && (
+      hasBill ||
+      parseFloat(amounts.previous_balance) > 0 ||
+      parseFloat(amounts.surcharge_amount) > 0
+    ));
     var collectionDate = data.collection_date_label || '';
     var periodFrom = formatDMY(data.period_start);
     var periodTo = formatDMY(data.period_end);
     var docClass = options.compact ? 'billing-doc billing-doc-compact' : 'billing-doc';
     var billingMonthName = MONTHS[month - 1] || '';
-    var surchargePct = resolveSurchargePercent(bill, data);
+    var surchargePct = resolveSurchargePercent(amounts, data);
     var surchargePctLabel = formatSurchargePercent(surchargePct);
     var surchargeHead = surchargePctLabel
       ? ('SURCHARGE<br><span class="surcharge-pct">(' + esc(surchargePctLabel) + '%)</span>')
       : 'SURCHARGE';
+    var amountDueVal = hasBill ? parseFloat(bill.amount_due) || 0 : null;
+    var unpaidDuesVal = hasAmounts ? (parseFloat(amounts.previous_balance) || 0) : null;
+    var surchargeVal = hasAmounts ? (parseFloat(amounts.surcharge_amount) || 0) : null;
+    var totalDueVal = hasBill
+      ? ((parseFloat(bill.amount_due) || 0) +
+         (parseFloat(bill.previous_balance) || 0) +
+         (parseFloat(bill.surcharge_amount) || 0))
+      : (hasAmounts ? ((unpaidDuesVal || 0) + (surchargeVal || 0)) : null);
 
     return (
       '<div class="' + docClass + '">' +
@@ -214,14 +229,10 @@
             '<td class="center reading-cell">' + (hasBill ? blank(bill.previous_reading) : '&nbsp;') + '</td>' +
             '<td class="center reading-cell">' + (hasBill ? blank(bill.current_reading) : '&nbsp;') + '</td>' +
             '<td class="center reading-cell">' + (hasBill ? blank(bill.consumption) : '&nbsp;') + '</td>' +
-            '<td class="center amount-cell">' + (hasBill ? ('Php ' + fmt(bill.amount_due)) : '&nbsp;') + '</td>' +
-            '<td class="center amount-cell">' + (hasBill ? ('Php ' + fmt(bill.previous_balance || 0)) : '&nbsp;') + '</td>' +
-            '<td class="center amount-cell">' + (hasBill ? ('Php ' + fmt(bill.surcharge_amount || 0)) : '&nbsp;') + '</td>' +
-            '<td class="center amount-cell total-cell">' + (hasBill ? ('Php ' + fmt(
-              (parseFloat(bill.amount_due) || 0) +
-              (parseFloat(bill.previous_balance) || 0) +
-              (parseFloat(bill.surcharge_amount) || 0)
-            )) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell">' + (amountDueVal != null ? ('Php ' + fmt(amountDueVal)) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell">' + (unpaidDuesVal != null ? ('Php ' + fmt(unpaidDuesVal)) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell">' + (surchargeVal != null ? ('Php ' + fmt(surchargeVal)) : '&nbsp;') + '</td>' +
+            '<td class="center amount-cell total-cell">' + (totalDueVal != null ? ('Php ' + fmt(totalDueVal)) : '&nbsp;') + '</td>' +
           '</tr>' +
           '<tr>' +
             '<td colspan="2" class="rate-cell"><span class="rate-title">RATE</span>' + buildRateLines(data.rate_tiers, bill) + '</td>' +
@@ -234,7 +245,9 @@
             '</td>' +
           '</tr>' +
         '</table>' +
-        (!hasBill ? '<p class="no-bill-msg">No bill generated for this period.</p>' : '') +
+        (!hasBill ? '<p class="no-bill-msg">No bill generated for this period.' +
+          (hasAmounts ? ' Unpaid dues below include prior unpaid bill(s).' : '') +
+          '</p>' : '') +
       '</div>'
     );
   }
